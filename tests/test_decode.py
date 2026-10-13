@@ -228,18 +228,35 @@ def main():
     ref_gen = {s["name"]: s["gen"] for s in S.s}
     ref_logits = {s["name"]: s["logits"] for s in S.s}
     n_steps = min(a.tokens, 96)
-    diffs = 0
+    diffs, near = 0, 0
+
+    def check(what, s):
+        """int8: the same tokens and logits bit for bit.  bf16 (cuBLAS picks its kernels by batch size): the same logits
+        to rounding while the histories agree; a split at a near-tie is reported, not counted."""
+        nonlocal diffs, near
+        gen, lg = s["gen"], s["logits"]
+        want, wl = ref_gen[s["name"]][:n_steps], ref_logits[s["name"]][:n_steps]
+        if exact:
+            if gen != want or not all(torch.equal(x, y) for x, y in zip(lg, wl)):
+                diffs += 1
+                print(f"  {what} differs: {s['name']}", flush=True)
+            return
+        first = next((i for i in range(n_steps) if gen[i] != want[i]), n_steps)
+        d = max(float((lg[i] - wl[i]).abs().max()) for i in range(min(first + 1, n_steps)))
+        top2 = wl[first].topk(2).values if first < n_steps else None
+        tie = top2 is not None and float(top2[0] - top2[1]) < TIE
+        if d > 1.0 or (first < n_steps and not tie):
+            diffs += 1
+        near += first < n_steps and tie
+        if first < n_steps or d > 1.0:
+            print(f"  {what}: {s['name']} max |dlogit| {d:.4f} while the histories agree; tokens part at {first}"
+                  f"{' (a near-tie)' if tie else ''}", flush=True)
     for k, (name, ids) in enumerate(ps):         # alone, in another slot
         A = Seqs(eng, dec, [(name, ids)], rows_each)
         A.s[0]["slot"], A.s[0]["kv_start"] = eng.think_slot0 + n_seq - 1, eng.think_kv0 + (n_seq - 1) * rows_each
         A.prefill(A.s)
         A.run(A.s, n_steps)
-        same_t = A.s[0]["gen"] == ref_gen[name][:n_steps]
-        same_l = all(torch.equal(x, y) for x, y in zip(A.s[0]["logits"], ref_logits[name][:n_steps]))
-        if not same_t or (exact and not same_l):
-            diffs += 1
-            print(f"  alone differs: {name} tokens {'same' if same_t else 'DIFFER'}, logits "
-                  f"{'bit-identical' if same_l else 'differ'}", flush=True)
+        check("alone", A.s[0])
     J2 = Seqs(eng, dec, ps, rows_each)               # staggered: sequence i joins at step 8 i
     J2.prefill(J2.s)
     active = []
@@ -251,13 +268,9 @@ def main():
         if live:
             J2.step(live, t % 2)
     for s in J2.s:
-        same_t = s["gen"] == ref_gen[s["name"]][:n_steps]
-        same_l = all(torch.equal(x, y) for x, y in zip(s["logits"], ref_logits[s["name"]][:n_steps]))
-        if not same_t or (exact and not same_l):
-            diffs += 1
-            print(f"  joining differs: {s['name']} tokens {'same' if same_t else 'DIFFER'}", flush=True)
+        check("joining", s)
     print(f"2. isolation: {len(ps)} sequences alone and joining a running batch at steps 0, 8, 16, ...: "
-          f"{'the same tokens' + (' and logits, bit for bit' if exact else '') if not diffs else f'{diffs} DIFFER'}",
+          f"{('the same tokens and logits, bit for bit' if exact else f'the same logits to rounding ({near} part at a near-tie)') if not diffs else f'{diffs} DIFFER'}",
           flush=True)
     bad += diffs
 
