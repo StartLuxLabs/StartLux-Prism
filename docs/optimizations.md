@@ -266,6 +266,21 @@ two scan waves, output) take 0.67 ms of yesno's 4.1 ms for one 64-token chunk pe
   sm_90a on Hopper - the architecture-specific target wgmma and setmaxnreg need; `FLASHJEV_CUDA_ARCH` overrides), and
   the dispatch tables are per GPU model (`gemm_table_<gpu>.json`, `w4a8_table_<gpu>.json`).
 
+## Images (2026-10-13)
+
+* **One Triton kernel for the vision tower's RoPE** (`kernels/vision_rope.py`), with transformers' roundings, so the
+  same bits: 19 -> 15 ms for a 1,024-token image.
+* **Vision-tower graphs**: a CUDA graph per image size up to 576 tokens, recorded the second time a size appears (16
+  sizes kept, one memory pool): 6.4 -> 2.1 ms at 64 tokens. Above 576 tokens a graph gained 5% or less: not kept.
+* **Image decoding**: v1.1's base64 regular expression took 50 ms per 3 MB image; a strict decode runs first now, with
+  the regular expression only as the fallback (12 ms), and a request's images decode in threads: about 600 -> 144 ms
+  of decoding for eight 1024 x 1024 images.
+* **The body graph is recorded before the image features are written**: recording runs the pass once, which turned the
+  image tokens' rows into their residuals before the replay read them (probabilities about 0.5 too flat).
+* **Measured and dropped: cuDNN attention in the tower** (7.0 against 10.4 ms per 1,024-token image over the 27 blocks):
+  cuDNN chooses its kernel plan per process, so features and answers changed across restarts. The tower's attention is
+  pinned to PyTorch's flash kernel.
+
 ## Opt-in
 
 * **int8 attention scores** (`--attn-qk8`, `Options.attn_qk8`): keys also kept as int8 (one scale per token and kv
@@ -314,6 +329,9 @@ two scan waves, output) take 0.67 ms of yesno's 4.1 ms for one 64-token chunk pe
 
 ## Open
 
+* Images: a deterministic attention kernel for the vision tower (the 3.4 ms per 1,024-token image cuDNN would save);
+  base64 decoding holds the GIL (about 12 ms per 3 MB image); the tower runs on the scheduler's stream, so it does not
+  overlap with the decoder's passes.
 * Hopper (H200): W4A8 still runs on mma.sync (Q4_K_M's projections at 200-300 TOPS against W8A8's 1,250 on wgmma:
   90% of the 27B's W4A8 GPU time); the GEMMs at up to 64 rows (2.5-3.4 TB/s of 4.8); the TMA kernel's epilogue
   still does not overlap the next tile's main loop (one CTA per SM: a persistent kernel with two MMA warpgroups taking

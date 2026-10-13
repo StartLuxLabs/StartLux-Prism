@@ -499,6 +499,43 @@ def q4km(theme):
              "On the H200 the W4A8 GEMMs still run on mma.sync, not on Hopper's warpgroup MMA.")
 
 
+V11_ROWS = [("flash-jev int8", True), ("official engine, FP8", False), ("official engine, BF16", False)]
+V11_NOTE = ("Official engine: Startlux-decide-inference (StartLux-Decision v1.1's own package, commit b70404d) with "
+            "its release flags on vLLM 0.31.0, from the BF16 release (FP8: vLLM's --quantization fp8); the release has "
+            "no MTP weights, so neither side drafts tokens. flash-jev int8 from the Q8_0 GGUF release. One H200 per "
+            "server, 2026-10-13/14.")
+
+
+@chart
+def v11_official_latency(theme):
+    return bar_chart(
+        theme, "StartLux-Decision v1.1 27B AutoThink: flash-jev against the official engine",
+        "One request at a time, new evidence in every request, the official engine's own client (startlux-decide "
+        "bench). Mean ms per request (lower is better).",
+        V11_ROWS,
+        [dict(head="One yes/no question, ~256 tokens", vals=[19.0, 53.1, 54.2], shown=["19.0", "53.1", "54.2"],
+              unit="ms"),
+         dict(head="One yes/no question, ~8,192 tokens", vals=[439.8, 531.2, 728.8], shown=["439.8", "531.2", "728.8"],
+              unit="ms"),
+         dict(head="The README's three questions", vals=[17.4, 92.9, 93.1], shown=["17.4", "92.9", "93.1"],
+              unit="ms")],
+        note=V11_NOTE)
+
+
+@chart
+def v11_official_throughput(theme):
+    return bar_chart(
+        theme, "StartLux-Decision v1.1 27B AutoThink under load",
+        "JevBench's 231 public items, requests per second (higher is better): read-outs only (think_mode never) from "
+        "one and from 64 clients, and with thoughts (think_mode auto, the release's default) from 64 clients.",
+        V11_ROWS,
+        [dict(head="Read-outs, one client", vals=[24.2, 12.1, 10.6], shown=["24.2", "12.1", "10.6"], unit="req/s"),
+         dict(head="Read-outs, 64 clients", vals=[30.7, 26.3, 18.3], shown=["30.7", "26.3", "18.3"], unit="req/s"),
+         dict(head="With thoughts, 64 clients", vals=[7.61, 6.52, 5.89], shown=["7.61", "6.52", "5.89"],
+              unit="req/s")],
+        note=V11_NOTE + " Three passes over the items per measurement, every request with its own evidence.")
+
+
 def main():
     os.makedirs(OUT, exist_ok=True)
     for name, fn in CHARTS.items():

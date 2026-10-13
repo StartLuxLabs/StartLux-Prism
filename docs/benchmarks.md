@@ -18,6 +18,9 @@ numbers are from 2026-10-10 to 2026-10-12. Each chart is drawn from the table be
 - [The longest request in one pass](#the-longest-request-in-one-pass)
 - [Accuracy: StartLux-Decision-v1's evaluation](#accuracy-startlux-decision-v1s-evaluation)
 - [StartLux-Decision v1.1 27B AutoThink: thinking](#startlux-decision-v11-27b-autothink-thinking)
+- [StartLux-Decision v1.1 27B AutoThink against its official engine](#startlux-decision-v11-27b-autothink-against-its-official-engine)
+- [Images](#images)
+- [Several GPUs: data parallelism](#several-gpus-data-parallelism)
 - [Stress tests](#stress-tests)
 - [Engine configurations](#engine-configurations) · [Crashes on the RTX 5090 server](#crashes-on-the-rtx-5090-server)
 
@@ -764,6 +767,236 @@ training distribution.)
 One sequence's step takes 10.4 ms, most of it reading the 27 GB of int8 weights; 64 sequences share that read (16.5 ms
 per step at 512 tokens, 20.1 at 4,096, where attention and the recurrent states' traffic grow).
 
+## StartLux-Decision v1.1 27B AutoThink against its official engine
+
+flash-jev against Startlux-decide-inference, StartLux-Decision v1.1's own package and server (`startlux-decide`), on
+one 8-GPU H200 server, one GPU per server, 2026-10-13/14. Other users' jobs ran on two other GPUs of the server meanwhile.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="images/v11-official-latency-dark.svg">
+  <img src="images/v11-official-latency.svg" width="840" alt="Mean ms per request, one at a time: one yes/no question of about 256 tokens, flash-jev int8 19.0, official engine FP8 53.1, BF16 54.2; about 8,192 tokens, 439.8, 531.2, 728.8; the official README's three questions, 17.4, 92.9, 93.1.">
+</picture>
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="images/v11-official-throughput-dark.svg">
+  <img src="images/v11-official-throughput.svg" width="840" alt="JevBench requests per second: read-outs from one client, flash-jev int8 24.2, official engine FP8 12.1, BF16 10.6; read-outs from 64 clients, 30.7, 26.3, 18.3; with thoughts from 64 clients, 7.61, 6.52, 5.89.">
+</picture>
+
+**The servers:**
+- **Official engine:**
+  - Software: Startlux-decide-inference at commit `b70404d` (package 1.1.0). Its own test suite passes (222 tests).
+  - Serving: `startlux-decide serve --model DIR --launch-vllm --gpus N`, with the release flags its launcher picks
+    for vLLM 0.31.0 (torch 2.13.0+cu130). That means prefix caching and chunked prefill at 8,192 tokens, a 262,144-token
+    context, a GPU memory share of 0.88, images on, and thoughts as one streamed request.
+  - Weights: the BF16 release `startlux-models/StartLux-Decision-v1.1-27B-AutoThink`. The weights commit is `46072ef`
+    (the latest commit, `869e181`, only adds the model card). The download is 54.7 GB in 14 shards; every file's
+    SHA-256 was checked against Hugging Face.
+  - FP8: the same server with `--quantization fp8`.
+  - No MTP: the folder's config declares one MTP layer, but the release ships no `mtp.*` tensors, so the launcher
+    turns MTP speculative decoding off ("no MTP (the folder holds no MTP weights)").
+- **flash-jev int8:** the Q8_0 GGUF release (SHA-256 `28757be9...`, the same file as above) with its mmproj, server
+  defaults (64 thoughts at once), at this repository's commit `6e47e4d`.
+- **What differs between the two sides:**
+  - The weights. The official engine reads the BF16 release; flash-jev reads the Q8_0 GGUF made from it, so
+    flash-jev's weight values carry Q8_0's rounding.
+  - The thought sampler. Both sample at T 0.6, top-k 20, top-p 0.95 with the same seeds, but the random number
+    generators differ, so the two sides write different thoughts.
+  - The linear-attention state. vLLM keeps the recurrent state of thoughts in bf16 (`mamba_ssm_cache_dtype` auto
+    takes the model's dtype); flash-jev keeps it in fp32.
+
+**Clients.** Requests that time one at a time come from the official engine's own client (`startlux-decide bench`),
+with 5 warm-up requests dropped from the 25 of each file. Its `--warmup` would replay the file's first requests,
+which would then be timed as prefix-cache hits. Every request has its own evidence. JevBench runs use
+`bench/run_jevbench.py` and JevBench's own scorer.
+
+**One request at a time** (mean ms; p50 and p95 within 2% of the mean for one-pass requests):
+
+| request | official, BF16 | official, FP8 | **flash-jev int8** | flash-jev bf16 |
+|---|---|---|---|---|
+| one yes/no question, ~256 prompt tokens | 54.2 | 53.1 | **19.0** | 25.5 |
+| ~1,024 tokens | 116.3 | 114.5 | **57.6** | 89.2 |
+| ~4,096 tokens | 375.0 | 272.4 | **214.3** | 348.6 |
+| ~8,192 tokens | 728.8 | 531.2 | **439.8** | 722.2 |
+| the official README's three questions, `think_mode` never | 93.1 | 92.9 | **17.4** | 23.8 |
+| the same, `think_mode` auto (109 of 165 questions think) | 1,775 | 1,296 | **785** | 1,542 |
+
+flash-jev bf16 (weights dequantized from the Q8_0 GGUF) ran this table only.
+
+**JevBench, read-outs only** (`think_mode` never; requests/s over three passes of the 231 items):
+
+| clients | official, BF16 | official, FP8 | **flash-jev int8** |
+|---|---|---|---|
+| 1 | 10.6 | 12.1 | **24.2** |
+| 16 | 17.8 | 25.8 | **29.9** |
+| 64 | 18.3 | 26.3 | **30.7** |
+| correct per pass, of 231 | 212-213 | 211-214 | 212-216 |
+
+One request at a time, flash-jev's read-outs take less than half the time. From many clients, both engines are bound
+by the GPU's tensor cores, which run int8 and FP8 at the same rate on an H200, and flash-jev's lead narrows to 17%.
+
+**JevBench with thoughts, one request at a time** (`think_mode` auto, the release's default):
+
+| | official, BF16 | official, FP8 | **flash-jev int8** |
+|---|---|---|---|
+| correct, of 231 | 226 | 225 | 224 |
+| mean / p50 / p95 ms per item | 1,702 / 56 / 11,481 | 1,150 / 55 / 6,713 | 1,212 / **21** / 6,961 |
+| items without a thought, mean ms | 79 | 68 | **31** |
+| items that thought (right after the thought) | 66 (62) | 66 (61) | 67 (61) |
+| thought tokens, mean / p50 / max | 350 / 226 / 1,651 | 342 / 268 / 1,429 | 369 / 135 / 3,948 |
+| thought tokens/s, one sequence | 63 | **94** | **94** |
+| requests/s | 0.59 | **0.87** | 0.83 |
+
+Thoughts are generated at the same speed on flash-jev int8 and on the official engine's FP8, at 94 tokens per
+second for one sequence. Per token, the two take the same time. flash-jev's mean is higher only because of one
+3,948-token thought; the official engine's longest is 1,429 tokens.
+
+**JevBench with thoughts from many clients** (`think_mode` auto, requests/s over three passes):
+
+| clients | official, BF16 | official, FP8 | **flash-jev int8** |
+|---|---|---|---|
+| 16 | 3.77 | 4.66 | **4.94** |
+| 64 | 5.89 | 6.52 | **7.61** |
+| correct per pass, of 231 | 224-229 (mean 226.5) | 221-228 (225.2) | 219-222 (220.5) |
+
+**StartLux-Decision v1's evaluation suites with thoughts** (`think_mode` auto, 12,351 decisions from 16 clients, the
+three servers at once, so the times compare only roughly):
+
+| server | Easy | Original | Hard | Typed | ToolACE | AG News | WildJB | Average | Brier (Hard) | ECE (Hard) | time |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| official, BF16 | 100.00 | 100.00 | 94.59 | 78.20 | 95.48 | 90.83 | 91.67 | 92.97 | 0.0999 | 0.0547 | 1,252 s |
+| official, FP8 | 100.00 | 98.61 | 94.59 | 78.35 | 95.81 | 90.71 | 91.72 | 92.83 | 0.1044 | 0.0443 | 957 s |
+| **flash-jev int8** | 100.00 | 98.61 | 94.59 | 78.50 | 96.13 | 90.83 | 91.90 | 92.94 | 0.1093 | 0.0531 | **750 s** |
+
+flash-jev's scores are those of its earlier run ([thinking](#startlux-decision-v11-27b-autothink-thinking)), to the
+digit, although the questions now came from 16 clients at once.
+
+**Accuracy with thoughts, many samples.** One thought per question, as in the suites, puts the three servers level.
+Many thoughts per question show a small gap. In the many-client JevBench runs every request carries its own request
+number, so every pass draws new thoughts. Over nine samples of the 231 items, flash-jev int8 averages 221.2 correct,
+against 226.0 for the official BF16 server and 224.9 for FP8. Without thoughts the three score the same.
+
+A cross-read experiment locates it. The setup:
+- **Questions:** the 67 JevBench items that thought, each with 3 request numbers, `think_mode` always (201 thoughts per
+  writer).
+- **Reading:** every thought read twice: by the official engine's read-out (vLLM completions, as its backend reads)
+  and by flash-jev int8. Each read is mixed with the writer's own first read-out.
+- **Check:** a writer's own read-out rebuilt this way gives the probabilities its server reported (flash-jev: bit for
+  bit).
+
+| thoughts written by | official read-out | flash-jev int8 read-out |
+|---|---|---|
+| official engine, BF16 | 187 | 185 |
+| flash-jev, bf16 (the Q8_0 weights dequantized) | 186 | 185 |
+| flash-jev int8 | 180 | 178 |
+
+What the experiment shows:
+- **The gap is in writing the thoughts:** int8 thoughts lose about 7 of 201 questions whoever reads them.
+- **Reading costs little:** reading with int8 costs 1 or 2.
+- **The cause is the int8 activations:** thoughts written with bf16 arithmetic on the same Q8_0 weights are as good as
+  the official engine's. The int8 path quantizes every activation row of a decode step to int8 with one scale per row,
+  and over a long generation the error shows. Read-outs see it far less.
+
+**flash-jev int8 against flash-jev bf16** on the same Q8_0 weights (bf16: the blocks dequantized, cuBLAS), one H200.
+
+Prefill (`bench/prefill_speed.py`):
+
+| one prompt per pass | 256 tokens | 1,024 | 4,096 | 8,192 | 16,384 | 32,768 | passes of 8,192 tokens (32 x 256, 64 x 128, 8 x 1,024) |
+|---|---|---|---|---|---|---|---|
+| int8 | 17.5 ms | 54.3 | 208.9 | 426.2 | 915.4 | 2,072.6 | 20,750-20,855 tokens/s |
+| bf16 | 25.2 ms | 88.5 | 349.4 | 717.1 | 1,492.8 | 3,226.8 | 11,912-11,958 tokens/s |
+| int8 faster by | 1.44x | 1.63x | 1.67x | 1.68x | 1.63x | 1.56x | 1.74-1.75x |
+
+Decode (`bench/decode_speed.py`, ms per step / tokens per second):
+
+| sequences, context | 1, 512 | 8, 512 | 64, 512 | 1, 4,096 | 8, 4,096 | 64, 4,096 |
+|---|---|---|---|---|---|---|
+| int8 | 10.47 / 95.5 | 11.06 / 723 | 16.70 / 3,832 | 10.56 / 94.7 | 11.41 / 701 | 20.31 / 3,152 |
+| bf16 | 14.89 / 67.1 | 15.90 / 503 | 21.74 / 2,944 | 14.98 / 66.8 | 16.24 / 493 | 25.37 / 2,522 |
+| int8 faster by | 1.42x | 1.44x | 1.30x | 1.42x | 1.42x | 1.25x |
+
+Decode streams the weights, which are half as large in int8, but the int8 path reaches about 2.6 TB/s against
+cuBLAS bf16's 3.6 at one sequence ([Open](optimizations.md#open)). At 64 sequences the linear-attention states, fp32 on
+both paths, take a third of a step.
+
+Through the server (JevBench, requests/s; correct per pass of 231):
+
+| | one client | 16 clients | 64 clients | correct per pass |
+|---|---|---|---|---|
+| int8, read-outs | 24.2 | 29.9 | 30.7 | 212-216 |
+| bf16, read-outs | 14.9 | 16.7 | 16.9 | 213 |
+| int8, with thoughts | 0.84 | 4.94 | 7.61 | 219-222 (mean 220.5) |
+| bf16, with thoughts | 0.51 | 3.40 | 4.14 | 224-228 (mean 226.2) |
+
+## Images
+
+StartLux-Decision-v1.1-27B-AutoThink's Q8_0 GGUF with its vision file (`mmproj-StartLux-Decision-v1.1-27B-AutoThink-F16.gguf`,
+0.93 GB, SHA-256 `b6ff3c746a642ac44ea14f679f3a6e788a8b7c2cb4474378fa895e86f1b937eb`), one H200, 2026-10-13. The image
+requests are `bench/vision_suite.py`'s: synthetic images with a right answer for every question (shapes and colours,
+rendered text such as an invoice, signs and a shipping label, counting), 1 to 8 images per request, sizes from 32 x 32
+to 2,400 x 1,600 pixels, aspect ratios up to 20:1.
+
+**Against transformers** (`tests/vision_reference.py`): `Qwen3_5ForConditionalGeneration` on a bf16 checkpoint converted
+from the same Q8_0 GGUF and mmproj (`flash_jev/tools/gguf_to_hf.py --mmproj`), 24 image requests with 53 questions, and
+11 text questions as the yardstick:
+
+| flash-jev | same decision (images) | max \|Δp\| | mean \|Δp\| | max \|Δlogit\| | text: max / mean \|Δp\| |
+|---|---|---|---|---|---|
+| bf16 | 53 of 53 | 0.0042 | 0.00008 | 0.093 | 0.0048 / 0.00056 |
+| int8 | 53 of 53 | 0.046 | 0.00044 | 2.26 | 0.053 / 0.0040 |
+
+transformers, bf16 and int8 answer all 53 questions right. The vision tower alone gives transformers'
+`Qwen3_5VisionModel` features bit for bit (same weights, same attention kernel) on 9 sizes from 64 to 1,024 tokens.
+
+**The vision tower** (bf16, one image):
+
+| tokens per image | eager | as served |
+|---|---|---|
+| 64 | 6.4 ms | 2.1 ms (CUDA graph) |
+| 256 | 6.3 ms | 3.9 ms (CUDA graph) |
+| 576 | 10.4 ms | 9.7 ms (CUDA graph) |
+| 1,024 | 18.7 ms | 18.7 ms (no graph above 576 tokens) |
+
+transformers' own module takes 60-75 ms per image.
+
+**End to end** (int8 server, one request at a time, two questions, new images in every request; `bench/vision_latency.py`):
+
+| image size | 1 image | 4 images | 8 images |
+|---|---|---|---|
+| 1024 x 1024 | 126 ms | 407 ms | 794 ms |
+| 512 x 512 | 40 ms | 120 ms | 216 ms |
+| 256 x 256 | 22 ms | 48 ms | 84 ms |
+
+At 1024 x 1024 the GPU time is 82 / 288 / 580 ms and decoding the images 35 / 85 / 144 ms. Text requests take the
+same time with the tower loaded: seven latency suites, two rounds each, within 0.3 ms of the server without it, whose
+own rounds differ by up to 0.47 ms.
+
+**With thoughts.** The same 53 questions with `think_mode` `"always"`:
+- every question thinks (29 tokens on average), and the thoughts describe the images ("Evidence shows large red
+  circle");
+- all 53 answers are right;
+- the first read-outs equal the one-pass answers;
+- two runs give the same thoughts and probabilities;
+- a request takes 649 ms, against 30 ms in one pass.
+
+## Several GPUs: data parallelism
+
+`python -m flash_jev.dp`: one flash-jev int8 server per GPU behind the router (README, Serving), StartLux-Decision-v1.1-27B-AutoThink on
+GPUs 1-3 of the H200 server, 2026-10-14; JevBench as above (requests/s over three passes, each request with its own
+evidence).
+
+| | one GPU | three GPUs | |
+|---|---|---|---|
+| one request at a time, read-outs: mean / p50 ms | 41.1 / 15.8 | 42.2 / 14.8 | the router's hop: about 1 ms |
+| read-outs, 1 client | 24.2 | 23.4 | |
+| read-outs, 64 clients | 30.7 | **88.7** | 2.89x |
+| read-outs, 192 clients | | 89.4 | |
+| with thoughts, 64 clients | 7.61 | 13.5 | |
+| with thoughts, 192 clients | | 14.1 | 1.85x |
+
+The 231 items one at a time through the three workers gave the single GPU's decisions and probabilities. With
+thoughts, a three-pass run cannot end before its longest thought: one of about 4,000 tokens takes some 40 s on its
+own, so the gain shows in longer runs.
+
 ## Stress tests
 
 `tests/test_stress.py` runs against a live server and fails on any broken promise (a few minutes per run, about two
@@ -812,6 +1045,12 @@ clients on every model), where no engine failed a request.
   Inductor: torch.compile of this hybrid model did not finish in 25 minutes).
 * **llama.cpp** b10639 `llama-server -ngl 99 -c 16384 --parallel 4` behind StartLux-Decision's `gguf_server` (the
   setting its model card gives).
+* **Startlux-decide-inference** (StartLux-Decision v1.1's package, commit `b70404d`):
+  - Command: `startlux-decide serve --model DIR --launch-vllm --gpus N` (add `--quantization fp8` for FP8).
+  - vLLM: 0.31.0, with the flags its launcher picks (prefix caching, chunked prefill at 8,192 tokens, context
+    262,144, `--gpu-memory-utilization 0.88`, `--logprobs-mode processed_logprobs --max-logprobs 26`,
+    `--generation-config vllm`, images).
+  - Thoughts: one streamed request each. There is no MTP, since the release holds no MTP weights.
 * **Long evidence** (the 8k and 50k tables and the 8k-token clients): llama.cpp `-c 262144 --parallel 4`, vLLM
   `--max-model-len 65536`, SGLang `--context-length 65536`, decider `DECIDER_MAX_STATE_TOKENS=65536`; the rest as above
   (16,384 tokens of context otherwise).
