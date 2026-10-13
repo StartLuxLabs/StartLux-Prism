@@ -222,6 +222,26 @@ def _unlink_created():
     _CREATED.clear()
 
 
+def _sweep_stale():
+    """Remove the /dev/shm files of groups whose rank 0 is gone: a server killed before it could remove them (they
+    are named after its process id)."""
+    import glob
+    import re
+    for path in glob.glob("/dev/shm/flashjev-tp-*"):
+        m = re.match(r"flashjev-tp-(\d+)-", os.path.basename(path))
+        if not m:
+            continue
+        try:
+            os.kill(int(m.group(1)), 0)
+        except ProcessLookupError:
+            try:
+                os.unlink(path)
+            except OSError:
+                pass
+        except OSError:                              # alive, another user's
+            pass
+
+
 class Channel:
     """Rank 0 -> followers through shared memory: a ring of fixed-size headers (sequence number, op, argument count,
     payload bytes, int64 arguments), one area for the pickled payload of a rare message, and every follower's count of
@@ -521,6 +541,7 @@ def start(world, gpus=None):
     os.environ["CUDA_VISIBLE_DEVICES"] = ",".join(gpus[:world])
     port = _free_port()
     prefix = f"flashjev-tp-{os.getpid()}-{port}"
+    _sweep_stale()
     root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     env = dict(os.environ, PYTHONPATH=os.pathsep.join([root] + [p for p in os.environ.get("PYTHONPATH", "").split(
         os.pathsep) if p]))
