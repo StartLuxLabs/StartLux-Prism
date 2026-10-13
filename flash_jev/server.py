@@ -32,7 +32,7 @@ from concurrent.futures import Future
 
 import torch
 
-from .decide import Decider
+from .decide import Decider, request_controls
 from .engine.model import Engine, Options, group
 from .httpserve import serve
 
@@ -180,6 +180,12 @@ def main():
                          "fp32 reference on average, same decisions on JevBench (docs/optimizations.md)")
     ap.add_argument("--overlap-tokens", type=int, default=1024,
                     help="queue the next pass behind the running one once this many prompt tokens are waiting")
+    ap.add_argument("--none-check", choices=("auto", "on", "off"), default="auto",
+                    help="choice questions get the extra option \"None of the above\" and report none_probability "
+                         "(StartLux-Decision v1.1); auto: on for v1.1 folders, as startlux-decide serve, off for v1 ones")
+    ap.add_argument("--allow-none", action="store_true",
+                    help="default for the request field allow_none: a choice is null when \"None of the above\" is "
+                         "the most likely option")
     ap.add_argument("--switch-interval", type=float, default=0.0005,
                     help="Python GIL switch interval (s): how long a thread may hold the GIL while another waits")
     a = ap.parse_args()
@@ -188,6 +194,12 @@ def main():
         kinds = {t.type for n, t in GGUFFile(a.gguf).tensors.items() if n.endswith("ffn_gate.weight")}
         a.precision = "w4a8" if kinds & {GGML_Q4_K, GGML_Q5_K, GGML_Q6_K} else "int8"
     a.name = a.name or re.sub(r"-Q8_0$", "", os.path.basename(a.gguf).removesuffix(".gguf")) + " (flash-jev)"
+    from .gguf import GGUFFile
+    from .modelcfg import folder_kind
+    kind = folder_kind(a.model_dir, GGUFFile(a.gguf).meta)
+    if kind == "instant":
+        sys.exit("this is a StartLux-Decision v1.1 Instant model (its prompt is read bidirectionally): flash-jev runs "
+                 "prompts causally and does not serve it yet")
     sys.setswitchinterval(a.switch_interval)
     engine = Engine(a.gguf, a.model_dir, Options(precision=a.precision, max_tokens=a.max_tokens, graphs=not a.no_graphs,
                                                   graph_max_tokens=a.graph_max_tokens, mem_fraction=a.mem_fraction,
@@ -203,11 +215,14 @@ def main():
     budget = min(a.budget or engine.max_tokens, engine.max_tokens)      # a smaller GPU / larger model: fewer tokens
     sched = Scheduler(engine, budget, a.overlap_tokens, direct=not a.no_direct)
     tok = engine.tok
+    none_check = {"auto": kind != "v1", "on": True, "off": False}[a.none_check]
+    bad_json = 400 if kind == "v1" else 422          # as the reference server of each release answers a broken body
 
     models = json.dumps({"models": [{"name": a.name, "description": "StartLux-Decision typed decision model on "
                                      "flash-jev", "release_date": "2026-10-01"}]}).encode()
     health = json.dumps({"status": "ok", "model": a.name, "precision": a.precision, "max_tokens": engine.max_tokens,
-                         "batch_tokens": budget}).encode()
+                         "batch_tokens": budget, "kind": kind, "think_mode": "never", "none_check": none_check,
+                         "allow_none": a.allow_none}).encode()
 
     def handle(method, path, body):
         path = path.split("?", 1)[0].rstrip("/")
@@ -217,16 +232,18 @@ def main():
             if path == "/stats":
                 return 200, json.dumps(dict(sched.stats, prefix_cache=engine.cache_stats())).encode()
             return 200, health
-        if method != "POST" or path != "/v1/systemone":
+        if method != "POST" or path not in ("/v1/systemone", "/v1/decisions"):
             return 404, b'{"error": "not found"}'
         t0 = time.perf_counter()
         try:
             req = json.loads(body)
         except ValueError as e:
-            return 400, json.dumps({"error": f"malformed body: {e}"}).encode()
+            return bad_json, json.dumps({"error": f"malformed body: {e}"}).encode()
         try:
+            ctl = request_controls(req)
             backend, marks = Backend(sched), [("parsed", time.perf_counter())]
-            answers, usage = Decider(tok, backend).decide(req.get("state"), req["questions"], marks)
+            answers, usage = Decider(tok, backend, none_check, a.allow_none).decide(
+                req.get("state"), req["questions"], marks, ctl["allow_none"], ctl["none_check"])
             timings = dict(backend.last or {})
             timings["stages_ms"] = {b[0]: round((b[1] - a_[1]) * 1000, 3) for a_, b in zip(marks, marks[1:])}
             return 200, json.dumps({"answers": answers, "usage": usage, "model": a.name,

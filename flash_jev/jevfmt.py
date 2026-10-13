@@ -1,6 +1,9 @@
-# Vendored unchanged from StartLux-Decision (startlux_decision/jevfmt.py, commit 0e7a2e81b9c9), Apache-2.0;
-# see LICENSES/StartLux-Decision-Apache-2.0.txt.  The prompt bytes must match the format the checkpoints were
-# trained on, so this file is not edited: flash-jev changes how the forward pass runs, not what it reads.
+# Vendored from StartLux-Decision (startlux_decision/jevfmt.py, commit 0e7a2e81b9c9), Apache-2.0; see
+# LICENSES/StartLux-Decision-Apache-2.0.txt.  The prompt bytes must match the format the checkpoints were trained on,
+# so the v1 rendering is unchanged: flash-jev changes how the forward pass runs, not what it reads.  One addition, from
+# StartLux-Decision v1.1 (startlux_decide/prompt.py, Apache-2.0): the extra last option "None of the above" of a choice
+# question with allow_none / none_check (`from_systemone(..., allow_none=True)`), which v1 requests never get, so every
+# v1 prompt renders as before.
 """Prompt rendering for StartLux-Decision.
 
 A question about a state is turned into one chat prompt: a fixed system line, then an Evidence / Question / Options
@@ -25,6 +28,7 @@ MAX_OPTIONS = 26
 MAX_LEVELS = 10
 _BARE = re.compile(r"^(?:\(?[A-Za-z][\).]?|\(?\d{1,3}[\).]?|option[_ ]?\d{1,3}|opt[_ ]?\d{1,3})$", re.I)
 ANNOTATE_MIN = 8
+NONE_OPTION = "None of the above"   # v1.1: the extra last option of a choice question with allow_none / none_check
 
 
 def short_hash(text, n=16):
@@ -95,12 +99,14 @@ def validate(row):
 def option_lines(row, order):
     crit = {o["id"]: o.get("criterion") for o in row["options"]}
     t = row["type"]
-    hide = t == "choice" and all(_BARE.match(i) for i in order) and all(crit[i] for i in order)
+    extra = len(order) - 1 if row.get("none_option") else None      # v1.1: the extra last option, always by name
+    listed = order if extra is None else order[:extra]               # the bare-id rule looks at the listed options
+    hide = t == "choice" and all(_BARE.match(i) for i in listed) and all(crit[i] for i in listed)
     lines = []
     for k, i in enumerate(order):
         name = ("yes" if i == "true" else "no") if t == "noul" else i
         c = crit[i]
-        if hide:
+        if hide and k != extra:
             body = c
         elif c is None or not c.strip() or _norm(c) == _norm(name):
             body = name
@@ -163,8 +169,9 @@ def score_keys(crit):
         return list(crit)
 
 
-def from_systemone(state, spec, qid="q"):
-    """One /v1/systemone question spec -> the record that gets rendered. Score level ids are "0".."n-1"."""
+def from_systemone(state, spec, qid="q", allow_none=False):
+    """One /v1/systemone question spec -> the record that gets rendered. Score level ids are "0".."n-1".
+    allow_none (v1.1): a choice question gets the extra last option NONE_OPTION (other types ignore it)."""
     t = spec.get("type", "choice")
     t = "noul" if t == "bool" else t
     crit = spec.get("criteria", spec.get("options"))
@@ -173,6 +180,11 @@ def from_systemone(state, spec, qid="q"):
         if isinstance(crit, (list, tuple)):
             crit = {str(c): None for c in crit}
         opts = [{"id": str(k), "criterion": value_text(v)} for k, v in crit.items()]
+        if allow_none:
+            if any(_norm(o["id"]) == _norm(NONE_OPTION) for o in opts):
+                raise ValueError(f'allow_none adds the option "{NONE_OPTION}" itself: remove the option of that '
+                                 "name or leave allow_none out")
+            opts.append({"id": NONE_OPTION, "criterion": None})
     elif t == "score":
         if isinstance(crit, dict):
             crit = [crit[k] for k in score_keys(crit)]
@@ -188,4 +200,6 @@ def from_systemone(state, spec, qid="q"):
     row = {"id": qid, "type": t, "state": state_text(state), "instructions": ins, "options": opts}
     if t == "score":
         row["ordered"] = True
+    if t == "choice" and allow_none:
+        row["none_option"] = True
     return row

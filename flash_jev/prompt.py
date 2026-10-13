@@ -22,6 +22,7 @@ import os
 import threading
 
 from . import jevfmt as J
+from .modelcfg import folder_kind
 
 # One request's prompts are a handful of short strings: waking the tokenizer's thread pool for them costs more than
 # it saves (about a millisecond in the server, whose request threads already run concurrently).
@@ -33,9 +34,10 @@ TAIL = "<|im_end|>\n<|im_start|>assistant\n" + THINK_OFF
 
 
 def render_text(row, order=None):
-    """A rendered record (jevfmt.from_systemone) -> (prompt text, option order)."""
+    """A rendered record (jevfmt.from_systemone) -> (prompt text, option order).  The content is stripped, as the chat
+    template's |trim does (it matters only for an option id that ends in whitespace)."""
     msgs, order = J.messages(row, order)
-    return HEAD + msgs[1]["content"] + TAIL, order
+    return HEAD + msgs[1]["content"].strip() + TAIL, order
 
 
 class Tokenizer:
@@ -50,6 +52,7 @@ class Tokenizer:
         self._heads, self._heads_lock = {}, threading.Lock()
         self._tails = {}
         cfg = json.load(open(os.path.join(model_dir, "decision_config.json")))
+        self.kind = folder_kind(model_dir)              # v1 / auto_think / instant (modelcfg.py)
         self.letters = list(cfg["letter_token_ids"])
         self.temperature = {k: float(v) for k, v in cfg["temperature_by_type"].items()}
         wide = cfg.get("wide_choice", {})
