@@ -1,11 +1,11 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="840" height="481" viewBox="0 0 840 481" role="img" aria-labelledby="title desc" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif">
 <title id="title">JevBench, one request at a time: every engine</title>
-<desc id="desc">Mean ms per item over the 231 public JevBench items (lower is better). StartLux-Decision-4B and -9B on an RTX 5090, -27B on an H200; every engine alone on the GPU, unique requests through the same HTTP client. decider and JevK5 run StartLux's weights as same-shape stand-ins (they ship no StartLux checkpoint).</desc>
+<desc id="desc">Mean ms per item over the 231 public JevBench items (lower is better). StartLux-Decision-v1-4B and -9B on an RTX 5090, -27B on an H200, from their Q8_0 files; every engine alone on the GPU, unique requests through the same HTTP client. decider and JevK5 run StartLux's weights as same-shape stand-ins (they ship no StartLux checkpoint).</desc>
 <rect x="0.5" y="0.5" width="839" height="480" rx="8" fill="#fcfcfb" stroke="#e9e8e2"/>
 <text x="22.0" y="38.0" font-size="16" fill="#0b0b0b" text-anchor="start" font-weight="600">JevBench, one request at a time: every engine</text>
-<text x="22.0" y="62.0" font-size="12.5" fill="#52514e" text-anchor="start" font-weight="400">Mean ms per item over the 231 public JevBench items (lower is better). StartLux-Decision-4B and -9B on an RTX 5090, -27B on an</text>
-<text x="22.0" y="80.0" font-size="12.5" fill="#52514e" text-anchor="start" font-weight="400">H200; every engine alone on the GPU, unique requests through the same HTTP client. decider and JevK5 run StartLux's weights as</text>
-<text x="22.0" y="98.0" font-size="12.5" fill="#52514e" text-anchor="start" font-weight="400">same-shape stand-ins (they ship no StartLux checkpoint).</text>
+<text x="22.0" y="62.0" font-size="12.5" fill="#52514e" text-anchor="start" font-weight="400">Mean ms per item over the 231 public JevBench items (lower is better). StartLux-Decision-v1-4B and -9B on an RTX 5090, -27B on an</text>
+<text x="22.0" y="80.0" font-size="12.5" fill="#52514e" text-anchor="start" font-weight="400">H200, from their Q8_0 files; every engine alone on the GPU, unique requests through the same HTTP client. decider and JevK5 run</text>
+<text x="22.0" y="98.0" font-size="12.5" fill="#52514e" text-anchor="start" font-weight="400">StartLux's weights as same-shape stand-ins (they ship no StartLux checkpoint).</text>
 <text x="188.5" y="125.0" font-size="12.5" fill="#0b0b0b" text-anchor="start" font-weight="600">4B · RTX 5090</text>
 <text x="188.5" y="412.0" font-size="11" fill="#898781" text-anchor="middle" font-weight="400" style="font-variant-numeric: tabular-nums">0</text>
 <line x1="237.9" y1="133.0" x2="237.9" y2="397.0" stroke="#e1e0d9" stroke-width="1" shape-rendering="crispEdges"/>

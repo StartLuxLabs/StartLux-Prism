@@ -12,7 +12,7 @@ own (`flash_jev/jevfmt.py` is vendored unchanged), so only the forward pass diff
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/images/jevbench-latency-dark.svg">
-  <img src="docs/images/jevbench-latency.svg" width="840" alt="JevBench mean ms per item, one request at a time, for every engine on StartLux-Decision-4B and -9B (RTX 5090) and -27B (H200): flash-jev int8 15.0, 21.6 and 41.0; decider with torch.compile and FP8 33.4, 50.3, 66.8; flash-jev bf16 29.6, 52.1, 68.2; SGLang native 42.0, 59.8, 90.1; SGLang via adapter 40.1, 62.1, 92.0; StartLux-Decision server 47.0, 71.2, 96.0; decider default 48.5, 76.1, 99.9; JevK5 49.8, 74.4, 101.1; vLLM 55.3, 84.9, 119.1; llama.cpp 134.7, 162.7, 589.2.">
+  <img src="docs/images/jevbench-latency.svg" width="840" alt="JevBench mean ms per item, one request at a time, for every engine on StartLux-Decision-v1-4B and -9B (RTX 5090) and -27B (H200), Q8_0 files: flash-jev int8 15.0, 21.6 and 41.0; decider with torch.compile and FP8 33.4, 50.3, 66.8; flash-jev bf16 29.6, 52.1, 68.2; SGLang native 42.0, 59.8, 90.1; SGLang via adapter 40.1, 62.1, 92.0; StartLux-Decision server 47.0, 71.2, 96.0; decider default 48.5, 76.1, 99.9; JevK5 49.8, 74.4, 101.1; vLLM 55.3, 84.9, 119.1; llama.cpp 134.7, 162.7, 589.2.">
 </picture>
 
 ## Highlights
@@ -41,10 +41,11 @@ own (`flash_jev/jevfmt.py` is vendored unchanged), so only the forward pass diff
 ## Performance
 
 Every engine alone on the same GPU, unique requests (no engine can replay a cached prefix) through the same
-`/v1/systemone` HTTP client, JevBench scored with its own scorer; StartLux-Decision-4B and -9B on an RTX 5090, -27B on
-an H200.
+`/v1/systemone` HTTP client, JevBench scored with its own scorer; StartLux-Decision-v1-4B and -9B on an RTX 5090, -27B
+on an H200, every engine from the same Q8_0 file (below).
 
-**Models.** StartLux-Decision v1, StartLux's GGUF releases on Hugging Face (published 2026-09-29), unchanged: every
+**Models, for every benchmark, stress test and accuracy run.** StartLux-Decision v1, StartLux's GGUF releases on Hugging
+Face (published 2026-09-29), unchanged: every
 file run here is byte-identical to the release (SHA-256 checked on 2026-10-13). The repositories were named
 `StartLux-Decision-<size>-<precision>-GGUF` when we downloaded them and now carry a `v1`; the old names redirect.
 
@@ -85,7 +86,7 @@ SGLang's native endpoint also renders its own prompts.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/images/jevbench-throughput-dark.svg">
-  <img src="docs/images/jevbench-throughput.svg" width="840" alt="JevBench requests per second from 32 clients for every engine on the 4B, 9B (RTX 5090) and 27B (H200): flash-jev int8 85.2, 53.3, 30.6; decider with torch.compile and FP8 35.0, 22.6, 15.4; flash-jev bf16 37.0, 19.9, 16.7; SGLang native 39.5, 21.7, 18.8; SGLang via adapter 37.4, 20.5, 17.7; StartLux-Decision server 22.9, 14.2, 10.4; decider default 20.7, 12.6, 9.6; JevK5 21.8, 13.6, 9.9; vLLM 33.6, 18.9, 15.4; llama.cpp 6.5, 5.7, 1.4.">
+  <img src="docs/images/jevbench-throughput.svg" width="840" alt="JevBench requests per second from 32 clients for every engine on StartLux-Decision-v1-4B, -9B (RTX 5090) and -27B (H200), Q8_0 files: flash-jev int8 85.2, 53.3, 30.6; decider with torch.compile and FP8 35.0, 22.6, 15.4; flash-jev bf16 37.0, 19.9, 16.7; SGLang native 39.5, 21.7, 18.8; SGLang via adapter 37.4, 20.5, 17.7; StartLux-Decision server 22.9, 14.2, 10.4; decider default 20.7, 12.6, 9.6; JevK5 21.8, 13.6, 9.9; vLLM 33.6, 18.9, 15.4; llama.cpp 6.5, 5.7, 1.4.">
 </picture>
 
 **Single requests and long evidence, every engine** (p50 ms, one request at a time):

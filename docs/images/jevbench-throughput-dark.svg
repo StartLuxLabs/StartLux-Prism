@@ -1,11 +1,11 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="840" height="465" viewBox="0 0 840 465" role="img" aria-labelledby="title desc" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif">
 <title id="title">JevBench from 32 clients: every engine</title>
-<desc id="desc">Requests per second while 32 clients send the 231 public items, three passes each (higher is better); no engine failed a request. StartLux-Decision-4B and -9B on an RTX 5090, -27B on an H200. decider and JevK5 run StartLux's weights as same-shape stand-ins (they ship no StartLux checkpoint).</desc>
+<desc id="desc">Requests per second while 32 clients send the 231 public items, three passes each (higher is better); no engine failed a request. StartLux-Decision-v1-4B and -9B on an RTX 5090, -27B on an H200, from their Q8_0 files. decider and JevK5 run StartLux's weights as same-shape stand-ins (they ship no StartLux checkpoint).</desc>
 <rect x="0.5" y="0.5" width="839" height="464" rx="8" fill="#1a1a19" stroke="#2c2c2a"/>
 <text x="22.0" y="38.0" font-size="16" fill="#ffffff" text-anchor="start" font-weight="600">JevBench from 32 clients: every engine</text>
 <text x="22.0" y="62.0" font-size="12.5" fill="#c3c2b7" text-anchor="start" font-weight="400">Requests per second while 32 clients send the 231 public items, three passes each (higher is better); no engine failed a request.</text>
-<text x="22.0" y="80.0" font-size="12.5" fill="#c3c2b7" text-anchor="start" font-weight="400">StartLux-Decision-4B and -9B on an RTX 5090, -27B on an H200. decider and JevK5 run StartLux's weights as same-shape stand-ins</text>
-<text x="22.0" y="98.0" font-size="12.5" fill="#c3c2b7" text-anchor="start" font-weight="400">(they ship no StartLux checkpoint).</text>
+<text x="22.0" y="80.0" font-size="12.5" fill="#c3c2b7" text-anchor="start" font-weight="400">StartLux-Decision-v1-4B and -9B on an RTX 5090, -27B on an H200, from their Q8_0 files. decider and JevK5 run StartLux's weights as</text>
+<text x="22.0" y="98.0" font-size="12.5" fill="#c3c2b7" text-anchor="start" font-weight="400">same-shape stand-ins (they ship no StartLux checkpoint).</text>
 <text x="188.5" y="125.0" font-size="12.5" fill="#ffffff" text-anchor="start" font-weight="600">4B · RTX 5090</text>
 <text x="188.5" y="412.0" font-size="11" fill="#898781" text-anchor="middle" font-weight="400" style="font-variant-numeric: tabular-nums">0</text>
 <line x1="266.4" y1="133.0" x2="266.4" y2="397.0" stroke="#2c2c2a" stroke-width="1" shape-rendering="crispEdges"/>

@@ -1,8 +1,8 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="760" height="464" viewBox="0 0 760 464" role="img" aria-labelledby="title desc" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif">
-<title id="title">StartLux-Decision-4B on an RTX 5090</title>
+<title id="title">StartLux-Decision-v1-4B (Q8_0) on an RTX 5090</title>
 <desc id="desc">Every engine alone on the GPU, unique requests through the same HTTP client; the 231 public JevBench items. decider and JevK5 run StartLux's weights as same-shape stand-ins (they ship no StartLux checkpoint).</desc>
 <rect x="0.5" y="0.5" width="759" height="463" rx="8" fill="#fcfcfb" stroke="#e9e8e2"/>
-<text x="22.0" y="38.0" font-size="16" fill="#0b0b0b" text-anchor="start" font-weight="600">StartLux-Decision-4B on an RTX 5090</text>
+<text x="22.0" y="38.0" font-size="16" fill="#0b0b0b" text-anchor="start" font-weight="600">StartLux-Decision-v1-4B (Q8_0) on an RTX 5090</text>
 <text x="22.0" y="62.0" font-size="12.5" fill="#52514e" text-anchor="start" font-weight="400">Every engine alone on the GPU, unique requests through the same HTTP client; the 231 public JevBench items. decider</text>
 <text x="22.0" y="80.0" font-size="12.5" fill="#52514e" text-anchor="start" font-weight="400">and JevK5 run StartLux's weights as same-shape stand-ins (they ship no StartLux checkpoint).</text>
 <text x="188.5" y="107.0" font-size="12.5" fill="#0b0b0b" text-anchor="start" font-weight="600">One request at a time: mean ms per item</text>

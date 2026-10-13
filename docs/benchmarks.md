@@ -1,6 +1,7 @@
 # Benchmarks and stress tests
 
-flash-jev against seven other engines on StartLux-Decision 4B, 9B and 27B: one request at a time, many clients at
+flash-jev against seven other engines on StartLux-Decision v1 at 4B, 9B and 27B (StartLux's Q8_0 and Q4_K_M GGUF
+releases, byte-identical to them: [Setup](#setup)): one request at a time, many clients at
 once, long evidence, follow-up questions served from a prefix cache, the longest request each engine computes in one
 pass, and the stress test of a running server. Two machines: an RTX 5090 (the 4B, the 9B and the 27B's Q4_K_M file)
 and an H200 (the 27B). Every engine runs alone on the GPU, one after another, through the same HTTP client; all
@@ -8,11 +9,11 @@ numbers are from 2026-10-10 to 2026-10-12. Each chart is drawn from the table be
 
 - [Summary](#summary)
 - [Setup](#setup) · [Method](#method) · [Reproducing](#reproducing)
-- [StartLux-Decision-4B on an RTX 5090](#startlux-decision-4b-on-an-rtx-5090): [one request at a time](#one-request-at-a-time),
+- [StartLux-Decision-v1-4B on an RTX 5090](#startlux-decision-v1-4b-on-an-rtx-5090): [one request at a time](#one-request-at-a-time),
   [many clients](#many-clients-at-once), [long evidence](#long-evidence-8k-and-50k-tokens),
   [prefix cache](#follow-up-questions-the-prefix-cache)
-- [StartLux-Decision-9B on an RTX 5090](#startlux-decision-9b-on-an-rtx-5090)
-- [StartLux-Decision-27B on an H200](#startlux-decision-27b-on-an-h200)
+- [StartLux-Decision-v1-9B on an RTX 5090](#startlux-decision-v1-9b-on-an-rtx-5090)
+- [StartLux-Decision-v1-27B on an H200](#startlux-decision-v1-27b-on-an-h200)
 - [Q4_K_M files: W4A8](#q4_k_m-files-w4a8)
 - [The longest request in one pass](#the-longest-request-in-one-pass)
 - [Accuracy: StartLux-Decision-v1's evaluation](#accuracy-startlux-decision-v1s-evaluation)
@@ -21,7 +22,8 @@ numbers are from 2026-10-10 to 2026-10-12. Each chart is drawn from the table be
 
 ## Summary
 
-Every engine on all three models: StartLux-Decision-4B and -9B on the RTX 5090, -27B on the H200. decider and JevK5 run
+Every engine on all three models: StartLux-Decision-v1-4B and -9B on the RTX 5090, -27B on the H200, each from its Q8_0
+file (`StartLux-Decision-4B-Q8_0.gguf`, `-9B-Q8_0.gguf`, `-27B-Q8_0.gguf`; [Setup](#setup)). decider and JevK5 run
 StartLux's weights as same-shape stand-ins (they ship no StartLux checkpoint), so their speed compares directly but
 their scores, in parentheses, come from prompts these weights were not trained with.
 
@@ -182,7 +184,10 @@ environment prepare_model.sh prints. The Q4_K_M rows: `MODEL=<the Q4_K_M reposit
 flash-jev-w4a8 llamacpp sglang-gguf` (sglang-gguf with that model's CAUSAL_FLAT); the W4A8 GEMM's table:
 `bench/w4a8_table.py` over the Q4_K_M files.
 
-## StartLux-Decision-4B on an RTX 5090
+## StartLux-Decision-v1-4B on an RTX 5090
+
+The model: StartLux-Decision-v1-4B, `StartLux-Decision-4B-Q8_0.gguf` (4.48 GB, SHA-256 `3de47f14…`), for every engine
+(the PyTorch engines on its bf16 conversion); the Q4_K_M rows further down: `StartLux-Decision-4B-Q4_K_M.gguf`.
 
 ### One request at a time
 
@@ -363,14 +368,15 @@ Memory: 64 entries x (48 MiB of linear-attention state + 2.4 MB of conv tails) a
 with the defaults (`--prefix-cache 64 --prefix-cache-tokens 65536`; the server took 13,200 MiB instead of 7,930 MiB).
 With long evidence the KV rows run out first (23 entries of about 2,750 tokens in the jevbench scenario).
 
-## StartLux-Decision-9B on an RTX 5090
+## StartLux-Decision-v1-9B on an RTX 5090
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="images/rtx5090-9b-dark.svg">
   <img src="images/rtx5090-9b.svg" width="760" alt="StartLux-Decision-9B on an RTX 5090. JevBench mean ms per item one request at a time, and requests per second from 32 clients: flash-jev int8 21.6 and 53.3; decider compile + FP8 50.3 and 22.6; flash-jev bf16 52.1 and 19.9; SGLang native 59.8 and 21.7; SGLang via adapter 62.1 and 20.5; StartLux-Decision server 71.2 and 14.2; JevK5 74.4 and 13.6; decider default 76.1 and 12.6; vLLM 84.9 and 18.9; llama.cpp 162.7 and 5.7.">
 </picture>
 
-The same procedure on StartLux-Decision-9B's Q8_0 GGUF (hidden 4096, feed-forward 12288, untied output head; the same
+The same procedure on StartLux-Decision-v1-9B's Q8_0 GGUF (`StartLux-Decision-9B-Q8_0.gguf`, 9.53 GB, SHA-256
+`9daae505…`; hidden 4096, feed-forward 12288, untied output head; the same
 linear-attention and attention heads as the 4B), on 2026-10-10 between 17:53 and 20:03: `scripts/new_model.sh` first
 (the dispatch table entries for its projection shapes, its int8 calibration, and the correctness tests: int8 and bf16
 make the fp32 reference's decision on 23/23 questions, largest probability difference 0.043 and 0.003; the CUDA GEMM
@@ -419,14 +425,16 @@ decider's default mode runs out of GPU memory on the 50k request (`torch.OutOfMe
 `chunk_fwd_o`, reproduced once more alone): 17.9 GB of bf16 weights, its CUDA graphs and 50k tokens of activations do
 not fit; with FP8 weights it does.
 
-## StartLux-Decision-27B on an H200
+## StartLux-Decision-v1-27B on an H200
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="images/h200-27b-dark.svg">
   <img src="images/h200-27b.svg" width="760" alt="StartLux-Decision-27B on an H200. JevBench mean ms per item one request at a time, and requests per second from 32 clients: flash-jev int8 41.0 and 30.6; decider compile + FP8 66.8 and 15.4; flash-jev bf16 68.2 and 16.7; SGLang native 90.1 and 18.8; SGLang via adapter 92.0 and 17.7; StartLux-Decision server 96.0 and 10.4; decider default 99.9 and 9.6; JevK5 101.1 and 9.9; vLLM 119.1 and 15.4; llama.cpp 589.2 and 1.4.">
 </picture>
 
-The 27B (hidden 5120, 64 layers: 48 linear-attention with 48 value heads, 16 attention with 24 heads over 4 KV heads;
+StartLux-Decision-v1-27B from its Q8_0 GGUF (`StartLux-Decision-27B-Q8_0.gguf`, 28.60 GB, SHA-256 `5868a8a2…`; the
+Q4_K_M rows: `StartLux-Decision-27B-Q4_K_M.gguf`; hidden 5120, 64 layers: 48 linear-attention with 48 value heads, 16
+attention with 24 heads over 4 KV heads;
 untied output head) on the H200 ([Setup](#setup)), with `scripts/stress.sh` steps 0-3 and 5 and `env-27b.sh` for the
 folders; the converted bf16 checkpoint and its views as for the 9B (`scripts/prepare_model.sh`). SGLang's JIT kernels
 needed the CUDA folder's `lib64 -> lib` link, as on the RTX 5090 server. decider and JevK5 have no 27B checkpoints:
@@ -507,7 +515,8 @@ mma.sync (200-300 TOPS against the int8 path's 1,250 on wgmma: `docs/optimizatio
   <img src="images/q4km.svg" width="760" alt="Q4_K_M files, JevBench mean ms per item, flash-jev W4A8 against llama.cpp on the same file: 4B on an RTX 5090 19.7 against 135.8; 9B on an RTX 5090 32.1 against 160.3; 27B on an RTX 5090 112.7 against 439.3; 27B on an H200 155.2 against 626.7.">
 </picture>
 
-StartLux-Decision's Q4_K_M GGUFs (4B 2.71 GB, 9B 5.63 GB, 27B 16.55 GB; Q4_K with Q6_K for some tensors) run on
+StartLux-Decision-v1's Q4_K_M GGUFs (`StartLux-Decision-4B-Q4_K_M.gguf` 2.71 GB, `-9B-Q4_K_M.gguf` 5.63 GB,
+`-27B-Q4_K_M.gguf` 16.55 GB; Q4_K with Q6_K for some tensors) run on
 flash-jev's W4A8 path (`--precision auto` picks it for a k-quant file): the file's Q4_K / Q6_K values as they are, int8
 activations with one scale per 256 inputs, int8 tensor cores (`flash_jev/kernels/w4a8.py`, `csrc/w4a8_gemm.cu`; how and
 why: `docs/optimizations.md`). Requantizing the 4-bit weights to the int8 path's per-row W8A8 instead (the first way
@@ -544,7 +553,7 @@ the 27B fit the RTX 5090: its Q4_K_M file on W4A8 runs with a smaller prefix cac
 holds 151 MB of recurrent state on the 27B, 48 MiB on the 4B; largest batch then 6,144 tokens). The 27B became possible
 once its value-head count stopped being assumed a power of two (three Triton kernels pad it and mask; the 4B's and 9B's
 answers bit-identical before and after). Every engine on the 27B, Q8_0 and Q4_K_M:
-[the H200 section](#startlux-decision-27b-on-an-h200).
+[the H200 section](#startlux-decision-v1-27b-on-an-h200).
 
 **Under stress** (`scripts/stress.sh` steps 1-5 on the 4B and 9B Q4_K_M files, 2026-10-11:
 `ENGINES="flash-jev-w4a8 llamacpp"`, `STRESS_PREC=w4a8 FLASHJEV_PREC=w4a8 MAXCTX_ENGINES=flash-jev`; requests/s, p50 ms in
@@ -586,7 +595,7 @@ shard. The 9B did not start: its launches died at random ([Crashes](#crashes-on-
 `scripts/max_context.sh`: one request at a time at 16k, 32k, 48k, 64k, 96k, 128k, 192k and 256k tokens until one
 fails, each engine computing the whole prompt in one forward pass (p50 ms of one request after one warm-up).
 
-**StartLux-Decision-4B on the RTX 5090:**
+**StartLux-Decision-v1-4B (`StartLux-Decision-4B-Q8_0.gguf`) on the RTX 5090:**
 
 | engine | 16k | 32k | 48k | 64k | 96k | longest |
 |---|---|---|---|---|---|---|
@@ -603,7 +612,7 @@ default chunked prefill both reach the model's 262,144 tokens: one 256,000-token
 38.2 s on vLLM. flash-jev computes a request in one pass by design (a CUDA graph per batch size); its largest batch
 comes from GPU memory (README, Serving), and a longer request is refused, never cut.
 
-**StartLux-Decision-27B on the H200:**
+**StartLux-Decision-v1-27B (`StartLux-Decision-27B-Q8_0.gguf`, W4A8: `-Q4_K_M.gguf`) on the H200:**
 
 | engine (27B Q8_0, H200) | 16k | 32k | 48k | 64k | 96k | 128k | longest |
 |---|---|---|---|---|---|---|---|
@@ -720,14 +729,14 @@ passes per level, every pass within 3 of the score one at a time), 64 JevBench r
 then one at a time with the same probabilities to the last bit (int8 and W4A8 are batch-invariant), and `/health` and
 `/stats` at the end. Every run passed all 11 checks:
 
-| model, GPU, precision (date) | 8k / 50k evidence, p50 ms | largest batch: answered / refused | 8k evidence, 8 / 16 / 32 clients, req/s | JevBench, 8 / 16 / 32 clients, req/s (scores per pass; one at a time) | under load |
+| model file, GPU, precision (date) | 8k / 50k evidence, p50 ms | largest batch: answered / refused | 8k evidence, 8 / 16 / 32 clients, req/s | JevBench, 8 / 16 / 32 clients, req/s (scores per pass; one at a time) | under load |
 |---|---|---|---|---|---|
-| 4B, RTX 5090, int8 (10-10) | 163.6 / 1,918.6 | 65,046 tokens in 2.9 s / 66,581 | 6.15 / 6.09 / 6.07 | 82.9 / 83.9 / 83.0 (202-205; 205) | 64/64 identical |
-| 9B, RTX 5090, int8 (10-10) | 243.2 / skipped¹ | 48,679 tokens in 2.4 s / 50,203 | 4.08 / 4.03 / 4.01 | 52.5 / 53.0 / 53.2 (199-201; 200) | 64/64 identical |
-| 4B, RTX 5090, W4A8 on Q4_K_M (10-11) | 231.5 / 2,285.6 | 65,046 tokens in 3.4 s / 66,581 | 4.32 / 4.29 / 4.27 | 57.2 / 57.5 / 57.5 (198-202; 201) | 64/64 identical |
-| 9B, RTX 5090, W4A8 on Q4_K_M (10-11) | 364.0 / 3,110.4 | 65,046 tokens in 4.5 s / 66,581 | 2.72 / 2.69 / 2.67 | 34.3 / 34.7 / 34.7 (198-200; 200) | 64/64 identical |
-| 27B, H200, int8 (10-12) | 425.3 / 3,675.5 | 130,578 tokens in 14.7 s / 132,119 | 2.32 / 2.34 / 2.33 | 29.3 / 29.9 / 30.8 (206-209; 207) | 64/64 identical |
-| 27B, H200, W4A8 on Q4_K_M (10-12) | 1,711.4 / 11,444.7 | 130,578 tokens in 34.9 s / 132,119 | 0.59 / 0.59 / 0.59 | 7.2 / 7.4 / 7.5 (206-210; 207) | 64/64 identical |
+| v1-4B Q8_0, RTX 5090, int8 (10-10) | 163.6 / 1,918.6 | 65,046 tokens in 2.9 s / 66,581 | 6.15 / 6.09 / 6.07 | 82.9 / 83.9 / 83.0 (202-205; 205) | 64/64 identical |
+| v1-9B Q8_0, RTX 5090, int8 (10-10) | 243.2 / skipped¹ | 48,679 tokens in 2.4 s / 50,203 | 4.08 / 4.03 / 4.01 | 52.5 / 53.0 / 53.2 (199-201; 200) | 64/64 identical |
+| v1-4B Q4_K_M, RTX 5090, W4A8 (10-11) | 231.5 / 2,285.6 | 65,046 tokens in 3.4 s / 66,581 | 4.32 / 4.29 / 4.27 | 57.2 / 57.5 / 57.5 (198-202; 201) | 64/64 identical |
+| v1-9B Q4_K_M, RTX 5090, W4A8 (10-11) | 364.0 / 3,110.4 | 65,046 tokens in 4.5 s / 66,581 | 2.72 / 2.69 / 2.67 | 34.3 / 34.7 / 34.7 (198-200; 200) | 64/64 identical |
+| v1-27B Q8_0, H200, int8 (10-12) | 425.3 / 3,675.5 | 130,578 tokens in 14.7 s / 132,119 | 2.32 / 2.34 / 2.33 | 29.3 / 29.9 / 30.8 (206-209; 207) | 64/64 identical |
+| v1-27B Q4_K_M, H200, W4A8 (10-12) | 1,711.4 / 11,444.7 | 130,578 tokens in 34.9 s / 132,119 | 0.59 / 0.59 / 0.59 | 7.2 / 7.4 / 7.5 (206-210; 207) | 64/64 identical |
 
 ¹ 50,005 tokens is beyond the 9B's largest batch with its prefix cache (49,152 tokens): the check is skipped, and the
 capacity check covers the limit. Results: `results/stress/`.

@@ -11,7 +11,7 @@
 <line x1="144.4" y1="100.0" x2="162.4" y2="100.0" stroke="#898781" stroke-width="2" stroke-linecap="round"/>
 <circle cx="153.4" cy="100.0" r="4" fill="#898781" stroke="#fcfcfb" stroke-width="2"/>
 <text x="168.4" y="104.0" font-size="12.5" fill="#52514e" text-anchor="start" font-weight="400">SGLang 0.5.21, --chunked-prefill-size -1</text>
-<text x="22.0" y="133.0" font-size="12.5" fill="#0b0b0b" text-anchor="start" font-weight="600">StartLux-Decision-4B, RTX 5090</text>
+<text x="22.0" y="133.0" font-size="12.5" fill="#0b0b0b" text-anchor="start" font-weight="600">StartLux-Decision-v1-4B (Q8_0), RTX 5090</text>
 <text x="49.0" y="351.0" font-size="11" fill="#898781" text-anchor="end" font-weight="400" style="font-variant-numeric: tabular-nums">0 s</text>
 <line x1="56.0" y1="280.3" x2="319.0" y2="280.3" stroke="#e1e0d9" stroke-width="1" shape-rendering="crispEdges"/>
 <text x="49.0" y="284.3" font-size="11" fill="#898781" text-anchor="end" font-weight="400" style="font-variant-numeric: tabular-nums">2 s</text>
@@ -38,7 +38,7 @@
 <circle cx="224.3" cy="222.3" r="4" fill="#898781" stroke="#fcfcfb" stroke-width="2"><title>SGLang 0.5.21, --chunked-prefill-size -1, 64k tokens: 3.741 s</title></circle>
 <text x="316.5" y="165.4" font-size="12" fill="#0b0b0b" text-anchor="start" font-weight="600" style="font-variant-numeric: tabular-nums" stroke="#fcfcfb" stroke-width="3" stroke-linejoin="round" paint-order="stroke">5.6 s</text>
 <text x="224.3" y="212.3" font-size="12" fill="#52514e" text-anchor="middle" font-weight="400" style="font-variant-numeric: tabular-nums" stroke="#fcfcfb" stroke-width="3" stroke-linejoin="round" paint-order="stroke">3.7 s</text>
-<text x="395.0" y="133.0" font-size="12.5" fill="#0b0b0b" text-anchor="start" font-weight="600">StartLux-Decision-27B, H200</text>
+<text x="395.0" y="133.0" font-size="12.5" fill="#0b0b0b" text-anchor="start" font-weight="600">StartLux-Decision-v1-27B (Q8_0), H200</text>
 <text x="422.0" y="351.0" font-size="11" fill="#898781" text-anchor="end" font-weight="400" style="font-variant-numeric: tabular-nums">0 s</text>
 <line x1="429.0" y1="284.5" x2="692.0" y2="284.5" stroke="#e1e0d9" stroke-width="1" shape-rendering="crispEdges"/>
 <text x="422.0" y="288.5" font-size="11" fill="#898781" text-anchor="end" font-weight="400" style="font-variant-numeric: tabular-nums">5 s</text>

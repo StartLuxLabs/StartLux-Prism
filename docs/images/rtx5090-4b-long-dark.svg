@@ -1,8 +1,8 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="760" height="411" viewBox="0 0 760 411" role="img" aria-labelledby="title desc" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif">
-<title id="title">Long evidence: StartLux-Decision-4B on an RTX 5090</title>
+<title id="title">Long evidence: StartLux-Decision-v1-4B (Q8_0) on an RTX 5090</title>
 <desc id="desc">One yes/no question about an application log of 8,000 or 50,000 tokens, one request at a time; every engine counted every token. decider and JevK5 run StartLux's weights as same-shape stand-ins (they ship no StartLux checkpoint).</desc>
 <rect x="0.5" y="0.5" width="759" height="410" rx="8" fill="#1a1a19" stroke="#2c2c2a"/>
-<text x="22.0" y="38.0" font-size="16" fill="#ffffff" text-anchor="start" font-weight="600">Long evidence: StartLux-Decision-4B on an RTX 5090</text>
+<text x="22.0" y="38.0" font-size="16" fill="#ffffff" text-anchor="start" font-weight="600">Long evidence: StartLux-Decision-v1-4B (Q8_0) on an RTX 5090</text>
 <text x="22.0" y="62.0" font-size="12.5" fill="#c3c2b7" text-anchor="start" font-weight="400">One yes/no question about an application log of 8,000 or 50,000 tokens, one request at a time; every engine counted every</text>
 <text x="22.0" y="80.0" font-size="12.5" fill="#c3c2b7" text-anchor="start" font-weight="400">token. decider and JevK5 run StartLux's weights as same-shape stand-ins (they ship no StartLux checkpoint).</text>
 <text x="188.5" y="107.0" font-size="12.5" fill="#ffffff" text-anchor="start" font-weight="600">8,000 tokens: p50 ms (lower is better)</text>

@@ -376,8 +376,8 @@ def chart(fn):
 def jevbench_latency(theme):
     return all_engines_chart(
         theme, "JevBench, one request at a time: every engine",
-        "Mean ms per item over the 231 public JevBench items (lower is better). StartLux-Decision-4B and -9B on an "
-        "RTX 5090, -27B on an H200; every engine alone on the GPU, unique requests through the same HTTP client. "
+        "Mean ms per item over the 231 public JevBench items (lower is better). StartLux-Decision-v1-4B and -9B on an "
+        "RTX 5090, -27B on an H200, from their Q8_0 files; every engine alone on the GPU, unique requests through the same HTTP client. "
         + STAND_IN, "lat", "ms",
         "Q8_0 weights for every engine (bf16 conversions of them for the PyTorch engines). The 27B's llama.cpp bar is "
         "cut (589.2 ms). Scores, p50 and p95 per engine: docs/benchmarks.md.")
@@ -388,7 +388,8 @@ def jevbench_throughput(theme):
     return all_engines_chart(
         theme, "JevBench from 32 clients: every engine",
         "Requests per second while 32 clients send the 231 public items, three passes each (higher is better); no "
-        "engine failed a request. StartLux-Decision-4B and -9B on an RTX 5090, -27B on an H200. " + STAND_IN,
+        "engine failed a request. StartLux-Decision-v1-4B and -9B on an RTX 5090, -27B on an H200, from their Q8_0 files. "
+        + STAND_IN,
         "tput", "requests/s",
         "8 and 16 clients give every engine within a few percent of its 32-client rate: from 8 clients on, the GPU is "
         "busy and more clients only queue.")
@@ -396,21 +397,21 @@ def jevbench_throughput(theme):
 
 @chart
 def rtx5090_4b(theme):
-    return engines_chart(theme, "StartLux-Decision-4B on an RTX 5090", 0,
+    return engines_chart(theme, "StartLux-Decision-v1-4B (Q8_0) on an RTX 5090", 0,
                          "Q8_0 weights for every engine (bf16 conversions of them for the PyTorch engines); "
                          "2026-10-10.")
 
 
 @chart
 def rtx5090_9b(theme):
-    return engines_chart(theme, "StartLux-Decision-9B on an RTX 5090", 1,
+    return engines_chart(theme, "StartLux-Decision-v1-9B (Q8_0) on an RTX 5090", 1,
                          "Q8_0 weights for every engine (bf16 conversions of them for the PyTorch engines); "
                          "2026-10-10.")
 
 
 @chart
 def h200_27b(theme):
-    return engines_chart(theme, "StartLux-Decision-27B on an H200", 2,
+    return engines_chart(theme, "StartLux-Decision-v1-27B (Q8_0) on an H200", 2,
                          "Q8_0 weights for every engine (bf16 conversions of them for the PyTorch engines); "
                          "2026-10-12. llama.cpp's latency bar is cut (589.2 ms).")
 
@@ -433,7 +434,7 @@ def rtx5090_4b_long(theme):
     rows = [("flash-jev int8", 162.5, 1960), ("decider, compile + FP8", 328.7, 3708), ("SGLang via adapter", 342.2, 2911),
             ("JevK5", 417.7, 3263), ("StartLux-Decision server", 424.2, "fails above 32,768 tokens"),
             ("vLLM via adapter", 440.5, 3359), ("decider, default", 521.5, 3272), ("llama.cpp (Q8_0)", 730.3, 5326)]
-    return long_chart(theme, "Long evidence: StartLux-Decision-4B on an RTX 5090", rows, None, None,
+    return long_chart(theme, "Long evidence: StartLux-Decision-v1-4B (Q8_0) on an RTX 5090", rows, None, None,
                       "2026-10-10. The StartLux-Decision server's chunked path fails on prompts above 32,768 tokens "
                       "with the transformers version installed.")
 
@@ -443,7 +444,7 @@ def h200_27b_long(theme):
     rows = [("flash-jev int8", 432, 3693), ("decider, compile + FP8", 698, 7301), ("SGLang via adapter", 704, 4936),
             ("vLLM via adapter", 833, 5743), ("JevK5", 847, 5783), ("StartLux-Decision server", 870, "fails above 32,768 tokens"),
             ("decider, default", 1062, 6779), ("llama.cpp (Q8_0)", 3514, 28623)]
-    return long_chart(theme, "Long evidence: StartLux-Decision-27B on an H200", rows, 1200, 8000,
+    return long_chart(theme, "Long evidence: StartLux-Decision-v1-27B (Q8_0) on an H200", rows, 1200, 8000,
                       "2026-10-12. llama.cpp's bars are cut (3,514 and 28,623 ms). SGLang runs FlashAttention 3 here; "
                       "at 50,000 tokens attention is most of the work.")
 
@@ -454,9 +455,9 @@ def max_context(theme):
         theme, "The longest request in one pass (no chunked prefill)",
         "One request at a time, the whole prompt in one forward pass; seconds per request. vLLM does not start "
         "without chunked prefill on this model.",
-        [dict(head="StartLux-Decision-4B, RTX 5090", xs=[16, 32, 48, 64, 96],
+        [dict(head="StartLux-Decision-v1-4B (Q8_0), RTX 5090", xs=[16, 32, 48, 64, 96],
               series=[[0.377, 0.978, 1.814, 2.861, 5.567], [0.692, 1.562, 2.559, 3.741, None]], xmax=100, ymax=6),
-         dict(head="StartLux-Decision-27B, H200", xs=[16, 32, 48, 64, 96, 128],
+         dict(head="StartLux-Decision-v1-27B (Q8_0), H200", xs=[16, 32, 48, 64, 96, 128],
               series=[[0.910, 2.047, 3.460, 5.120, 9.234, 14.205], [1.424, 2.984, 4.697, 6.605, 10.821, 15.705]],
               xmax=132, ymax=16)],
         legend=[("accent", "flash-jev int8"), ("line2", "SGLang 0.5.21, --chunked-prefill-size -1")],
@@ -473,7 +474,7 @@ def prefix_cache(theme):
             ("decider, compile + FP8", 104.6, 157.8), ("StartLux-Decision server", 173.9, 173.6)]
     return bar_chart(
         theme, "Follow-up questions about evidence already sent",
-        "StartLux-Decision-4B on an RTX 5090: the 20 public JevBench items with the longest evidence (2,000-3,700 "
+        "StartLux-Decision-v1-4B (Q8_0) on an RTX 5090: the 20 public JevBench items with the longest evidence (2,000-3,700 "
         "tokens), each asked, then two more questions about the same evidence. p50 ms.",
         [(r[0], r[0] == "flash-jev int8, prefix cache") for r in rows],
         [dict(head="First request (new evidence)", vals=[r[1] for r in rows], shown=[f"{r[1]:,.1f}" for r in rows],
@@ -487,7 +488,7 @@ def prefix_cache(theme):
 @chart
 def q4km(theme):
     return group_chart(
-        theme, "Q4_K_M files: flash-jev W4A8 against llama.cpp",
+        theme, "StartLux-Decision-v1 Q4_K_M files: flash-jev W4A8 against llama.cpp",
         "Each engine on the same Q4_K_M GGUF file: flash-jev on the file's own 4-bit weights (int8 activations, "
         "int8 tensor cores), llama.cpp b10639. JevBench, one request at a time.",
         ["4B · RTX 5090", "9B · RTX 5090", "27B · RTX 5090", "27B · H200"],

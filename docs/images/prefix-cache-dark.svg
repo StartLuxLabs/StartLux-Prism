@@ -1,10 +1,10 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="760" height="343" viewBox="0 0 760 343" role="img" aria-labelledby="title desc" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif">
 <title id="title">Follow-up questions about evidence already sent</title>
-<desc id="desc">StartLux-Decision-4B on an RTX 5090: the 20 public JevBench items with the longest evidence (2,000-3,700 tokens), each asked, then two more questions about the same evidence. p50 ms.</desc>
+<desc id="desc">StartLux-Decision-v1-4B (Q8_0) on an RTX 5090: the 20 public JevBench items with the longest evidence (2,000-3,700 tokens), each asked, then two more questions about the same evidence. p50 ms.</desc>
 <rect x="0.5" y="0.5" width="759" height="342" rx="8" fill="#1a1a19" stroke="#2c2c2a"/>
 <text x="22.0" y="38.0" font-size="16" fill="#ffffff" text-anchor="start" font-weight="600">Follow-up questions about evidence already sent</text>
-<text x="22.0" y="62.0" font-size="12.5" fill="#c3c2b7" text-anchor="start" font-weight="400">StartLux-Decision-4B on an RTX 5090: the 20 public JevBench items with the longest evidence (2,000-3,700 tokens), each</text>
-<text x="22.0" y="80.0" font-size="12.5" fill="#c3c2b7" text-anchor="start" font-weight="400">asked, then two more questions about the same evidence. p50 ms.</text>
+<text x="22.0" y="62.0" font-size="12.5" fill="#c3c2b7" text-anchor="start" font-weight="400">StartLux-Decision-v1-4B (Q8_0) on an RTX 5090: the 20 public JevBench items with the longest evidence (2,000-3,700</text>
+<text x="22.0" y="80.0" font-size="12.5" fill="#c3c2b7" text-anchor="start" font-weight="400">tokens), each asked, then two more questions about the same evidence. p50 ms.</text>
 <text x="230.9" y="107.0" font-size="12.5" fill="#ffffff" text-anchor="start" font-weight="600">First request (new evidence)</text>
 <text x="230.9" y="290.0" font-size="11" fill="#898781" text-anchor="middle" font-weight="400" style="font-variant-numeric: tabular-nums">0</text>
 <line x1="280.2" y1="115.0" x2="280.2" y2="275.0" stroke="#2c2c2a" stroke-width="1" shape-rendering="crispEdges"/>
