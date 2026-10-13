@@ -20,6 +20,12 @@ candidate) - so a thought does not depend on the sequences it is batched with or
 
 Positions: a sequence starts at the position after its last prefilled token (taken from the prefill's plan, not
 derived from a token count), +1 per step, equal on all three M-RoPE axes.
+
+Tensor parallel (an Engine with Options.tp, flash_jev/tp.py): every rank builds the decoder (rank 0's constructor
+mirrors it) and runs every step on its shard - the output projections' int32 sums and their inputs' row maxima
+all-reduced, as in the prefill - with the output head and the sampler replicated: every rank draws the same tokens, so
+the next step's input tokens are already on every GPU.  Rank 0 stages a step's tables in shared memory; the followers
+copy them from there.
 """
 from __future__ import annotations
 
@@ -96,6 +102,9 @@ class Decoder:
         e = self.eng = engine
         if e.w4:
             raise ValueError("thoughts are generated on the int8 and bf16 paths (not w4a8)")
+        self.tp = e.tp
+        if self.tp is not None:                      # built on every rank alike (tp.py)
+            self._tp_id = self.tp.mirror(self, (engine, gguf_path, max_seqs, sampling, graphs, attn, max_len))
         self.cfg = cfg = e.cfg
         self.sampling = sampling or Sampling()
         if not 1 <= self.sampling.top_k <= TOPK:
@@ -109,9 +118,16 @@ class Decoder:
         if isinstance(w, gguf_weights.KQuant):
             w = w.as_q8()
         self.vocab = w.shape[0]
+        self.gguf_path = gguf_path
+        # tensor parallel: each rank computes the logits of its share of the vocabulary, which every rank then gathers
+        # (fused, kernels/decode.py gather_vocab) - a logit is the same computation whichever rows run with it
+        self.vshard = 0
+        if e.int8 and self.tp is not None and self.vocab % self.tp.world == 0 and self.tp.fast_rows >= self.max_B:
+            self.vshard = self.vocab // self.tp.world
         if e.int8:
-            self.head_w = w.qs.contiguous()
-            self.head_s = w.d.t().contiguous()                       # fp16 [K / 32, N]: coalesced per group
+            lo, hi = (self.tp.rank * self.vshard, (self.tp.rank + 1) * self.vshard) if self.vshard else (0, self.vocab)
+            self.head_w = w.qs[lo:hi].contiguous()
+            self.head_s = w.d.t()[:, lo:hi].contiguous()             # fp16 [K / 32, N]: coalesced per group
         else:
             self.head_bf16 = w.dequant(torch.bfloat16)
         del w
@@ -127,6 +143,8 @@ class Decoder:
         z = lambda *s, dtype=f32: torch.zeros(*s, dtype=dtype, device=dev)  # noqa: E731
         HV, HK, D = cfg.v_heads, cfg.k_heads, cfg.gdn_dim
         P = max(cfg.conv_dim + cfg.value_dim + 2 * HV, e.qn + 2 * cfg.n_kv_head * cfg.head_dim)
+        if self.tp is not None:                      # a multiple of 16, as the whole model's (engine/model.py)
+            P = -(-P // 16) * 16
         b = dict(h=z(B, cfg.hidden), proj=z(B, P, dtype=bf), q=z(B, HK, D, dtype=bf), k=z(B, HK, D, dtype=bf),
                  v=z(B, HV, D, dtype=bf), g=z(B, HV), beta=z(B, HV), o=z(B, HV, D),
                  mix=z(B, max(cfg.value_dim, cfg.n_head * cfg.head_dim), dtype=bf),
@@ -135,8 +153,15 @@ class Decoder:
                  tok_in=z(B, dtype=i32), tok_out=z(B, dtype=i32))
         if e.int8:
             K = max(cfg.ffn, cfg.value_dim, cfg.hidden)
-            b.update(aq=z(B * K, dtype=torch.int8), as_=z(B), parts=z(4, B, cfg.hidden, dtype=i32),
-                     hq=z(B, cfg.hidden, dtype=torch.int8), hs=z(B, cfg.hidden // KD.HEAD_G))
+            b.update(aq=z(B * K, dtype=torch.int8), as_=z(B), hq=z(B, cfg.hidden, dtype=torch.int8),
+                     hs=z(B, cfg.hidden // KD.HEAD_G))
+            if self.vshard:                          # every rank's logits shard, as mapped here (symmetric memory)
+                self.vshards = [x.view(B, self.vshard) for x in self.tp.symmetric(B * self.vshard, f32)]
+            if self.tp is None:
+                b["parts"] = z(4, B, cfg.hidden, dtype=i32)
+            else:                                    # the all-reduced output projections (tp.out_proj, quantize_rows)
+                from ..tp import parts_elems
+                b.update(tp_parts=z(parts_elems(B, cfg.hidden), dtype=i32), tp_amax=z(B))
         else:
             b.update(x=z(B, cfg.hidden, dtype=bf), delta=z(B, cfg.hidden, dtype=bf), act=z(B, cfg.ffn, dtype=bf))
         if self.attn == "split":
@@ -155,7 +180,10 @@ class Decoder:
         for k in ("temp", "top_p"):
             self.t[k] = self.t[k].view(torch.float32)
         self.n = self.t["count"][:1]
-        self._stage = [torch.zeros(off, dtype=i32).pin_memory() for _ in range(2)]
+        if self.tp is not None:                      # rank 0 stages, every rank copies (tp.Group.shared)
+            self._stage = [self.tp.shared(f"decoder{self._tp_id}-stage{i}", 4 * off).view(i32) for i in range(2)]
+        else:
+            self._stage = [torch.zeros(off, dtype=i32).pin_memory() for _ in range(2)]
         self._stage_np = [x.numpy() for x in self._stage]
         self._tok_host = [torch.zeros(B, dtype=i32).pin_memory() for _ in range(2)]
         self._done = [torch.cuda.Event() for _ in range(2)]
@@ -188,9 +216,24 @@ class Decoder:
                               k8=e.k8, read=True)
         return mix
 
+    def _q8_input(self, fn, rows, *args):
+        if self.tp is None:
+            fn(*args)
+        else:                                        # the row maxima over every rank (tp.quantize_rows)
+            from ..tp import quantize_rows
+            quantize_rows(self.tp, fn, rows, self.buf["tp_amax"], *args)
+
+    def _out_proj(self, a, a_s, w, w_s, h, n, parts, pd, rows):
+        if self.tp is None:
+            return KW.gemm(a, a_s, w, w_s, h, n, a.shape[1], epi=1, slots=parts, pdl=pd)
+        from ..tp import out_proj                    # this rank's int32 sums, all-reduced
+        return out_proj(self.tp, a, a_s, w, w_s, self.buf["tp_parts"], rows, n, pdl=pd)
+
     def _layers_int8(self, B):
         cfg, e, b, n = self.cfg, self.eng, self.buf, self.n
-        h, parts, aq, as_ = b["h"], b["parts"], b["aq"], b["as_"]
+        h, parts, aq, as_ = b["h"], b.get("parts"), b["aq"], b["as_"]
+        if self.tp is not None:
+            self.tp.begin(B)
         pend = None
         pd = e.opt.pdl_mode if 0 < B <= e.opt.pdl else 0
         for i in range(cfg.n_layer):
@@ -202,23 +245,28 @@ class Decoder:
                 KW.gemm(xq, as_, lw["inp_q"], lw["inp_s"], proj, n, cfg.hidden, pdl=pd)
                 self._gdn(i, proj, B)
                 mq = self._rows(aq, B, cfg.value_dim)
-                KQ.gated_norm_q8(b["o"], proj, cfg.conv_dim, lw["ssm_norm"], lw["out_inv"], mq, as_, n, B, cfg)
-                pend = KW.gemm(mq, as_, lw["out_q"], lw["out_s"], h, n, cfg.value_dim, epi=1, slots=parts, pdl=pd)
+                self._q8_input(KQ.gated_norm_q8, B, b["o"], proj, cfg.conv_dim, lw["ssm_norm"], lw["out_inv"], mq, as_,
+                               n, B, cfg)
+                pend = self._out_proj(mq, as_, lw["out_q"], lw["out_s"], h, n, parts, pd, B)
             else:
                 proj = b["proj"][:B, :lw["qkv_q"].shape[0]]
                 KW.gemm(xq, as_, lw["qkv_q"], lw["qkv_s"], proj, n, cfg.hidden, pdl=pd)
                 mix = self._attn(i, proj, B)
                 mq = self._rows(aq, B, cfg.n_head * cfg.head_dim)
-                KQ.rows_q8(mix, lw["o_inv"], mq, as_, n, B)
-                pend = KW.gemm(mq, as_, lw["o_q"], lw["o_s"], h, n, mq.shape[1], epi=1, slots=parts, pdl=pd)
+                self._q8_input(KQ.rows_q8, B, mix, lw["o_inv"], mq, as_, n, B)
+                pend = self._out_proj(mq, as_, lw["o_q"], lw["o_s"], h, n, parts, pd, B)
             KQ.norm_q8(h, lw["post_norm_s"], xq, as_, n, B, cfg.eps, parts=parts, pending=pend)
             KW.gemm(xq, as_, lw["gu_q"], lw["gu_s"], b["gu"][:B], n, cfg.hidden, pdl=pd)
             fq = self._rows(aq, B, cfg.ffn)
-            KQ.swiglu_q8(b["gu"], lw["down_inv"], fq, as_, n, B)
-            pend = KW.gemm(fq, as_, lw["down_q"], lw["down_s"], h, n, cfg.ffn, epi=1, slots=parts, pdl=pd)
+            self._q8_input(KQ.swiglu_q8, B, b["gu"], lw["down_inv"], fq, as_, n, B)
+            pend = self._out_proj(fq, as_, lw["down_q"], lw["down_s"], h, n, parts, pd, B)
         KQ.fold(h, parts, pend, n, B)
         KD.head_quant(h, e.out_norm, b["hq"], b["hs"], n, B, cfg.eps)
-        KD.head_q8(b["hq"], b["hs"], self.head_w, self.head_s, b["logits"], n, B)
+        if self.vshard:                              # this rank's share of the vocabulary, then every rank's
+            KD.head_q8(b["hq"], b["hs"], self.head_w, self.head_s, self.vshards[self.tp.rank][:B], n, B)
+            KD.gather_vocab([x[:B] for x in self.vshards], b["logits"][:B], n, B, self.tp.sync(self.vshards))
+        else:
+            KD.head_q8(b["hq"], b["hs"], self.head_w, self.head_s, b["logits"], n, B)
 
     def _layers_bf16(self, B):
         cfg, e, b, n = self.cfg, self.eng, self.buf, self.n
@@ -271,6 +319,8 @@ class Decoder:
 
     def warm_up(self, buckets=None):
         """Record the step graphs (with an empty batch: every kernel returns at once on zero live rows)."""
+        if self.tp is not None:
+            self.tp.call(self, "warm_up", buckets)    # every rank records them, in the same order
         self._tabs.zero_()
         for B in buckets or [x for x in DEC_BUCKETS if x <= self.max_B]:
             if self.graphs:
@@ -321,14 +371,24 @@ class Decoder:
         B = next(b for b in DEC_BUCKETS if b >= n)
         t0 = time.perf_counter()
         self._stage_rows(rows, slot)
+        if self.tp is not None:
+            self.tp.run(self, slot, B)               # the followers run the same step (replay)
+        self._step(slot, B)
+        self._tok_host[slot][:n].copy_(self.buf["tok_out"][:n], non_blocking=True)
+        self._done[slot].record()
+        return Step(rows, B, slot, t0)
+
+    def _step(self, slot, B):
         self._tabs.copy_(self._stage[slot], non_blocking=True)
         if self.graphs:
             self._graph(B).replay()
         else:
             self._forward(B)
-        self._tok_host[slot][:n].copy_(self.buf["tok_out"][:n], non_blocking=True)
-        self._done[slot].record()
-        return Step(rows, B, slot, t0)
+
+    @torch.no_grad()
+    def replay(self, slot, B):
+        """A follower: the step rank 0 published (tp.Group.run), its tables from rank 0's shared staging buffer."""
+        self._step(slot, B)
 
     def finish(self, step):
         """Wait for a launched step: the sampled token of each row (numpy int32)."""
@@ -344,6 +404,13 @@ class Decoder:
         """The final norm and this decoder's output head on residual rows h [R, hidden] fp32 (tests: the prefill's read
         rows, for its logits at any position) -> [R, vocab] fp32."""
         e, cfg, dev = self.eng, self.cfg, h.device
+        head_w, head_s = self.head_w, self.head_s
+        if self.vshard:                              # (tests on rank 0: the whole head, loaded for them)
+            if getattr(self, "_full_head", None) is None:
+                w = load_head(self.gguf_path).to(dev)
+                w = w.as_q8() if isinstance(w, gguf_weights.KQuant) else w
+                self._full_head = (w.qs.contiguous(), w.d.t().contiguous())
+            head_w, head_s = self._full_head
         out = []
         for i in range(0, h.shape[0], self.max_B):
             x = h[i:i + self.max_B].contiguous()
@@ -354,7 +421,7 @@ class Decoder:
                 hq = torch.empty(k, cfg.hidden, dtype=torch.int8, device=dev)
                 hs = torch.empty(k, cfg.hidden // KD.HEAD_G, device=dev)
                 KD.head_quant(x, e.out_norm, hq, hs, n, k, cfg.eps)
-                KD.head_q8(hq, hs, self.head_w, self.head_s, logits, n, k)
+                KD.head_q8(hq, hs, head_w, head_s, logits, n, k)
             else:
                 xb = torch.empty(k, cfg.hidden, dtype=torch.bfloat16, device=dev)
                 KD.head_norm_bf16(x, e.out_norm, xb, n, k, cfg.eps)

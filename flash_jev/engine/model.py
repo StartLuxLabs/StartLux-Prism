@@ -58,6 +58,19 @@ AUTO_RESERVE = 3 << 29               # bytes kept free beyond the buffers when s
 ALPHA = 0.75
 
 
+def smooth_quant(qs, act, dev, norm=None):
+    """W8A8 weights of a projection (Q8_0 matrices qs stacked by rows) with SmoothQuant: per input channel
+    s = act^alpha / max|W|^(1 - alpha), W s quantized per output row -> (int8 [N, K], fp32 row scales [N], the input's
+    factor: norm / s, or 1 / s without a norm).  On the whole matrix: a tensor-parallel shard slices the results."""
+    W = torch.cat([q.to(dev).dequant(torch.float32) for q in qs], 0)
+    s = (act.clamp_min(1e-5) ** ALPHA / W.abs().amax(0).clamp_min(1e-5) ** (1 - ALPHA)).clamp(1e-3, 1e3)
+    W = W * s[None, :]
+    ws = W.abs().amax(1).clamp_min(1e-8) / 127.0
+    wq = torch.round(W / ws[:, None]).clamp(-127, 127).to(torch.int8).contiguous()
+    extra = (norm / s).contiguous() if norm is not None else (1.0 / s).contiguous()
+    return wq, ws.contiguous(), extra
+
+
 def max_segs(T):
     return min(256, max(8, T // 16))
 
@@ -111,26 +124,41 @@ class Options:
     think_seqs: int = 0             # sequences that can decode at once (engine/decode.py): state slots of their own
     think_kv_rows: int = 0          # KV-arena rows for the decoding sequences (each: its prompt, then its tokens)
     mmproj: str = ""                # the vision tower (llama.cpp mmproj GGUF) for prompts with images; "": text only
+    tp: int = 1                     # tensor parallelism over this many GPUs (int8; flash_jev/tp.py: the group must be
+                                    # started in this process first)
 
 
 class Engine:
     def __init__(self, gguf_path, model_dir, options=None, device="cuda"):
         self.opt = options or Options()
         self.device = torch.device(device)
+        self.tp = None                               # tensor parallelism (flash_jev/tp.py): this rank's group
+        if self.opt.tp > 1:
+            from .. import tp as TP
+            self.tp = TP.group()
+            if self.tp.world != self.opt.tp:
+                raise ValueError(f"Options.tp {self.opt.tp} on a group of {self.tp.world} GPUs")
+            if self.opt.precision != "int8":
+                raise ValueError("tensor parallelism runs the int8 (W8A8) path")
+            self._tp_id = self.tp.mirror(self, (gguf_path, model_dir, self.opt))   # built on every rank alike
+            self.device = self.tp.device
         t0 = time.perf_counter()
         w = gguf_weights.load(gguf_path)
         self.cfg = w.config
         self.tok = Tokenizer(model_dir)
         self.vision = None
-        if self.opt.mmproj:
+        if self.opt.mmproj and (self.tp is None or self.tp.rank == 0):       # tensor parallel: rank 0 encodes images
             from ..vision import VisionTower
-            self.vision = VisionTower(self.opt.mmproj, device)
+            self.vision = VisionTower(self.opt.mmproj, self.device)
             if self.vision.cfg.out != self.cfg.hidden:
                 raise ValueError(f"{self.opt.mmproj}: projects to {self.vision.cfg.out}, the decoder's hidden size is "
                                  f"{self.cfg.hidden}")
         self.int8 = False
         self.w4 = self.opt.precision == "w4a8"
-        if self.w4:                                  # the file's k-quant values as they are: no bf16 copy, no calibration
+        if self.tp is not None:                      # int8 shards straight from the Q8_0 values: no bf16 copy
+            self._tp_weights(w)
+            self.tp.setup(self.cfg.hidden)           # the fused all-reduces' symmetric buffers (every rank alike)
+        elif self.w4:                                # the file's k-quant values as they are: no bf16 copy, no calibration
             self._w4_weights(w)
         else:
             self._bf16_weights(w)
@@ -140,10 +168,10 @@ class Engine:
         self._rec = None
         self._prefix_pass = False
         self._side, self._side_used = None, False     # L2 prefetch stream (short int8 passes)
-        if self.opt.precision == "int8":
+        if self.opt.precision == "int8" and self.tp is None:
             amax = self._load_or_calibrate(w)
             self._int8_weights(w, amax)
-        elif self.opt.precision not in ("bf16", "w4a8"):
+        elif self.opt.precision not in ("bf16", "w4a8", "int8"):
             raise ValueError(f"precision {self.opt.precision!r}")
         del w
         torch.cuda.empty_cache()
@@ -220,13 +248,7 @@ class Engine:
         dev, cfg = self.device, self.cfg
 
         def quant(qs, act, norm=None):
-            W = torch.cat([q.to(dev).dequant(torch.float32) for q in qs], 0)
-            s = (act.clamp_min(1e-5) ** ALPHA / W.abs().amax(0).clamp_min(1e-5) ** (1 - ALPHA)).clamp(1e-3, 1e3)
-            W = W * s[None, :]
-            ws = W.abs().amax(1).clamp_min(1e-8) / 127.0
-            wq = torch.round(W / ws[:, None]).clamp(-127, 127).to(torch.int8).contiguous()
-            extra = (norm / s).contiguous() if norm is not None else (1.0 / s).contiguous()
-            return wq, ws.contiguous(), extra
+            return smooth_quant(qs, act, dev, norm)
 
         for i, l in enumerate(w.layers):
             d = self.layers[i]
@@ -242,6 +264,62 @@ class Engine:
                                                                  d["attn_norm"])
                 d["out_q"], d["out_s"], d["out_inv"] = quant((l.wout,), amax[(i, "out")])
             torch.cuda.empty_cache()
+        self.int8 = True
+
+    def _tp_weights(self, w):
+        """Tensor parallel: this rank's shard of the W8A8 weights, straight from the GGUF's Q8_0 values (no bf16 copy,
+        no buffers before the final ones); embedding, norms and the letter rows whole.  Every projection is quantized
+        whole, as on one GPU, and then sliced (tp.shard_index): the rank's int8 values and scales are the single-GPU
+        engine's.  self.cfg becomes the shard's config (its heads, its FFN columns; tp.shard_config)."""
+        from .. import tp as TP
+        if not (self.opt.calib and os.path.exists(self.opt.calib)):
+            raise ValueError("tensor parallelism needs the int8 activation ranges (--calib FILE): compute them once "
+                             "on one GPU (the same flag without --tp)")
+        amax = self._load_or_calibrate(w)
+        dev, full = self.device, self.cfg
+        n, r = self.tp.world, self.tp.rank
+        self.full_cfg = full
+        self.cfg = cfg = TP.shard_config(full, n)
+        ix = {k: v.to(dev) for k, v in TP.shard_index(full, n, r).items()}
+        self.embed = w.embed.to(dev)
+        if not isinstance(self.embed, gguf_weights.Q8):
+            self.embed = self.embed.as_q8()
+        self.letters = w.output.dequant(torch.float32, torch.tensor(self.tok.letters)).to(dev)
+        self.out_norm = w.out_norm.to(dev)
+        self.layers, self.gdn_index, self.attn_index = [], {}, {}
+
+        def rows(qs, act, idx, norm=None):            # column-parallel: this rank's output rows
+            wq, ws, extra = smooth_quant(qs, act, dev, norm)
+            return wq[idx].contiguous(), ws[idx].contiguous(), extra
+
+        def cols(qs, act, idx):                       # row-parallel: this rank's input columns
+            wq, ws, extra = smooth_quant(qs, act, dev)
+            return wq[:, idx].contiguous(), ws, extra[idx].contiguous()
+        for i, l in enumerate(w.layers):
+            d = {"attn_norm": l.attn_norm.to(dev), "post_norm": l.post_norm.to(dev)}
+            d["gu_q"], d["gu_s"], d["post_norm_s"] = rows((l.ffn_gate, l.ffn_up), amax[(i, "gu")], ix["gu"],
+                                                          d["post_norm"])
+            d["down_q"], d["down_s"], d["down_inv"] = cols((l.ffn_down,), amax[(i, "down")], ix["down"])
+            if full.is_attention(i):
+                self.attn_index[i] = len(self.attn_index)
+                d["qkv_q"], d["qkv_s"], d["attn_norm_s"] = rows((l.wq, l.wk, l.wv), amax[(i, "qkv")], ix["qkv"],
+                                                                d["attn_norm"])
+                d["o_q"], d["o_s"], d["o_inv"] = cols((l.wo,), amax[(i, "o")], ix["o"])
+                d.update(q_norm=l.q_norm.to(dev), k_norm=l.k_norm.to(dev))
+            else:
+                self.gdn_index[i] = len(self.gdn_index)
+                d["inp_q"], d["inp_s"], d["attn_norm_s"] = rows((l.wqkv, l.wz, l.wbeta, l.walpha), amax[(i, "inp")],
+                                                                ix["inp"], d["attn_norm"])
+                d["out_q"], d["out_s"], d["out_inv"] = cols((l.wout,), amax[(i, "out")], ix["out"])
+                d.update(conv=l.conv.to(dev)[ix["conv"]].contiguous(), dt_bias=l.dt_bias.to(dev)[ix["vh"]].contiguous(),
+                         a=l.a.to(dev)[ix["vh"]].contiguous(), ssm_norm=l.ssm_norm.to(dev))
+            self.layers.append(d)
+            torch.cuda.empty_cache()
+        if not full.is_attention(full.n_layer - 1):
+            raise ValueError("expected the last layer to be full attention")
+        self.qn = cfg.n_head * cfg.head_dim * 2                       # this rank's query|gate rows
+        self.inv_freq = (1.0 / (cfg.rope_theta ** (torch.arange(0, cfg.rope_dim, 2, dtype=torch.float64) /
+                                                   cfg.rope_dim))).to(torch.float32).to(dev)
         self.int8 = True
 
     def _load_or_calibrate(self, w):
@@ -299,6 +377,10 @@ class Engine:
             out["k8"] = z(n_attn, cfg.n_kv_head, rows, cfg.head_dim, dtype=torch.int8)
             out["k8s"] = z(n_attn, cfg.n_kv_head, rows)
         P = max(cfg.conv_dim + cfg.value_dim + 2 * HV, self.qn + 2 * cfg.n_kv_head * cfg.head_dim)
+        if self.tp is not None:
+            # a multiple of 16, as the whole model's (16,480 on the 27B): Triton specializes the kernels that read
+            # these rows on the stride's divisibility, which can change their layouts and so the order of their sums
+            P = -(-P // 16) * 16
         mixw = max(cfg.value_dim, cfg.n_head * cfg.head_dim)
         buf = dict(
             h=z(T, cfg.hidden), proj=z(T, P, dtype=bf), q=z(T, HK, D, dtype=bf), k=z(T, HK, D, dtype=bf),
@@ -319,8 +401,15 @@ class Engine:
             # int8 activations: one flat buffer per side, viewed as [rows, K] row-major for each projection's K (the
             # producer kernels and the GEMM both index row * K); residual partial sums of split-K output projections,
             # added by the residual's next reader (split K pays only up to a few thousand rows: PARTS_ROWS)
-            buf.update(aq=z(T * K, dtype=torch.int8), as_=z(T), aqr=z(R * K, dtype=torch.int8), asr=z(R),
-                       parts=z(4, min(T, PARTS_ROWS), cfg.hidden, dtype=i32))
+            buf.update(aq=z(T * K, dtype=torch.int8), as_=z(T), aqr=z(R * K, dtype=torch.int8), asr=z(R))
+            if self.tp is None:
+                buf["parts"] = z(4, min(T, PARTS_ROWS), cfg.hidden, dtype=i32)
+            else:
+                # tensor parallel: the output projections' int32 partial sums for the all-reduce (one slot per K split,
+                # tp.out_proj), and the per-token maxima of their inputs (tp.quantize_rows)
+                from ..tp import parts_elems
+                buf.update(tp_parts=z(max(parts_elems(T, cfg.hidden), parts_elems(R, cfg.hidden)), dtype=i32),
+                           tp_amax=z(max(T, R)))
         else:
             buf.update(x=z(T, cfg.hidden, dtype=bf), delta=z(T, cfg.hidden, dtype=bf), act=z(T, cfg.ffn, dtype=bf),
                        xr=z(R, cfg.hidden, dtype=bf), deltar=z(R, cfg.hidden, dtype=bf), actr=z(R, cfg.ffn, dtype=bf))
@@ -336,7 +425,7 @@ class Engine:
         shapes = dict(counts=(16,), ids=(T,), pos=(T,), kvrow=(T,), hist=(T, 3), chunks=(max_chunks(T), 2),
                       segs0=(max_segs(T), 5), segs1=(max_segs(T), 5), saves=(3 * MAX_INSERTS, 3),
                       ranges=(max_segs(T), 6), blocks=(max_blocks(T), 4), read=(R,), read_pos=(R,), read_blocks=(R, 4))
-        if getattr(self, "vision", None) is not None:
+        if self.opt.mmproj:                   # a vision tower (on rank 0 when tensor parallel: every rank's tables)
             shapes["mrope"] = (T, 3)          # last: a batch without image tokens uploads the tables before it only
         return shapes
 
@@ -356,10 +445,13 @@ class Engine:
         free, total = torch.cuda.mem_get_info(self.device)
         budget = total * self.opt.mem_fraction - (total - free) - AUTO_RESERVE
         fits = [T for T in TOKEN_BUCKETS if self._buffer_bytes(T) <= budget]
-        if not fits:
+        T = max(fits) if fits else 0
+        if self.tp is not None:                      # every rank the same buckets: the smallest rank's (rank 0: images)
+            T = self.tp.min_int(T)
+        if not T:
             raise RuntimeError(f"not enough GPU memory for even {TOKEN_BUCKETS[0]}-token buffers "
                                f"({free / 2**30:.1f} of {total / 2**30:.1f} GiB free)")
-        return max(fits)
+        return T
 
     def _free_buffers(self):
         for k in ("state", "conv_state", "trans", "kv", "k8", "buf", "_tabs", "tab", "counts", "cnt", "cache"):
@@ -395,7 +487,11 @@ class Engine:
         self.count_names = ("tok", "chunks", "segs0", "segs1", "saves", "blocks", "read")
         self.cnt = {n: self.counts[i:i + 1] for i, n in enumerate(self.count_names)}
         R = o.max_read
-        self._stage = [torch.zeros(off, dtype=torch.int32).pin_memory() for _ in range(2)]
+        if self.tp is not None:                      # rank 0 stages, every rank copies to its GPU (tp.Group.shared)
+            self._stage = [self.tp.shared(f"engine{self._tp_id}-stage{i}", 4 * off).view(torch.int32)
+                           for i in range(2)]
+        else:
+            self._stage = [torch.zeros(off, dtype=torch.int32).pin_memory() for _ in range(2)]
         self._stage_np = [x.numpy() for x in self._stage]
         self._logits_host = [torch.zeros(R, len(self.tok.letters)).pin_memory() for _ in range(2)]
         self._done = [torch.cuda.Event() for _ in range(2)]
@@ -534,14 +630,33 @@ class Engine:
 
     def _body_int8(self, T):
         cfg, b, c, L = self.cfg, self.buf, self.cnt, self.layers
-        h, n, parts = b["h"], cfg.n_layer, b["parts"]
+        h, n, parts = b["h"], cfg.n_layer, b.get("parts")
         aq, as_ = b["aq"], b["as_"]
         pend = None             # a residual add a split-K output projection left to the next norm (w8a8.Deferred)
+        if self.tp is not None:
+            self.tp.begin(T)
         KE.embed(self.tab["ids"], self.embed, h, c["tok"], T)
         try:
             self._body_layers(T, cfg, b, c, L, h, n, parts, aq, as_, pend)
         finally:
             self._join_side()
+
+    def _q8_input(self, fn, rows, *args):
+        """The int8 input of an output projection (quant.gated_norm_q8 / rows_q8 / swiglu_q8), its scale over the
+        whole row: tensor parallel, over every rank's columns (tp.quantize_rows)."""
+        if self.tp is None:
+            fn(*args)
+        else:
+            from ..tp import quantize_rows
+            quantize_rows(self.tp, fn, rows, self.buf["tp_amax"], *args)
+
+    def _out_proj(self, a, a_s, w, w_s, h, n_rows, parts, pd, rows):
+        """An output projection added into the residual h -> the Deferred add it leaves (or None): one GPU, the
+        fused epilogue or deferred split-K slots; tensor parallel, this rank's int32 sums all-reduced (tp.out_proj)."""
+        if self.tp is None:
+            return KW.gemm(a, a_s, w, w_s, h, n_rows, a.shape[1], epi=1, slots=parts, pdl=pd)
+        from ..tp import out_proj
+        return out_proj(self.tp, a, a_s, w, w_s, self.buf["tp_parts"], rows, n_rows, pdl=pd)
 
     def _body_layers(self, T, cfg, b, c, L, h, n, parts, aq, as_, pend):
         pd = self.opt.pdl_mode if 0 < T <= self.opt.pdl else 0
@@ -555,9 +670,9 @@ class Engine:
                 self._prefetch(T, [lw["gu_q"]])
                 self._gdn_core(i, proj, T)
                 mq = self._rows(aq, T, cfg.value_dim)
-                KQ.gated_norm_q8(b["o"], proj, cfg.conv_dim, lw["ssm_norm"], lw["out_inv"], mq, as_, c["tok"], T, cfg)
-                pend = KW.gemm(mq, as_, lw["out_q"], lw["out_s"], h, c["tok"], cfg.value_dim, epi=1, slots=parts,
-                               pdl=pd)
+                self._q8_input(KQ.gated_norm_q8, T, b["o"], proj, cfg.conv_dim, lw["ssm_norm"], lw["out_inv"], mq,
+                               as_, c["tok"], T, cfg)
+                pend = self._out_proj(mq, as_, lw["out_q"], lw["out_s"], h, c["tok"], parts, pd, T)
             else:
                 proj = b["proj"][:T, :lw["qkv_q"].shape[0]]
                 if i == n - 1:
@@ -569,19 +684,21 @@ class Engine:
                 self._prefetch(T, [lw["gu_q"]])
                 mix = self._attn_core(i, proj, T)
                 mq = self._rows(aq, T, cfg.n_head * cfg.head_dim)
-                KQ.rows_q8(mix, lw["o_inv"], mq, as_, c["tok"], T)
-                pend = KW.gemm(mq, as_, lw["o_q"], lw["o_s"], h, c["tok"], mq.shape[1], epi=1, slots=parts, pdl=pd)
+                self._q8_input(KQ.rows_q8, T, mix, lw["o_inv"], mq, as_, c["tok"], T)
+                pend = self._out_proj(mq, as_, lw["o_q"], lw["o_s"], h, c["tok"], parts, pd, T)
             KQ.norm_q8(h, lw["post_norm_s"], xq, as_, c["tok"], T, cfg.eps, parts=parts, pending=pend)
             KW.gemm(xq, as_, lw["gu_q"], lw["gu_s"], b["gu"][:T], c["tok"], cfg.hidden, pdl=pd)
             fq = self._rows(aq, T, cfg.ffn)
-            KQ.swiglu_q8(b["gu"], lw["down_inv"], fq, as_, c["tok"], T)
-            pend = KW.gemm(fq, as_, lw["down_q"], lw["down_s"], h, c["tok"], cfg.ffn, epi=1, slots=parts, pdl=pd)
+            self._q8_input(KQ.swiglu_q8, T, b["gu"], lw["down_inv"], fq, as_, c["tok"], T)
+            pend = self._out_proj(fq, as_, lw["down_q"], lw["down_s"], h, c["tok"], parts, pd, T)
 
     def _head_int8(self, R):
         cfg, b, t, c = self.cfg, self.buf, self.tab, self.cnt
         i = cfg.n_layer - 1
-        lw, parts = self.layers[i], b["parts"]
+        lw, parts = self.layers[i], b.get("parts")
         aq, as_ = b["aqr"], b["asr"]
+        if self.tp is not None:
+            self.tp.begin(R)
         KE.gather_rows(b["h"], t["read"], b["hr"], c["read"], R)
         xq = self._rows(aq, R, cfg.hidden)
         KQ.norm_q8(b["hr"], lw["attn_norm_s"], xq, as_, c["read"], R, cfg.eps)
@@ -590,13 +707,13 @@ class Engine:
         KW.gemm(xq, as_, lw["qkv_q"][:self.qn], lw["qkv_s"][:self.qn], qg, c["read"], cfg.hidden, pdl=pd)
         self._head_attention(qg, R)
         mq = self._rows(aq, R, cfg.n_head * cfg.head_dim)
-        KQ.rows_q8(b["mixr"], lw["o_inv"], mq, as_, c["read"], R)
-        pend = KW.gemm(mq, as_, lw["o_q"], lw["o_s"], b["hr"], c["read"], mq.shape[1], epi=1, slots=parts, pdl=pd)
+        self._q8_input(KQ.rows_q8, R, b["mixr"], lw["o_inv"], mq, as_, c["read"], R)
+        pend = self._out_proj(mq, as_, lw["o_q"], lw["o_s"], b["hr"], c["read"], parts, pd, R)
         KQ.norm_q8(b["hr"], lw["post_norm_s"], xq, as_, c["read"], R, cfg.eps, parts=parts, pending=pend)
         KW.gemm(xq, as_, lw["gu_q"], lw["gu_s"], b["gur"][:R], c["read"], cfg.hidden, pdl=pd)
         fq = self._rows(aq, R, cfg.ffn)
-        KQ.swiglu_q8(b["gur"], lw["down_inv"], fq, as_, c["read"], R)
-        pend = KW.gemm(fq, as_, lw["down_q"], lw["down_s"], b["hr"], c["read"], cfg.ffn, epi=1, slots=parts, pdl=pd)
+        self._q8_input(KQ.swiglu_q8, R, b["gur"], lw["down_inv"], fq, as_, c["read"], R)
+        pend = self._out_proj(fq, as_, lw["down_q"], lw["down_s"], b["hr"], c["read"], parts, pd, R)
         KQ.fold(b["hr"], parts, pend, c["read"], R)
         self._readout(b["hr"][:R], R)
 
@@ -750,6 +867,8 @@ class Engine:
         keeps it behind the batch before it."""
         b.t_launch = time.perf_counter()
         n = b.n_tabs if b.n_tabs >= 0 else self._tabs.numel()
+        if self.tp is not None:
+            return self._launch_tp(b, n)
         self._tabs[:n].copy_(self._stage[b.slot][:n], non_blocking=True)
         body_graph = self.opt.graphs and b.T <= (self.opt.graph_max_tokens or self.max_tokens)
         if b.plan.feats:
@@ -776,6 +895,68 @@ class Engine:
         self._done[b.slot].record()
         return b
 
+    # ------------------------------------------------------------------ tensor parallel (flash_jev/tp.py)
+    def _launch_tp(self, b, n):
+        """Rank 0: the images encoded first (so nothing fails once the pass is published), the pass published to the
+        followers, then run as every rank runs it (_pass); the logits back."""
+        feats = None
+        if b.plan.feats:
+            try:
+                feats = self._encode_images(b.plan.feats)
+            except Exception:
+                if self.cache is not None:          # the pass will not run: its new entries were never written
+                    self.cache.discard(b.plan.inserted)
+                raise
+            b.images = feats[2]
+        self.tp.run(self, b.slot, b.T, b.R, n, 0 if feats is None else len(feats[0]))
+        self._pass(b.slot, b.T, b.R, n, feats)
+        n = b.plan.counts["read"]
+        self._logits_host[b.slot][:n].copy_(self.buf["logits"][:n], non_blocking=True)
+        self._done[b.slot].record()
+        return b
+
+    @torch.no_grad()
+    def replay(self, slot, T, R, n, n_img):
+        """A follower: the pass rank 0 published (tp.Group.run) - its tables from rank 0's shared staging buffer, the
+        image rows by broadcast, the same graphs."""
+        feats = None
+        if n_img:
+            feats = (torch.empty(n_img, dtype=torch.int64, device=self.device),
+                     torch.empty(n_img, self.cfg.hidden, device=self.device), 0)
+        self._pass(slot, T, R, n, feats)
+
+    def _pass(self, slot, T, R, n, feats):
+        """One pass on every rank alike: tables, image rows (rank 0's, broadcast), body and head."""
+        self._tabs[:n].copy_(self._stage[slot][:n], non_blocking=True)
+        body_graph = self.opt.graphs and T <= (self.opt.graph_max_tokens or self.max_tokens)
+        if feats is not None:
+            if body_graph:
+                self._graph("body", T)               # recording runs the pass once: before the features go in
+            rows, x = feats[0], feats[1]
+            self.tp.bcast_(rows)
+            self.tp.bcast_(x)
+            self.buf["h"].index_copy_(0, rows, x)
+        if body_graph:
+            self._graph("body", T).replay()
+        else:
+            self._body(T)
+        if self.opt.graphs:
+            self._graph("head", R).replay()
+        else:
+            self._head(R)
+
+    def _encode_images(self, feats):
+        """Rank 0: a batch's image rows as vision.write writes them -> (their packed rows, int64; their features, fp32
+        [rows, hidden]; the images encoded)."""
+        done, rows, xs = {}, [], []
+        for start, image, j0, n in feats:
+            f = done.get(image.digest)
+            if f is None:
+                f = done[image.digest] = self.vision.encode(image)
+            rows.append(torch.arange(start, start + n, dtype=torch.int64, device=self.device))
+            xs.append(f[j0:j0 + n].float())
+        return torch.cat(rows), torch.cat(xs), len(done)
+
     def finish(self, b):
         """Wait for a launched batch; its letter logits ([26] fp32 per row, in order) and timings."""
         self._done[b.slot].synchronize()
@@ -796,6 +977,8 @@ class Engine:
 
     def warm_up(self, buckets=None, reads=None):
         """Record the graphs of the given buckets (default: all up to max_tokens and graph_max_tokens) before serving."""
+        if self.tp is not None:
+            self.tp.call(self, "warm_up", buckets, reads)       # every rank records them, in the same order
         top = min(self.max_tokens, self.opt.graph_max_tokens or self.max_tokens)
         for T in buckets or [x for x in TOKEN_BUCKETS if x <= top]:
             self._graph("body", T)

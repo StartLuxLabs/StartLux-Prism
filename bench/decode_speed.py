@@ -1,7 +1,7 @@
 """Decode speed (engine/decode.py): tokens per second for 1 to 64 sequences at once, at a few context lengths.
 
     python bench/decode_speed.py --gguf MODEL.gguf --model-dir DIR [--precision int8 --calib FILE]
-        [--batches 1,2,4,8,16,32,64] [--contexts 512,4096] [--steps 64] [--profile]
+        [--batches 1,2,4,8,16,32,64] [--contexts 512,4096] [--steps 64] [--profile] [--tp N --gpus a,b]
 
 Every sequence is a prompt of the given length (prefilled, state kept), then --steps decode steps are queued as the
 server queues them (each step launched before the previous one's tokens are read).  Reports ms per step and tokens/s;
@@ -31,18 +31,26 @@ def main():
     ap.add_argument("--steps", type=int, default=64)
     ap.add_argument("--profile", action="store_true")
     ap.add_argument("--attn", default="split", help="decode attention kernels to time: split, tree or both (split,tree)")
+    ap.add_argument("--tp", type=int, default=1, help="tensor parallelism over --gpus (int8; flash_jev/tp.py)")
+    ap.add_argument("--gpus", default="", help="with --tp: the GPUs (default: the visible ones)")
     a = ap.parse_args()
+    if a.tp > 1:
+        from flash_jev import tp as TP
+        TP.start(a.tp, a.gpus or None)
     batches = [int(x) for x in a.batches.split(",")]
     contexts = [int(x) for x in a.contexts.split(",")]
     n = max(batches)
     rows_each = max(contexts) + a.steps + 8
     eng = Engine(a.gguf, a.model_dir, Options(precision=a.precision, calib=a.calib, max_tokens=16384, prefix_cache=0,
-                                              think_seqs=n, think_kv_rows=n * rows_each))
+                                              think_seqs=n, think_kv_rows=n * rows_each, tp=a.tp))
     for attn in a.attn.split(","):
         dec = Decoder(eng, a.gguf, max_seqs=n, sampling=Sampling(), attn=attn)
         dec.warm_up()
-        print(f"{a.precision}, {attn} attention: decode steps, {a.steps} per measurement", flush=True)
+        print(f"{a.precision}{f', tp {a.tp}' if a.tp > 1 else ''}, {attn} attention: decode steps, {a.steps} per "
+              f"measurement", flush=True)
         run(a, eng, dec, batches, contexts, rows_each, n)
+        if eng.tp is not None:
+            eng.tp.forget(dec)
         del dec
         torch.cuda.empty_cache()
 

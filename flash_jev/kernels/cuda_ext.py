@@ -77,12 +77,13 @@ def wg_fits(cfg, stages):
     return 3 <= stages <= 6 and stages * ((bm + bn) * 128 + (16 if tma else 0)) + 1024 <= WG_SMEM_LIMIT
 
 
-def gemm_wg(a, a_s, w, w_s, out, n_rows, epi=0, cfg=0, stages=4, split=1, slots=None):
+def gemm_wg(a, a_s, w, w_s, out, n_rows, epi=0, cfg=0, stages=4, split=1, slots=None, i32=False):
     """The same product (epi 0 bf16 store, 1 fp32 residual add) on Hopper's warpgroup MMA (csrc/w8a8_wgmma.cu).
     split > 1 (epi 1, TMA configs): deferred split-K - split z stores its int32 partial sums in slots[z] (int32 [S,
-    rows, N]) for the residual's next reader to add, as gemm's mode "defer"."""
+    rows, N]) for the residual's next reader to add, as gemm's mode "defer".  i32: int32 sums into slots even with
+    one split (w8a8.gemm_i32)."""
     stride = 0
-    if split > 1:
+    if split > 1 or i32:
         assert epi == 1 and slots is not None and slots.shape[0] >= split and slots.shape[2] == out.shape[1]
         out, stride = slots[0][:out.shape[0]], slots.stride(0)
     load().w8a8_wgmma(a, a_s.reshape(-1), w, w_s.reshape(-1), out, n_rows, epi, cfg, stages, split, stride)
@@ -110,17 +111,19 @@ def _workspace(device):
 SPLIT_MODES = {"atomic": 0, "workspace": 1, "cluster": 2, "defer": 3}
 
 
-def gemm(a, a_s, w, w_s, out, n_rows, epi=0, cfg=0, split=1, stages=4, mode="cluster", slots=None, pdl=False):
+def gemm(a, a_s, w, w_s, out, n_rows, epi=0, cfg=0, split=1, stages=4, mode="cluster", slots=None, pdl=False,
+         i32=False):
     """a int8 [M, K], a_s fp32 [M], w int8 [N, K], w_s fp32 [N] -> out (bf16 store, or fp32 add when epi == 1).
     With split > 1 (epi 1 only) the K splits of a tile combine by `mode`: "defer" (split z stores its int32 partial
     sums in slots[z] - int32 [S, rows, N] - and the next reader of the residual adds them, scales the total and adds
     it, see w8a8.Deferred; no synchronization), "cluster" (int32 partial sums added over distributed shared memory in
     a thread block cluster), "workspace" (int32 partial sums through global memory, the last split to arrive adds
     them) - all three give the bits of an unsplit product - or "atomic" (fp32 atomic adds into out: order-dependent).
-    pdl: launched to overlap the previous kernel (programmatic dependent launch, see csrc/w8a8_gemm.cu)."""
+    i32 (mode "defer"): int32 sums into slots even with one split (w8a8.gemm_i32).  pdl: launched to overlap the
+    previous kernel (programmatic dependent launch, see csrc/w8a8_gemm.cu)."""
     ws, counters = _workspace(a.device) if split > 1 and mode == "workspace" else (None, None)
     stride = 0
-    if split > 1 and mode == "defer":
+    if (split > 1 or i32) and mode == "defer":
         assert slots is not None and slots.shape[0] >= split and slots.shape[2] == out.shape[1]
         out, stride = slots[0][:out.shape[0]], slots.stride(0)
     load().w8a8_gemm(a, a_s.reshape(-1), w, w_s.reshape(-1), out, n_rows, epi, cfg, split, stages, SPLIT_MODES[mode],

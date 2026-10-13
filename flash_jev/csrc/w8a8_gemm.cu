@@ -424,7 +424,7 @@ __global__ void __launch_bounds__(WARPS_M* WARPS_N * 32)
       for (int e = 0; e < 4; ++e) acc[i][j][e] = 0;
   run_mainloop<SP, BM, BN, BK, WARPS_M, WARPS_N, STAGES>(A, W, M, N, K, m0, n0, kt0, kt0 + k_per_split / BK, smem,
                                                         acc);
-  if (EPI == 1 && gridDim.z > 1) {
+  if (EPI == 1 && (gridDim.z > 1 || slot_stride > 0)) {  // slot_stride > 0 with one split: int32 out (gemm_i32)
     using T = Tile<BM, BN, BK, WARPS_M, WARPS_N, STAGES>;
     constexpr int THREADS = T::THREADS, MT = T::MT, NT = T::NT, ACC = T::ACC;
     const int tid = threadIdx.x;
@@ -646,7 +646,7 @@ void launch(const torch::Tensor& a, const torch::Tensor& sa, const torch::Tensor
                                     sw.data_ptr<float>(), out.data_ptr(), (int)out.stride(0), n_rows.data_ptr<int>(),
                                     M, N, K, K / split, mode == SPLIT_WORKSPACE ? ws : nullptr,
                                     mode == SPLIT_WORKSPACE ? counters : nullptr, cluster_k,
-                                    split > 1 && mode == SPLIT_DEFER ? slot_stride : (int64_t)0,
+                                    mode == SPLIT_DEFER ? slot_stride : (int64_t)0,
                                     cluster_k ? 0 : pdl));
 }
 
@@ -715,9 +715,9 @@ void w8a8_gemm(torch::Tensor a, torch::Tensor sa, torch::Tensor w, torch::Tensor
                torch::Tensor n_rows, int64_t epi, int64_t cfg, int64_t split, int64_t stages, int64_t mode,
                std::optional<torch::Tensor> workspace, std::optional<torch::Tensor> counters, int64_t slot_stride,
                int64_t pdl) {
-  check_operands(a, w, out, epi, mode == SPLIT_DEFER && split > 1);
+  check_operands(a, w, out, epi, mode == SPLIT_DEFER && (split > 1 || slot_stride > 0));
   // split-K of the residual add (mode, SplitMode): with SPLIT_DEFER `out` is the first of `split` int32 slots,
-  // slot_stride elements apart
+  // slot_stride elements apart (one split with slot_stride > 0: the int32 sums of gemm_i32, tensor parallel)
   TORCH_CHECK(mode != SPLIT_DEFER || split == 1 || slot_stride >= out.size(0) * out.stride(0), "deferred slots overlap");
   TORCH_CHECK(mode != SPLIT_WORKSPACE || split == 1 || workspace.has_value(), "workspace split-K needs the workspace");
   int32_t* ws = workspace.has_value() ? workspace->data_ptr<int32_t>() : nullptr;

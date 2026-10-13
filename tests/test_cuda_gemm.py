@@ -6,9 +6,10 @@ row count changing between replays.
 Batch invariance: every config, split mode (but atomic adds) and stream-K must give the same bits as the Triton kernel
 (kernels/w8a8.py) - bf16 stores and fp32 residual adds, deferred split-K folded by quant.fold.  On Hopper with an sm_90a
 build the warpgroup MMA kernels (csrc/w8a8_wgmma.cu) too: every tile config and stage count, and the TMA pipeline's
-deferred split-K.
+deferred split-K.  Tensor parallelism's output projections (tp_shards): each rank's int32 sums, from every kernel
+that can store them, added over 2 and 4 ranks and folded, give the one-GPU residual add's bits.
 
-    python tests/test_cuda_gemm.py [--quick]
+    python tests/test_cuda_gemm.py [--quick] [--tp-only]
 """
 import os
 import sys
@@ -37,6 +38,8 @@ def main():
     torch.manual_seed(0)
     dev = "cuda"
     CX.load()
+    if "--tp-only" in sys.argv:                         # the tensor-parallel shards' int32 sums only
+        sys.exit(1 if tp_shards(dev, quick) else 0)
     bad = 0
     for M, N, K, live in SHAPES:
         a = torch.randint(-127, 128, (M, K), device=dev, dtype=torch.int8)
@@ -162,8 +165,75 @@ def main():
         ok = err < 8e-3 and (live == M or out[live:].abs().max().item() == 0)
         bad += not ok
         print(f"graph replay, live={live:3d}: stream-K rel err {err:.1e}  {'ok' if ok else 'FAIL'}", flush=True)
+    bad += tp_shards(dev, quick)
     print("all ok" if not bad else f"{bad} FAILED")
     sys.exit(1 if bad else 0)
+
+
+def tp_shards(dev, quick):
+    """Tensor parallelism's output projections (flash_jev/tp.py): K split over 2 or 4 ranks, each rank's int32 sums
+    from every int32-capable kernel (w8a8.gemm_i32's choices: the mma.sync tile kernel and the wgmma TMA pipeline with
+    1, 2 or 4 K splits, the Triton kernel), added over the ranks and folded into the residual, must give the
+    single-GPU residual add's bits (the Triton kernel's over the whole K)."""
+    bad = 0
+    for M, N, K, live in [(64, 5120, 6144, 64), (100, 5120, 17408, 77), (8, 5120, 6144, 3), (384, 5120, 17408, 361)]:
+        a = torch.randint(-127, 128, (M, K), device=dev, dtype=torch.int8)
+        w = torch.randint(-127, 128, (N, K), device=dev, dtype=torch.int8)
+        sa = torch.rand(M, device=dev) * 1e-2
+        sw = torch.rand(N, device=dev) * 1e-3
+        n = torch.tensor([live], dtype=torch.int32, device=dev)
+        exact = (a.double() @ w.double().t())[:live]           # integers below 2^53: exact
+        tri1 = torch.ones(M, N, device=dev, dtype=torch.float32)
+        KW.gemm(a, sa.view(M, 1), w, sw.view(N, 1), tri1, n, K, epi=1, cfg=KW.pick(M, N, K, 1))
+        for tp in (2, 4):
+            k = K // tp
+            shards = [(a[:, r * k:(r + 1) * k].contiguous(), w[:, r * k:(r + 1) * k].contiguous()) for r in range(tp)]
+            kernels = [("triton", None)]
+            kernels += [(f"tile{c}.{st}.s{sp}", ("cuda", c, st, sp)) for c, (bm, bn, bk, _) in CX.CFGS.items()
+                        for st in (3, 4) for sp in (1, 2, 4) if not k % (bk * sp) and CX.fits(c, st)
+                        and (not quick or c in (2, 8))]
+            if CX.has_wgmma():
+                kernels += [(f"wg{c}.{st}.s{sp}", ("wg", c, st, sp)) for c in CX.WG_CFGS if CX.WG_CFGS[c][2]
+                            for st in (3, 4, 5, 6) for sp in (1, 2, 4) if CX.wg_fits(c, st) and not k % (128 * sp)
+                            and (not quick or st == 4)]
+            diff = []
+            for name, choice in kernels:
+                tot = torch.zeros(M, N, dtype=torch.int32, device=dev)
+                for xa, xw in shards:
+                    slots = torch.full((4, M, N), -(1 << 30), dtype=torch.int32, device=dev)
+                    if choice is None:
+                        S = _i32_triton(xa, sa, xw, sw, slots, n)
+                    elif choice[0] == "cuda":
+                        CX.gemm(xa, sa, xw, sw, slots[0][:M], n, epi=1, cfg=choice[1], stages=choice[2],
+                                split=choice[3], mode="defer", slots=slots, i32=True)
+                        S = choice[3]
+                    else:
+                        CX.gemm_wg(xa, sa, xw, sw, slots[0][:M], n, epi=1, cfg=choice[1], stages=choice[2],
+                                   split=choice[3], slots=slots, i32=True)
+                        S = choice[3]
+                    tot += slots[:S].sum(0, dtype=torch.int32)
+                res = torch.ones(M, N, device=dev, dtype=torch.float32)
+                KQ.fold(res, tot[None], KW.Deferred(1, sa, sw), n, M)
+                if not torch.equal(tot[:live].double(), exact) or not torch.equal(res[:live], tri1[:live]):
+                    diff.append(name)
+            bad += bool(diff)
+            print(f"tp {tp}: M={M:4d} N={N:5d} K/tp={k:5d} live={live:4d}: {len(kernels)} int32 kernels, rank sums "
+                  f"folded {'= one GPU (exact sums, the Triton residual add bits)' if not diff else 'DIFFER: ' + ','.join(diff)}"
+                  f"  {'ok' if not diff else 'FAIL'}", flush=True)
+    return bad
+
+
+def _i32_triton(a, a_s, w, w_s, slots, n):
+    """w8a8.gemm_i32 on its Triton kernel (no table entry)."""
+    import triton
+    M, K = a.shape
+    N = w.shape[0]
+    BM, BN, BK, GM, warps, stages = KW.pick(M, N, K, 0)[:6]
+    out = slots[0]
+    KW._w8a8_kernel[(triton.cdiv(M, BM) * triton.cdiv(N, BN), 1)](a, a_s, w, w_s, out, w_s, n, M, N, K, out.stride(0),
+                                                                  GK=K, BM=BM, BN=BN, BK=BK, GROUP_M=GM, EPI=3,
+                                                                  SPLIT_K=1, num_warps=warps, num_stages=stages)
+    return 1
 
 
 if __name__ == "__main__":

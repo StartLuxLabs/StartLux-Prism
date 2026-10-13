@@ -23,6 +23,8 @@ import torch
 import triton
 import triton.language as tl
 
+from .quant import _tp_sync
+
 
 @triton.jit
 def _tokens_kernel(src_ptr, prev_ptr, tok_ptr, n_ptr):
@@ -342,6 +344,38 @@ def head_q8(a, a_s, w, w_s, out, n, B, bn=64, gpi=4, warps=4, stages=3):
     bm = max(16, min(64, _p2(B)))
     _head_q8_kernel[(triton.cdiv(N, bn), triton.cdiv(B, bm))](a, a_s, w, w_s, out, n, N, K=K, BM=bm, BN=bn, G=HEAD_G,
                                                                GPI=gpi, num_warps=warps, num_stages=stages)
+
+
+@triton.jit
+def _gather_vocab_kernel(p0, p1, p2, p3, out_ptr, n_ptr, ep_ptr, f0, f1, f2, f3, chan, VL, V,
+                         RANK: tl.constexpr, NR: tl.constexpr, BLOCK: tl.constexpr):
+    """Per (row, block of a shard): every rank's logits of that block (p0..p3: the ranks' shards [rows, VL] as mapped
+    here) into the row of the whole vocabulary, after the fused all-reduces' sync (kernels/quant.py)."""
+    b = tl.program_id(0)
+    if b >= tl.load(n_ptr):
+        return
+    _tp_sync(ep_ptr, f0, f1, f2, f3, chan, RANK, NR)
+    c = tl.program_id(1) * BLOCK + tl.arange(0, BLOCK)
+    m = c < VL
+    b64 = b.to(tl.int64)
+    for q in tl.static_range(NR):
+        src = p0 if q == 0 else (p1 if q == 1 else (p2 if q == 2 else p3))
+        if q == RANK:
+            x = tl.load(src + b64 * VL + c, mask=m)
+        else:
+            x = tl.load(src + b64 * VL + c, mask=m, cache_modifier=".cv")
+        tl.store(out_ptr + b64 * V + q * VL + c, x, mask=m)
+
+
+def gather_vocab(shards, out, n, B, sync, block=4096):
+    """Tensor parallel, vocabulary-parallel output head: every rank's logits shard (shards: every rank's [B, VL] fp32
+    buffer as mapped here, in rank order) into out [B, VL * ranks] on every rank (a quant.Sync step)."""
+    from .quant import _sync_args
+    VL = shards[0].shape[1]
+    p = list(shards) + [shards[0]] * (4 - len(shards))
+    sa, RANK, NR = _sync_args(sync, out)
+    _gather_vocab_kernel[(B, triton.cdiv(VL, block))](*p, out, n, *sa[:6], VL, out.shape[1], RANK=RANK, NR=NR,
+                                                     BLOCK=block, num_warps=4)
 
 
 def head_norm_bf16(h, norm, out, n, B, eps):

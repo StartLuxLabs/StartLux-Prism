@@ -23,6 +23,9 @@ logits copy) no longer sit between two passes.
 StartLux-Decision v1.1 AutoThink folders (int8 or bf16) think as v1.1 does (think.py: think_mode auto by default, the
 request controls, return_details with v1.1's details and timing_ms): thoughts are generated on the GPU
 (engine/decode.py) by think.ThinkScheduler, this scheduler with decode steps interleaved between the batches.
+
+--tp N --gpus a,b,...: one model over N GPUs (tensor parallelism, int8; flash_jev/tp.py).  This process is rank 0 and
+serves as above; the other ranks are processes it starts, which replay its passes and decode steps on their shards.
 """
 from __future__ import annotations
 
@@ -215,6 +218,10 @@ def main():
     ap.add_argument("--max-images", type=int, default=I.MAX_IMAGES, help="most images per request")
     ap.add_argument("--max-pixels", type=int, default=I.MAX_PIXELS,
                     help="each image is resized to at most this many pixels (one token per 32 x 32)")
+    ap.add_argument("--tp", type=int, default=1,
+                    help="tensor parallelism: one model over this many GPUs (2 or 4 on the 27B; the int8 path), for "
+                         "lower latency (flash_jev/tp.py)")
+    ap.add_argument("--gpus", default="", help="with --tp: the GPUs, e.g. 4,5 (default: the visible ones)")
     a = ap.parse_args()
     from .vision import find_mmproj, is_mmproj
     if is_mmproj(a.gguf):
@@ -230,6 +237,11 @@ def main():
         from .gguf import GGML_Q4_K, GGML_Q5_K, GGML_Q6_K, GGUFFile
         kinds = {t.type for n, t in GGUFFile(a.gguf).tensors.items() if n.endswith("ffn_gate.weight")}
         a.precision = "w4a8" if kinds & {GGML_Q4_K, GGML_Q5_K, GGML_Q6_K} else "int8"
+    if a.tp > 1:
+        if a.precision != "int8":
+            sys.exit(f"--tp runs the int8 path (a Q8_0 file), not {a.precision}")
+        from . import tp as TP
+        TP.start(a.tp, a.gpus or None)              # before anything uses CUDA: the group's GPUs become the visible ones
     a.name = a.name or re.sub(r"-Q8_0$", "", os.path.basename(a.gguf).removesuffix(".gguf")) + " (flash-jev)"
     from .gguf import GGUFFile
     from .modelcfg import folder_kind
@@ -251,7 +263,7 @@ def main():
                                                   prefix_cache_min=a.prefix_cache_min, attn_qk8=a.attn_qk8,
                                                   think_seqs=a.think_seqs if thinks else 0,
                                                   think_kv_rows=a.think_kv_rows if thinks else 0,
-                                                  mmproj=mmproj))
+                                                  mmproj=mmproj, tp=a.tp))
     images = I.Settings(max_images=a.max_images, max_pixels=a.max_pixels, refused=text_only)
     if engine.vision is not None:
         with open(os.path.join(a.model_dir, "config.json")) as f:
@@ -281,7 +293,8 @@ def main():
 
     models = json.dumps({"models": [{"name": a.name, "description": "StartLux-Decision typed decision model on "
                                      "flash-jev", "release_date": "2026-10-01"}]}).encode()
-    health = json.dumps({"status": "ok", "model": a.name, "precision": a.precision, "max_tokens": engine.max_tokens,
+    health = json.dumps({"status": "ok", "model": a.name, "precision": a.precision, "tp": a.tp,
+                         "max_tokens": engine.max_tokens,
                          "batch_tokens": budget, "kind": kind, "think_mode": defaults.think_mode if thinks else "never",
                          "none_check": none_check, "allow_none": a.allow_none, "images": engine.vision is not None,
                          "max_images": a.max_images if engine.vision is not None else 0}

@@ -78,6 +78,9 @@ def main():
     ap.add_argument("--mma-max-m", type=int, default=0, help="time the mma.sync kernels (tile, stream-K) only up to "
                     "this many rows (0: always; Hopper: the wgmma kernel wins above a few rows)")
     ap.add_argument("--gguf", help="the model whose projection shapes to time (default StartLux-Decision-4B)")
+    ap.add_argument("--tp", type=int, default=1, help="a tensor-parallel shard's shapes (flash_jev/tp.py): the "
+                    "column-parallel projections' rows and the output projections' inputs divided by this; the output "
+                    "projections with int32 sums out (w8a8.gemm_i32, table keys NxKi)")
     ap.add_argument("--buckets", action="store_true", help="M = the engine's token and read buckets, each timed with "
                     "the live row count in the middle of the bucket's range (the rows a padded bucket really has)")
     ap.add_argument("--max-m", type=int, default=0, help="with --buckets: only buckets up to this many rows")
@@ -96,7 +99,12 @@ def main():
     dev = "cuda"
     CX.load()
     rows, table = [], {}
-    shapes = model_shapes(**gguf_dims(a.gguf)) if a.gguf else model_shapes()
+    dims = gguf_dims(a.gguf) if a.gguf else {}
+    if a.tp > 1:                                                  # a shard: its heads and FFN columns
+        dims = dims or dict(hidden=2560, ffn=9216, k_heads=16, v_heads=32, gdn_dim=128, n_head=16, n_kv=4,
+                            head_dim=256)
+        dims.update({k: dims[k] // a.tp for k in ("ffn", "k_heads", "v_heads", "n_head", "n_kv")})
+    shapes = model_shapes(**dims)
     seen = set()
     for name, (N, K) in shapes.items():
         key = name.split(" ")[0]
@@ -109,6 +117,9 @@ def main():
         copies = max(a.copies, -(-3 * (a.l2_mb << 20) // (N * K)))    # 4 copies of a 10 MB matrix would sit in L2
         ws = [torch.randint(-127, 128, (N, K), device=dev, dtype=torch.int8) for _ in range(copies)]
         sw = torch.rand(N, device=dev) * 1e-3
+        if a.tp > 1 and epi == 1:                                 # an output projection's int32 sums (gemm_i32)
+            rows += time_i32(a, key, N, K, ws, sw, live_of, table)
+            continue
         for M in [int(x) for x in a.m.split(",")]:
             x = torch.randint(-127, 128, (M, K), device=dev, dtype=torch.int8)
             sa = torch.rand(M, device=dev) * 1e-2
@@ -205,6 +216,61 @@ def main():
         json.dump({"gpu": torch.cuda.get_device_name(), "source": SOURCE, "table": table}, open(a.table, "w"), indent=1)
     if a.merge_into:
         merge(a.merge_into, table, torch.cuda.get_device_name())
+
+
+def time_i32(a, key, N, K, ws, sw, live_of, table):
+    """A tensor-parallel output projection's int32 sums (w8a8.gemm_i32) at each M: the Triton kernel, the mma.sync tile
+    kernel (up to --mma-max-m rows) and the wgmma TMA pipeline, each with 1, 2 or 4 K splits up to 512 rows - a split
+    charged with the fold reading tp x its slots instead of tp (the fused all-reduce reads every rank's).  Entries go
+    to table["NxKi"] as ["triton"], ["cuda", cfg, stages, split] or ["wg", cfg, stages, split]."""
+    import triton
+    dev, out_rows = "cuda", []
+    for M in [int(x) for x in a.m.split(",")]:
+        x = torch.randint(-127, 128, (M, K), device=dev, dtype=torch.int8)
+        sa = torch.rand(M, device=dev) * 1e-2
+        n = torch.tensor([live_of.get(M) or max(1, int(M * a.live_frac))], dtype=torch.int32, device=dev)
+        live = int(n.item())
+        slots = torch.zeros(4, M, N, dtype=torch.int32, device=dev)
+
+        def rot(fn):
+            def f():
+                for w in ws:
+                    fn(w)
+            return timed(f, a.iters) / len(ws) * 1000
+
+        BM, BN, BK, GM, warps, stages = KW.pick(M, N, K, 0)[:6]
+        grid = (triton.cdiv(M, BM) * triton.cdiv(N, BN), 1)
+        cands = [(rot(lambda w: KW._w8a8_kernel[grid](x, sa, w, sw, slots[0], sw, n, M, N, K, N, GK=K, BM=BM, BN=BN,
+                                                       BK=BK, GROUP_M=GM, EPI=3, SPLIT_K=1, num_warps=warps,
+                                                       num_stages=stages)), ["triton"])]
+        splits = (1, 2, 4) if M <= 512 else (1,)
+        mma = not a.mma_max_m or M <= a.mma_max_m
+        for cfg, st, sp in itertools.product(CX.CFGS if mma else (), (3, 4), splits):
+            if K % (CX.CFGS[cfg][2] * sp) or not CX.fits(cfg, st) or (a.cfgs and cfg not in a.cfgs):
+                continue
+            t = rot(lambda w: CX.gemm(x, sa, w, sw, slots[0][:M], n, epi=1, cfg=cfg, split=sp, stages=st,
+                                      mode="defer", slots=slots, i32=True))
+            cands.append((t + _split_cost(live, N, sp, a.tp), ["cuda", cfg, st, sp]))
+        for cfg, st in ((c, s) for c in CX.WG_CFGS for s in (3, 4, 5, 6)
+                        if CX.has_wgmma() and CX.WG_CFGS[c][2] and CX.wg_fits(c, s)):
+            for sp in splits:
+                if K % (128 * sp):
+                    continue
+                t = rot(lambda w: CX.gemm_wg(x, sa, w, sw, slots[0][:M], n, epi=1, cfg=cfg, stages=st, split=sp,
+                                             slots=slots, i32=True))
+                cands.append((t + _split_cost(live, N, sp, a.tp), ["wg", cfg, st, sp]))
+        t, best = min(cands, key=lambda c: c[0])
+        table.setdefault(f"{N}x{K}i", {})[str(M)] = best
+        out_rows.append({"shape": key + " (int32)", "M": M, "live": live, "N": N, "K": K, "triton_us": round(cands[0][0], 1),
+                         "cuda_us": round(t, 1), "cuda_cfg": best})
+        print(f"{key:12s} int32 M={M:5d} live={live:5d}  triton {cands[0][0]:7.1f}  -> {t:7.1f} us {best}  "
+              f"({N * K / t / 1e6:4.2f} TB/s weights)", flush=True)
+    return out_rows
+
+
+def _split_cost(rows, n, split, tp):
+    """The fold's extra time for `split` int32 slots per rank instead of one (tp ranks' slots read)."""
+    return 0.0 if split == 1 else max(0.0, fold_us(rows, n, tp * split) - fold_us(rows, n, tp))
 
 
 SOURCE = ("bench/cuda_gemm_micro.py (weights streamed from DRAM; tile = one CTA per tile, sk = stream-K, wg = Hopper "

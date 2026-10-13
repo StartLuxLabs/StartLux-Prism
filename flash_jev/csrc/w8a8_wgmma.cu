@@ -667,7 +667,8 @@ void w8a8_wgmma(torch::Tensor a, torch::Tensor sa, torch::Tensor w, torch::Tenso
   TORCH_CHECK(a.stride(1) == 1 && w.stride(1) == 1 && a.stride(0) == a.size(1) && w.stride(0) == w.size(1),
               "contiguous K-major operands");
   // split > 1 (residual add only): `out` is the first of `split` int32 slots, slot_stride elements apart
-  TORCH_CHECK(split == 1 ? slot_stride == 0 : (epi == 1 && slot_stride >= out.size(0) * out.stride(0)), "split slots");
+  // (one split with slot_stride > 0: int32 sums out, gemm_i32 of a tensor-parallel shard)
+  TORCH_CHECK(slot_stride == 0 ? split == 1 : (epi == 1 && slot_stride >= out.size(0) * out.stride(0)), "split slots");
   TORCH_CHECK(slot_stride > 0 ? out.dtype() == torch::kInt32
                               : (epi == 0 ? out.dtype() == torch::kBFloat16 : out.dtype() == torch::kFloat32),
               "output dtype");

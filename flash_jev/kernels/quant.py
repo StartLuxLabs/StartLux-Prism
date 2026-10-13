@@ -11,21 +11,97 @@ norm_q8 (and fold) also finish a residual add that a split-K output projection d
 int32 partial sums are added exactly, scaled and added into h with the same roundings as an unsplit projection's
 epilogue, so the residual has the same bits whichever way the projection ran.
 
+Tensor parallelism (flash_jev/tp.py): the inputs of the row-parallel projections (gated norm, attention output,
+SwiGLU) hold this rank's heads or columns only, while the per-token scale is the maximum over the whole row.  So those
+producers run twice around a max all-reduce: mode 1 also stores this rank's row maximum, mode 2 quantizes with the
+maximum over every rank's (`amax`, at least this rank's own: the maximum of the two is the same number).  Every mode
+runs the single-GPU kernel's code (mode 0) whole - the row's values, its maximum, the int8 stores; modes 1 and 2 only
+add a scalar store or load - because Triton chooses a kernel's register layouts from its loads and stores, and the
+layout sets the order of a sum over a row (the gated norm's over a head's D values): a mode 1 that stored only the
+maximum summed in another order and was off by an ulp on some rows.  The gated norm also keeps the whole model's head
+block (HP), so a shard's heads reduce as the whole model's do.  A maximum is exact in any order, so each rank's int8
+values and scales are the single-GPU kernel's, bit for bit.
+
 Every producer signals at its start that the next kernel may launch (programmatic dependent launch): the CUDA GEMM
 that consumes its output then streams its weights while this kernel runs, and waits for it before reading the
 activations (csrc/w8a8_gemm.cu).  The signal does nothing for a kernel launched the ordinary way.
+
+Fused all-reduces (tensor parallel, small batches: tp.py): instead of a collective between two kernels, the kernel that
+needs the sum or maximum reads every rank's data itself, over NVLink from the ranks' symmetric-memory buffers
+(norm_q8 / fold: every rank's int32 slots of an output projection; quantize mode 2: every rank's row maxima).  Each of
+its programs first signals its rank's arrival on every other rank (a flag set to this pass's number, release, system
+scope) and waits for every other rank's (acquire): the data each rank wrote before this kernel is then visible.  Integer
+sums and maxima are exact in any order, so the results are those of the NCCL path and of one GPU (Sync).
 """
+from typing import NamedTuple
+
 import torch
 import triton
 import triton.language as tl
 from triton.language.extra.cuda import libdevice
 
 
+class Sync(NamedTuple):
+    """One fused all-reduce step of a tensor-parallel group (flash_jev/tp.py; module docstring): `epoch` int64 [1], the
+    pass's number (the same on every rank); `flags`, every rank's flag array (int64 [channels, ranks]) as mapped
+    here, in rank order; `chan`, this step's flags (its index in the pass); `others`, the other ranks' data buffers
+    (as mapped here); this process's rank and the group's size."""
+    epoch: torch.Tensor
+    flags: tuple
+    chan: int
+    others: tuple
+    rank: int
+    world: int
+
+
+def _sync_args(sync, like):
+    """Kernel arguments of a Sync (or of none: the single-GPU and NCCL paths): epoch, 4 flag arrays, channel, 3 other
+    ranks' buffers; RANK, NR."""
+    if sync is None:
+        return (like,) * 5 + (0,) + (like,) * 3, 0, 1
+    f = tuple(sync.flags) + (sync.flags[0],) * (4 - len(sync.flags))
+    o = tuple(sync.others) + (like,) * (3 - len(sync.others))
+    return (sync.epoch, *f, sync.chan, *o), sync.rank, sync.world
+
+
 @triton.jit
-def _fold_parts(h, parts_ptr, part_stride, psa_ptr, psw_ptr, r, c, m, HID: tl.constexpr, NP: tl.constexpr):
+def _bump_kernel(ep_ptr):
+    tl.store(ep_ptr, tl.load(ep_ptr) + 1)
+
+
+def bump(epoch):
+    """A new pass number (int64 [1]) at the start of a tensor-parallel pass: every rank runs the same passes, so they
+    count alike."""
+    _bump_kernel[(1,)](epoch, num_warps=1)
+
+
+@triton.jit
+def _tp_sync(ep_ptr, f0, f1, f2, f3, chan, RANK: tl.constexpr, NR: tl.constexpr):
+    """Signal this rank's arrival at step `chan` on every other rank, then wait for every other rank's (module
+    docstring).  Every program signals: none waits on another program of its own grid."""
+    e = tl.load(ep_ptr)
+    for q in tl.static_range(NR):
+        if q != RANK:
+            fq = f0 if q == 0 else (f1 if q == 1 else (f2 if q == 2 else f3))
+            tl.atomic_xchg(fq + chan * NR + RANK, e, sem="release", scope="sys")
+    mine = f0 if RANK == 0 else (f1 if RANK == 1 else (f2 if RANK == 2 else f3))
+    for q in tl.static_range(NR):
+        if q != RANK:
+            while tl.atomic_add(mine + chan * NR + q, 0, sem="acquire", scope="sys") < e:
+                pass
+
+
+@triton.jit
+def _fold_parts(h, parts_ptr, part_stride, psa_ptr, psw_ptr, r, c, m, HID: tl.constexpr, NP: tl.constexpr,
+                o1, o2, o3, NR: tl.constexpr):
+    """NR > 1: the other ranks' slots too (o1 .. o_{NR-1}, read over NVLink, uncached)."""
     tot = tl.load(parts_ptr + r * HID + c, mask=m, other=0)
     for p in tl.static_range(1, NP):
         tot += tl.load(parts_ptr + p * part_stride + r * HID + c, mask=m, other=0)
+    for q in tl.static_range(1, NR):
+        oq = o1 if q == 1 else (o2 if q == 2 else o3)
+        for p in tl.static_range(NP):
+            tot += tl.load(oq + p * part_stride + r * HID + c, mask=m, other=0, cache_modifier=".cv")
     v = libdevice.mul_rn(libdevice.mul_rn(tot.to(tl.float32), tl.load(psa_ptr + r)),
                          tl.load(psw_ptr + c, mask=m, other=0.0))
     return libdevice.add_rn(h, v)
@@ -33,7 +109,10 @@ def _fold_parts(h, parts_ptr, part_stride, psa_ptr, psw_ptr, r, c, m, HID: tl.co
 
 @triton.jit
 def _norm_q8_kernel(h_ptr, w_ptr, q_ptr, s_ptr, rows_ptr, n_ptr, eps, parts_ptr, part_stride, psa_ptr, psw_ptr,
-                    HID: tl.constexpr, HP: tl.constexpr, GATHER: tl.constexpr, NP: tl.constexpr):
+                    ep_ptr, f0, f1, f2, f3, chan, o1, o2, o3,
+                    HID: tl.constexpr, HP: tl.constexpr, GATHER: tl.constexpr, NP: tl.constexpr,
+                    RANK: tl.constexpr, NR: tl.constexpr):
+    """NR > 1: the deferred add's slots are every rank's (a fused all-reduce, module docstring)."""
     tl.extra.cuda.gdc_launch_dependents()
     i = tl.program_id(0).to(tl.int64)
     if i >= tl.load(n_ptr):
@@ -44,9 +123,11 @@ def _norm_q8_kernel(h_ptr, w_ptr, q_ptr, s_ptr, rows_ptr, n_ptr, eps, parts_ptr,
         r = i
     c = tl.arange(0, HP)
     m = c < HID
+    if NR > 1:
+        _tp_sync(ep_ptr, f0, f1, f2, f3, chan, RANK, NR)
     h = tl.load(h_ptr + r * HID + c, mask=m, other=0.0)
     if NP > 0:      # a residual add deferred by a split-K projection, finished here and kept
-        h = _fold_parts(h, parts_ptr, part_stride, psa_ptr, psw_ptr, r, c, m, HID, NP)
+        h = _fold_parts(h, parts_ptr, part_stride, psa_ptr, psw_ptr, r, c, m, HID, NP, o1, o2, o3, NR)
         tl.store(h_ptr + r * HID + c, h, mask=m)
     y = h * tl.rsqrt(tl.sum(h * h, 0) / HID + eps) * tl.load(w_ptr + c, mask=m, other=0.0)
     amax = tl.max(tl.abs(y), 0)
@@ -56,9 +137,27 @@ def _norm_q8_kernel(h_ptr, w_ptr, q_ptr, s_ptr, rows_ptr, n_ptr, eps, parts_ptr,
 
 
 @triton.jit
-def _gated_norm_q8_kernel(o_ptr, z_ptr, P, Z_OFF, w_ptr, inv_s_ptr, q_ptr, s_ptr, n_ptr, eps,
-                          HV: tl.constexpr, HP: tl.constexpr, D: tl.constexpr):
-    """HP: HV rounded up to a power of two (the 27B's 48 value heads); the rows past HV are masked to zero."""
+def _all_amax(amax_ptr, t, ep_ptr, f0, f1, f2, f3, chan, o1, o2, o3, RANK: tl.constexpr, NR: tl.constexpr):
+    """Mode 2: a row's maximum over every rank - all-reduced already (NR 1), or read from every rank's buffer after
+    the sync (a fused all-reduce, module docstring)."""
+    if NR > 1:
+        _tp_sync(ep_ptr, f0, f1, f2, f3, chan, RANK, NR)
+    amax = tl.load(amax_ptr + t)
+    for q in tl.static_range(1, NR):
+        oq = o1 if q == 1 else (o2 if q == 2 else o3)
+        amax = tl.maximum(amax, tl.load(oq + t, cache_modifier=".cv"))
+    return amax
+
+
+@triton.jit
+def _gated_norm_q8_kernel(o_ptr, z_ptr, P, Z_OFF, w_ptr, inv_s_ptr, q_ptr, s_ptr, n_ptr, eps, amax_ptr,
+                          ep_ptr, f0, f1, f2, f3, chan, o1, o2, o3,
+                          HV: tl.constexpr, HP: tl.constexpr, D: tl.constexpr, MODE: tl.constexpr,
+                          RANK: tl.constexpr, NR: tl.constexpr):
+    """HP: HV rounded up to a power of two (the 27B's 48 value heads); the rows past HV are masked to zero.  Tensor
+    parallel: HV is this rank's heads, HP the whole model's (the same block, so the same order of the sum over D);
+    MODE 1 also stores the row's maximum in amax, MODE 2 quantizes with the maximum over the ranks (module
+    docstring)."""
     tl.extra.cuda.gdc_launch_dependents()
     t = tl.program_id(0).to(tl.int64)
     if t >= tl.load(n_ptr):
@@ -72,6 +171,10 @@ def _gated_norm_q8_kernel(o_ptr, z_ptr, P, Z_OFF, w_ptr, inv_s_ptr, q_ptr, s_ptr
     y = o * tl.rsqrt(tl.sum(o * o, 1) / D + eps)[:, None] * tl.load(w_ptr + d)[None, :] * (z / (1.0 + tl.exp(-z)))
     y = y * tl.load(inv_s_ptr + idx, mask=hm, other=0.0)
     amax = tl.max(tl.max(tl.abs(y), 1), 0)
+    if MODE == 1:
+        tl.store(amax_ptr + t, amax)
+    if MODE == 2:
+        amax = tl.maximum(_all_amax(amax_ptr, t, ep_ptr, f0, f1, f2, f3, chan, o1, o2, o3, RANK, NR), amax)
     scale = tl.maximum(amax, 1e-10) / 127.0
     tl.store(q_ptr + t * HV * D + idx, tl.extra.cuda.libdevice.rint(y / scale).to(tl.int8), mask=hm)
     tl.store(s_ptr + t, scale)
@@ -88,9 +191,12 @@ def _swiglu_piece(row, inv_s_ptr, FF: tl.constexpr, OFF: tl.constexpr, P: tl.con
 
 
 @triton.jit
-def _swiglu_q8_kernel(gu_ptr, inv_s_ptr, q_ptr, s_ptr, n_ptr, FF: tl.constexpr, P1: tl.constexpr, P2: tl.constexpr):
+def _swiglu_q8_kernel(gu_ptr, inv_s_ptr, q_ptr, s_ptr, n_ptr, amax_ptr, ep_ptr, f0, f1, f2, f3, chan, o1, o2, o3,
+                      FF: tl.constexpr, P1: tl.constexpr, P2: tl.constexpr, MODE: tl.constexpr, RANK: tl.constexpr,
+                      NR: tl.constexpr):
     """One row, in registers as two power-of-2 pieces (P1 + P2 >= FF: the 27B's 17,408 = 16,384 + 1,024; one power
-    of 2 for the whole row left 47% of its lanes masked).  The row's maximum is exact in any order: the same bits."""
+    of 2 for the whole row left 47% of its lanes masked).  The row's maximum is exact in any order: the same bits.
+    MODE 1 / 2: tensor parallel (module docstring)."""
     tl.extra.cuda.gdc_launch_dependents()
     t = tl.program_id(0).to(tl.int64)
     if t >= tl.load(n_ptr):
@@ -99,6 +205,10 @@ def _swiglu_q8_kernel(gu_ptr, inv_s_ptr, q_ptr, s_ptr, n_ptr, FF: tl.constexpr, 
     y1, c1, m1 = _swiglu_piece(row, inv_s_ptr, FF, 0, P1)
     y2, c2, m2 = _swiglu_piece(row, inv_s_ptr, FF, P1, P2)
     amax = tl.maximum(tl.max(tl.abs(y1), 0), tl.max(tl.abs(y2), 0))
+    if MODE == 1:
+        tl.store(amax_ptr + t, amax)
+    if MODE == 2:
+        amax = tl.maximum(_all_amax(amax_ptr, t, ep_ptr, f0, f1, f2, f3, chan, o1, o2, o3, RANK, NR), amax)
     scale = tl.maximum(amax, 1e-10) / 127.0
     tl.store(q_ptr + t * FF + c1, tl.extra.cuda.libdevice.rint(y1 / scale).to(tl.int8), mask=m1)
     tl.store(q_ptr + t * FF + c2, tl.extra.cuda.libdevice.rint(y2 / scale).to(tl.int8), mask=m2)
@@ -106,7 +216,9 @@ def _swiglu_q8_kernel(gu_ptr, inv_s_ptr, q_ptr, s_ptr, n_ptr, FF: tl.constexpr, 
 
 
 @triton.jit
-def _rows_q8_kernel(x_ptr, inv_s_ptr, q_ptr, s_ptr, n_ptr, K: tl.constexpr, KP: tl.constexpr):
+def _rows_q8_kernel(x_ptr, inv_s_ptr, q_ptr, s_ptr, n_ptr, amax_ptr, ep_ptr, f0, f1, f2, f3, chan, o1, o2, o3,
+                    K: tl.constexpr, KP: tl.constexpr, MODE: tl.constexpr, RANK: tl.constexpr, NR: tl.constexpr):
+    """MODE 1 / 2: tensor parallel (module docstring)."""
     tl.extra.cuda.gdc_launch_dependents()
     t = tl.program_id(0).to(tl.int64)
     if t >= tl.load(n_ptr):
@@ -115,6 +227,10 @@ def _rows_q8_kernel(x_ptr, inv_s_ptr, q_ptr, s_ptr, n_ptr, K: tl.constexpr, KP: 
     m = c < K
     y = tl.load(x_ptr + t * K + c, mask=m, other=0.0).to(tl.float32) * tl.load(inv_s_ptr + c, mask=m, other=0.0)
     amax = tl.max(tl.abs(y), 0)
+    if MODE == 1:
+        tl.store(amax_ptr + t, amax)
+    if MODE == 2:
+        amax = tl.maximum(_all_amax(amax_ptr, t, ep_ptr, f0, f1, f2, f3, chan, o1, o2, o3, RANK, NR), amax)
     scale = tl.maximum(amax, 1e-10) / 127.0
     tl.store(q_ptr + t * K + c, tl.extra.cuda.libdevice.rint(y / scale).to(tl.int8), mask=m)
     tl.store(s_ptr + t, scale)
@@ -222,49 +338,70 @@ def _p2(n):
 
 
 def norm_q8(h, w_over_s, q, s, n, T, eps, rows=None, parts=None, pending=None):
-    """parts int32 [S, rows, HID], pending (w8a8.Deferred or None): a residual add to finish in h first.  The
-    deferred projection's activation scales may be `s` itself (each row reads its scale before writing the new one)."""
+    """parts int32 [S, rows, HID], pending (w8a8.Deferred or None): a residual add to finish in h first (its own
+    slots when it names them, else `parts`; with a Sync, every rank's).  The deferred projection's activation scales
+    may be `s` itself (each row reads its scale before writing the new one)."""
     HID = h.shape[1]
     np_ = pending.n if pending else 0
+    if np_ and pending.parts is not None:
+        parts = pending.parts
     assert np_ == 0 or (parts is not None and rows is None and parts.dtype == torch.int32)
+    sa, RANK, NR = _sync_args(pending.sync if np_ else None, h)
     _norm_q8_kernel[(T,)](h, w_over_s, q, s, rows if rows is not None else n, n, eps,
                           parts if np_ else h, parts.stride(0) if np_ else 0, pending.a_s if np_ else s,
-                          pending.w_s if np_ else s, HID=HID, HP=_p2(HID), GATHER=rows is not None, NP=np_,
-                          num_warps=8)
+                          pending.w_s if np_ else s, *sa, HID=HID, HP=_p2(HID), GATHER=rows is not None, NP=np_,
+                          RANK=RANK, NR=NR, num_warps=8)
 
 
 @triton.jit
-def _fold_kernel(h_ptr, parts_ptr, part_stride, psa_ptr, psw_ptr, n_ptr, HID: tl.constexpr, HP: tl.constexpr,
-                 NP: tl.constexpr):
+def _fold_kernel(h_ptr, parts_ptr, part_stride, psa_ptr, psw_ptr, n_ptr, ep_ptr, f0, f1, f2, f3, chan, o1, o2, o3,
+                 HID: tl.constexpr, HP: tl.constexpr, NP: tl.constexpr, RANK: tl.constexpr, NR: tl.constexpr):
     r = tl.program_id(0).to(tl.int64)
     if r >= tl.load(n_ptr):
         return
     c = tl.arange(0, HP)
     m = c < HID
+    if NR > 1:
+        _tp_sync(ep_ptr, f0, f1, f2, f3, chan, RANK, NR)
     h = tl.load(h_ptr + r * HID + c, mask=m, other=0.0)
-    tl.store(h_ptr + r * HID + c, _fold_parts(h, parts_ptr, part_stride, psa_ptr, psw_ptr, r, c, m, HID, NP), mask=m)
+    tl.store(h_ptr + r * HID + c, _fold_parts(h, parts_ptr, part_stride, psa_ptr, psw_ptr, r, c, m, HID, NP, o1, o2,
+                                              o3, NR), mask=m)
 
 
 def fold(h, parts, pending, n, T):
     """Finish a deferred residual add (w8a8.Deferred) in h when no norm follows."""
     if pending:
         HID = h.shape[1]
-        _fold_kernel[(T,)](h, parts, parts.stride(0), pending.a_s, pending.w_s, n, HID=HID, HP=_p2(HID),
-                           NP=pending.n, num_warps=8)
+        if pending.parts is not None:
+            parts = pending.parts
+        sa, RANK, NR = _sync_args(pending.sync, h)
+        _fold_kernel[(T,)](h, parts, parts.stride(0), pending.a_s, pending.w_s, n, *sa, HID=HID, HP=_p2(HID),
+                           NP=pending.n, RANK=RANK, NR=NR, num_warps=8)
 
 
-def gated_norm_q8(o, proj, z_off, w, inv_s, q, s, n, T, cfg):
-    _gated_norm_q8_kernel[(T,)](o, proj, proj.stride(0), z_off, w, inv_s, q, s, n, cfg.eps,
-                                HV=cfg.v_heads, HP=_p2(cfg.v_heads), D=cfg.gdn_dim, num_warps=8)
+def gated_norm_q8(o, proj, z_off, w, inv_s, q, s, n, T, cfg, mode=0, amax=None, sync=None):
+    """mode 0: the whole row here; 1 / 2 (tensor parallel): store this rank's row maxima in amax / quantize with the
+    maximum over the ranks - all-reduced into amax, or (sync) read from every rank's (module docstring).
+    cfg.v_heads_full: the whole model's value heads (a tensor-parallel shard's config), whose power-of-2 block every
+    mode uses."""
+    amax = amax if amax is not None else s
+    sa, RANK, NR = _sync_args(sync, amax)
+    _gated_norm_q8_kernel[(T,)](o, proj, proj.stride(0), z_off, w, inv_s, q, s, n, cfg.eps, amax, *sa,
+                                HV=cfg.v_heads, HP=_p2(getattr(cfg, "v_heads_full", cfg.v_heads)), D=cfg.gdn_dim,
+                                MODE=mode, RANK=RANK, NR=NR, num_warps=8)
 
 
-def swiglu_q8(gu, inv_s, q, s, n, T):
+def swiglu_q8(gu, inv_s, q, s, n, T, mode=0, amax=None, sync=None):
     FF = q.shape[1]
     P1 = 1 << (FF.bit_length() - 1)                 # the largest power of 2 <= FF, then the rest (16 at least)
-    _swiglu_q8_kernel[(T,)](gu, inv_s, q, s, n, FF=FF, P1=P1, P2=max(_p2(FF - P1), 16),
-                            num_warps=4 if T <= 2048 else 16)
+    amax = amax if amax is not None else s
+    sa, RANK, NR = _sync_args(sync, amax)
+    _swiglu_q8_kernel[(T,)](gu, inv_s, q, s, n, amax, *sa, FF=FF, P1=P1, P2=max(_p2(FF - P1), 16), MODE=mode,
+                            RANK=RANK, NR=NR, num_warps=4 if T <= 2048 else 16)
 
 
-def rows_q8(x, inv_s, q, s, n, T):
+def rows_q8(x, inv_s, q, s, n, T, mode=0, amax=None, sync=None):
     K = q.shape[1]
-    _rows_q8_kernel[(T,)](x, inv_s, q, s, n, K=K, KP=_p2(K), num_warps=8)
+    amax = amax if amax is not None else s
+    sa, RANK, NR = _sync_args(sync, amax)
+    _rows_q8_kernel[(T,)](x, inv_s, q, s, n, amax, *sa, K=K, KP=_p2(K), MODE=mode, RANK=RANK, NR=NR, num_warps=8)

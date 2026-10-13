@@ -8,7 +8,8 @@ exactly; across groups in fp32 after scaling by s_a[row, g] * s_w[col, g].
 
 Epilogues: 0 store bf16; 1 add into the fp32 residual stream (output projections); 2 SwiGLU: each BN-wide tile of the
 gate|up weight holds BN/2 gate rows then the matching BN/2 up rows, the tile computes silu(gate) * up and writes it
-int8 with one scale per row (group = BN/2 columns) - the down projection's input, already quantized.
+int8 with one scale per row (group = BN/2 columns) - the down projection's input, already quantized; 3 store the raw
+int32 sums (gemm_i32: a tensor-parallel shard's part of an output projection, added over the ranks before the scaling).
 
 Batch invariance: with one scale group (GK == K, the engine's case) an output is (float(acc) * s_a) * s_w, each product
 rounded, and the residual add rounds once more - written with explicit round-to-nearest intrinsics, exactly as the
@@ -50,6 +51,16 @@ def _w8a8_kernel(a_ptr, as_ptr, w_ptr, ws_ptr, out_ptr, outs_ptr, n_rows_ptr, M,
     KS: tl.constexpr = GK // SPLIT_K                 # split-K slices one scale group (only with GK == K)
     a_p = a_ptr + rm[:, None].to(tl.int64) * K + pid_k * KS + rk[None, :]
     w_p = w_ptr + rn[None, :].to(tl.int64) * K + pid_k * KS + rk[:, None]
+    if EPI == 3:        # the raw int32 sums over all of K (gemm_i32: a tensor-parallel shard's partial products)
+        acc3 = tl.zeros([BM, BN], dtype=tl.int32)
+        for kk in range(0, K, BK):
+            a = tl.load(a_p, mask=(rm < M)[:, None], other=0)
+            w = tl.load(w_p, mask=nm[None, :], other=0)
+            acc3 = tl.dot(a, w, acc3)
+            a_p += BK
+            w_p += BK
+        tl.store(out_ptr + rm[:, None] * stride_om + rn[None, :], acc3, mask=(rm < live)[:, None] & nm[None, :])
+        return
     G = K // GK
     acc = tl.zeros([BM, BN], dtype=tl.float32)
     for g in range(G):
@@ -144,11 +155,13 @@ def _table():
     if not os.path.exists(path):
         return {}
     raw = json.load(open(path))["table"]
-    return {tuple(int(x) for x in k.split("x")): {int(m): c for m, c in v.items()} for k, v in raw.items()}
+    # "NxK": the projection's kernel; "NxKi": int32 sums out (gemm_i32, the tensor-parallel output projections)
+    return {tuple(int(x) for x in k.rstrip("i").split("x")) + (("i",) if k.endswith("i") else ()):
+            {int(m): c for m, c in v.items()} for k, v in raw.items()}
 
 
-def _choice(N, K, M):
-    t = _table().get((N, K))
+def _choice(N, K, M, i32=False):
+    t = _table().get((N, K, "i") if i32 else (N, K))
     if not t:
         return None
     m = min(t, key=lambda x: abs(math.log(x) - math.log(max(M, 1))))     # nearest measured token count
@@ -157,10 +170,14 @@ def _choice(N, K, M):
 
 class Deferred(NamedTuple):
     """A residual add left to the next kernel that reads the residual (quant.norm_q8 or quant.fold): `n` int32 slots of
-    partial sums, and the projection's activation and weight scales to apply to their total."""
+    partial sums, and the projection's activation and weight scales to apply to their total.  parts: the slots (int32
+    [S, rows, N]) when they are not the reader's own `parts` buffer (tensor parallel: the all-reduced sums, or this
+    rank's own with `sync`, a quant.Sync: the reader adds every rank's slots itself)."""
     n: int
     a_s: torch.Tensor
     w_s: torch.Tensor
+    parts: torch.Tensor = None
+    sync: object = None
 
 
 def gemm(a, a_s, w, w_s, out, n_rows, gk, epi=0, outs=None, cfg=None, slots=None, pdl=False):
@@ -206,6 +223,36 @@ def gemm(a, a_s, w, w_s, out, n_rows, gk, epi=0, outs=None, cfg=None, slots=None
                        GK=gk, BM=BM, BN=BN, BK=BK, GROUP_M=GM, EPI=epi, SPLIT_K=split, num_warps=warps,
                        num_stages=stages)
     return None
+
+
+def gemm_i32(a, a_s, w, w_s, slots, n_rows, max_split=4, pdl=False):
+    """The int32 products a w^T (a int8 [M, K], w int8 [N, K]) without the scales (a_s, w_s: the projection's, passed
+    only as gemm's kernels take them): an output projection's partial sums on one tensor-parallel rank (K is its share
+    of the inputs), to be added over the ranks - exact - and then scaled and added into the residual as the single-GPU
+    epilogue does (Deferred, quant.norm_q8).  The kernel comes from the dispatch table's "NxKi" entries (int32-capable
+    kernels: the wgmma TMA pipeline, the mma.sync tile kernel); a split over K stores split z's sums in slots[z]
+    (int32 [S, rows, N]).  Returns the number of slots written (at most max_split; without an entry, the Triton
+    kernel's one)."""
+    M, K = a.shape
+    N = w.shape[0]
+    assert slots.dtype == torch.int32 and slots.shape[1] >= M and slots.shape[2] == N
+    c = _choice(N, K, M, i32=True)
+    if c and c[0] in ("wg", "cuda") and (c[3] if len(c) > 3 else 1) <= max_split:
+        from . import cuda_ext
+        split = c[3] if len(c) > 3 else 1
+        if c[0] == "wg":
+            cuda_ext.gemm_wg(a, a_s, w, w_s, slots[0][:M], n_rows, epi=1, cfg=c[1], stages=c[2], split=split,
+                             slots=slots, i32=True)
+        else:
+            cuda_ext.gemm(a, a_s, w, w_s, slots[0][:M], n_rows, epi=1, cfg=c[1], stages=c[2], split=split,
+                          mode="defer", slots=slots, pdl=pdl, i32=True)
+        return split
+    BM, BN, BK, GM, warps, stages = pick(M, N, K, 0)[:6]
+    out = slots[0]
+    _w8a8_kernel[(triton.cdiv(M, BM) * triton.cdiv(N, BN), 1)](a, a_s, w, w_s, out, w_s, n_rows, M, N, K,
+                                                               out.stride(0), GK=K, BM=BM, BN=BN, BK=BK, GROUP_M=GM,
+                                                               EPI=3, SPLIT_K=1, num_warps=warps, num_stages=stages)
+    return 1
 
 
 def quant_rows(x, gk, n_rows=None):
