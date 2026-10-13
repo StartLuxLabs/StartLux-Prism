@@ -84,10 +84,24 @@ def load(jevbench):
     return items, score
 
 
+EXTRA = {}            # --extra: request fields added to every request (e.g. StartLux-Decision v1.1's think_mode)
+
+
 def body(model, raw, unique=True):
     """The request for one item (with a request number in front of its evidence when unique)."""
     return json.dumps({"model": model, "state": uniquify(raw["state"]) if unique else raw["state"],
-                       "questions": {"decision": raw["question"]}}).encode()
+                       "questions": {"decision": raw["question"]}, **EXTRA}).encode()
+
+
+def thought(resp):
+    """What a v1.1 AutoThink answer says about its thought (return_details), else {}."""
+    d = resp["answers"]["decision"].get("details") or {}
+    th = d.get("thought") or {}
+    out = {"output_tokens": resp.get("usage", {}).get("output_tokens", 0)}
+    if th:
+        out.update(thought=th.get("used"), thought_tokens=th.get("tokens"), ended=th.get("ended"),
+                   thought_ms=th.get("ms"), top=(d.get("first_pass") or {}).get("top"))
+    return out
 
 
 def warmup(url, model, items, n=-1):
@@ -104,7 +118,7 @@ def sequential(url, model, items, score):
         ms, resp = c.call(body(model, raw, unique=False))
         ok, labels = score(raw, resp["answers"]["decision"])
         out[raw["id"]] = {"tier": tier, "ms": round(ms, 3), "correct": ok, "probs": labels,
-                          "tokens": resp.get("usage", {}).get("input_tokens")}
+                          "tokens": resp.get("usage", {}).get("input_tokens"), **thought(resp)}
     return out
 
 
@@ -173,9 +187,23 @@ def run(a):
     out["total"] = {"correct": sum(v["correct"] for v in allv), "n": len(allv),
                     "mean_ms": round(statistics.mean(v["ms"] for v in allv), 2),
                     "p50_ms": round(statistics.median(v["ms"] for v in allv), 2)}
+    thinking = [v for v in allv if v.get("thought")]
+    if any("thought" in v for v in allv):
+        ends = {}
+        for v in thinking:
+            ends[v["ended"]] = ends.get(v["ended"], 0) + 1
+        toks = sorted(v["thought_tokens"] for v in thinking)
+        out["thoughts"] = {"n": len(thinking), "share": round(len(thinking) / len(allv), 4), "ended": ends,
+                           "tokens_mean": round(statistics.mean(toks), 1) if toks else 0,
+                           "tokens_p50": toks[len(toks) // 2] if toks else 0, "tokens_max": toks[-1] if toks else 0,
+                           "correct_thinking": sum(v["correct"] for v in thinking),
+                           "mean_ms_thinking": round(statistics.mean(v["ms"] for v in thinking), 1) if thinking else 0,
+                           "mean_ms_not_thinking": round(statistics.mean(v["ms"] for v in allv if not v.get("thought")),
+                                                         2) if len(thinking) < len(allv) else 0}
     t = out["total"]
     print(f"{a.label}: {t['correct']}/{t['n']}  mean {t['mean_ms']} ms  p50 {t['p50_ms']} ms  | " +
-          ", ".join(f"{k} {v['correct']}/{v['n']} {v['mean_ms']} ms" for k, v in out["tiers"].items()))
+          ", ".join(f"{k} {v['correct']}/{v['n']} {v['mean_ms']} ms" for k, v in out["tiers"].items()) +
+          (f"  | thoughts {out['thoughts']}" if "thoughts" in out else ""))
     if a.out:
         os.makedirs(os.path.dirname(os.path.abspath(a.out)), exist_ok=True)
         json.dump(out, open(a.out, "w"), indent=1)
@@ -217,7 +245,10 @@ def main():
     ap.add_argument("--passes", type=int, default=3, help="passes over the items per concurrency level (--conc)")
     ap.add_argument("--out")
     ap.add_argument("--compare", nargs="+")
+    ap.add_argument("--extra", default="", help='JSON object of fields added to every request, e.g. '
+                    '\'{"think_mode": "never"}\' or \'{"return_details": true}\' (StartLux-Decision v1.1 controls)')
     a = ap.parse_args()
+    EXTRA.update(json.loads(a.extra) if a.extra else {})
     if a.compare:
         compare(a.compare)
     else:

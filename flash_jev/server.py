@@ -15,6 +15,10 @@ The scheduler is pipelined: while the GPU runs batch N, the next batch is planne
 behind it (engine.prepare / launch), and only then does the thread wait for batch N (engine.finish).  So the GPU does
 not idle while Python plans, and the scheduler's few GIL handoffs per batch (one table copy, two graph replays, one
 logits copy) no longer sit between two passes.
+
+StartLux-Decision v1.1 AutoThink folders (int8 or bf16) think as v1.1 does (think.py: think_mode auto by default, the
+request controls, return_details with v1.1's details and timing_ms): thoughts are generated on the GPU
+(engine/decode.py) by think.ThinkScheduler, this scheduler with decode steps interleaved between the batches.
 """
 from __future__ import annotations
 
@@ -188,6 +192,17 @@ def main():
                          "the most likely option")
     ap.add_argument("--switch-interval", type=float, default=0.0005,
                     help="Python GIL switch interval (s): how long a thread may hold the GIL while another waits")
+    ap.add_argument("--think-mode", choices=("auto", "never", "always"),
+                    help="AutoThink folders: default think_mode of a request (default: the folder's, auto)")
+    ap.add_argument("--max-think-budget", type=int, default=0,
+                    help="AutoThink folders: the largest think_budget a request may ask for (0: the folder's budget)")
+    ap.add_argument("--think-seqs", type=int, default=64, help="AutoThink folders: thoughts generated at once")
+    ap.add_argument("--think-kv-rows", type=int, default=0,
+                    help="AutoThink folders: KV rows of the thinking sequences (prompt + thought each; 0: think-seqs x "
+                         "(budget + 1024))")
+    ap.add_argument("--context-length", type=int, default=0,
+                    help="AutoThink folders: prompt + thought tokens one question may use (the room check; 0: the "
+                         "largest batch, at most --think-kv-rows)")
     a = ap.parse_args()
     if a.precision == "auto":
         from .gguf import GGML_Q4_K, GGML_Q5_K, GGML_Q6_K, GGUFFile
@@ -201,28 +216,47 @@ def main():
         sys.exit("this is a StartLux-Decision v1.1 Instant model (its prompt is read bidirectionally): flash-jev runs "
                  "prompts causally and does not serve it yet")
     sys.setswitchinterval(a.switch_interval)
+    thinks = kind == "auto_think" and a.precision in ("int8", "bf16")       # thoughts: engine/decode.py, think.py
+    if thinks:
+        from . import think as TH
+        auto = TH.folder_auto_think(a.model_dir)
+        max_budget = a.max_think_budget or auto.budget
+        a.think_kv_rows = a.think_kv_rows or a.think_seqs * (max_budget + 1024)
     engine = Engine(a.gguf, a.model_dir, Options(precision=a.precision, max_tokens=a.max_tokens, graphs=not a.no_graphs,
                                                   graph_max_tokens=a.graph_max_tokens, mem_fraction=a.mem_fraction,
                                                   calib=a.calib, prefix_cache=a.prefix_cache,
                                                   prefix_cache_tokens=a.prefix_cache_tokens,
-                                                  prefix_cache_min=a.prefix_cache_min, attn_qk8=a.attn_qk8))
+                                                  prefix_cache_min=a.prefix_cache_min, attn_qk8=a.attn_qk8,
+                                                  think_seqs=a.think_seqs if thinks else 0,
+                                                  think_kv_rows=a.think_kv_rows if thinks else 0))
     t0 = time.perf_counter()
     if not a.no_graphs:
         engine.warm_up()
+    budget = min(a.budget or engine.max_tokens, engine.max_tokens)      # a smaller GPU / larger model: fewer tokens
+    none_check = {"auto": kind != "v1", "on": True, "off": False}[a.none_check]
+    if thinks:
+        from .engine.decode import Decoder
+        decoder = Decoder(engine, a.gguf, a.think_seqs, auto.sampling, graphs=not a.no_graphs)
+        decoder.warm_up()
+        sched = TH.ThinkScheduler(engine, decoder, budget, a.overlap_tokens, direct=not a.no_direct)
+        framing = TH.Framing(a.model_dir)
+        defaults = TH.default_controls(auto, think_mode=a.think_mode, none_check=none_check, allow_none=a.allow_none)
+        context = min(a.context_length or engine.max_tokens, a.think_kv_rows)
+    else:
+        sched = Scheduler(engine, budget, a.overlap_tokens, direct=not a.no_direct)
     free, total = torch.cuda.mem_get_info()
     print(f"loaded in {engine.load_s:.1f} s, graphs recorded in {time.perf_counter() - t0:.1f} s; max {engine.max_tokens} "
           f"tokens per batch; GPU memory {(total - free) / 2**30:.1f} of {total / 2**30:.1f} GiB in use", flush=True)
-    budget = min(a.budget or engine.max_tokens, engine.max_tokens)      # a smaller GPU / larger model: fewer tokens
-    sched = Scheduler(engine, budget, a.overlap_tokens, direct=not a.no_direct)
     tok = engine.tok
-    none_check = {"auto": kind != "v1", "on": True, "off": False}[a.none_check]
     bad_json = 400 if kind == "v1" else 422          # as the reference server of each release answers a broken body
 
     models = json.dumps({"models": [{"name": a.name, "description": "StartLux-Decision typed decision model on "
                                      "flash-jev", "release_date": "2026-10-01"}]}).encode()
     health = json.dumps({"status": "ok", "model": a.name, "precision": a.precision, "max_tokens": engine.max_tokens,
-                         "batch_tokens": budget, "kind": kind, "think_mode": "never", "none_check": none_check,
-                         "allow_none": a.allow_none}).encode()
+                         "batch_tokens": budget, "kind": kind, "think_mode": defaults.think_mode if thinks else "never",
+                         "none_check": none_check, "allow_none": a.allow_none}
+                        | ({"max_think_budget": max_budget, "context_length": context, "think_seqs": a.think_seqs,
+                            "think_kv_rows": a.think_kv_rows} if thinks else {})).encode()
 
     def handle(method, path, body):
         path = path.split("?", 1)[0].rstrip("/")
@@ -240,15 +274,23 @@ def main():
         except ValueError as e:
             return bad_json, json.dumps({"error": f"malformed body: {e}"}).encode()
         try:
-            ctl = request_controls(req)
-            backend, marks = Backend(sched), [("parsed", time.perf_counter())]
-            answers, usage = Decider(tok, backend, none_check, a.allow_none).decide(
-                req.get("state"), req["questions"], marks, ctl["allow_none"], ctl["none_check"])
+            backend, marks, timing = Backend(sched), [("parsed", time.perf_counter())], None
+            if thinks:
+                ctl = TH.parse_controls(req, defaults, max_budget)
+                answers, usage, timing = TH.ThinkingDecider(tok, backend, sched, framing, auto, context, none_check,
+                                                            a.allow_none).decide(
+                    req.get("state"), req["questions"], marks, ctl.allow_none, ctl.none_check, ctl=ctl)
+            else:
+                ctl = request_controls(req)
+                answers, usage = Decider(tok, backend, none_check, a.allow_none).decide(
+                    req.get("state"), req["questions"], marks, ctl["allow_none"], ctl["none_check"])
             timings = dict(backend.last or {})
             timings["stages_ms"] = {b[0]: round((b[1] - a_[1]) * 1000, 3) for a_, b in zip(marks, marks[1:])}
-            return 200, json.dumps({"answers": answers, "usage": usage, "model": a.name,
-                                    "latency_ms": round((time.perf_counter() - t0) * 1000, 3),
-                                    "timings": timings}).encode()
+            out = {"answers": answers, "usage": usage, "model": a.name,
+                   "latency_ms": round((time.perf_counter() - t0) * 1000, 3), "timings": timings}
+            if thinks and ctl.details:
+                out["timing_ms"] = timing
+            return 200, json.dumps(out).encode()
         except (ValueError, KeyError, TypeError, AttributeError) as e:
             return 422, json.dumps({"error": str(e), "detail": [{"loc": ["body"], "msg": str(e),
                                                                   "type": "value_error"}]}).encode()

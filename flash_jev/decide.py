@@ -15,8 +15,9 @@ default as `startlux-decide serve` has it, or allow_none), whose probability is 
 listed options are renormalised (and with allow_none the choice is null when it is the most likely); a long choice list
 keeps its 26 best finalists overall instead of another knock-out round; probabilities are softmax((z - max z) / T).
 v1 folders answer exactly as StartLux-Decision v1 does, unless a request asks for allow_none / none_check itself.
-flash-jev answers in one pass: the v1.1 thinking controls are validated, and a request that asks for a thought is
-refused (request_controls).
+AutoThink folders think as v1.1 does (think.py: ThinkingDecider, whose think_mode "never" is this Decider); v1 folders
+answer in one pass: the v1.1 thinking controls are validated, and a request that asks for a thought is refused
+(request_controls).
 """
 from __future__ import annotations
 
@@ -82,17 +83,18 @@ def choice_answer(dist, none=None, abstain=False):
 
 
 def request_controls(body):
-    """StartLux-Decision v1.1's request controls (startlux_decide/controls.py) -> {"allow_none", "none_check"} (None:
-    not given).  The thinking controls are validated as there; a request that asks for a thought (think_mode "auto" or
-    "always") is refused, since flash-jev answers in one pass.  Raises ValueError for a bad value."""
+    """StartLux-Decision v1.1's request controls (startlux_decide/controls.py) where flash-jev answers in one pass (v1
+    folders; AutoThink folders on the w4a8 path) -> {"allow_none", "none_check"} (None: not given).  The thinking
+    controls are validated as there; a request that asks for a thought (think_mode "auto" or "always") is refused
+    (AutoThink folders on the int8 and bf16 paths think: think.parse_controls).  Raises ValueError for a bad value."""
     tm = body.get("think_mode")
     if tm is not None:
         mode = THINK_MODE_ALIASES.get(tm, tm) if isinstance(tm, str) else tm
         if mode not in THINK_MODES:
             raise ValueError(f"think_mode must be one of {', '.join(THINK_MODES)} (or hybrid, plain, think), not {tm!r}")
         if mode != "never":
-            raise ValueError('flash-jev answers in one pass: leave think_mode out or set it to "never" (thinking is '
-                             "not supported yet)")
+            raise ValueError('flash-jev answers this model in one pass: leave think_mode out or set it to "never" (it '
+                             "thinks with StartLux-Decision v1.1 AutoThink models on the int8 and bf16 paths)")
     for name in ("gate", "mix"):
         v = body.get(name)
         if v is not None and (isinstance(v, bool) or not isinstance(v, (int, float))
