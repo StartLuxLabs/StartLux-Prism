@@ -5,7 +5,10 @@ import os
 
 import torch
 
-CSRC = os.path.join(os.path.dirname(__file__), "..", "csrc")
+# the canonical path: the build command holds it, and processes that imported flash_jev by different paths (a script's
+# sys.path entry, a tensor-parallel follower's PYTHONPATH) otherwise rebuilt the extension in turn, each waiting for
+# the other's build lock
+CSRC = os.path.realpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "csrc"))
 CFGS = {  # cfg id -> (BM, BN, BK, warps) of the instantiations in w8a8_gemm.cu (8..13: pipelined main loop)
     0: (128, 128, 64, 8), 1: (64, 128, 64, 4), 2: (64, 64, 128, 4), 3: (128, 64, 64, 4), 4: (64, 256, 64, 8),
     5: (32, 128, 128, 4), 6: (256, 128, 64, 8), 7: (128, 256, 64, 8),

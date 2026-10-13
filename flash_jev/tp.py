@@ -23,17 +23,20 @@ whole matrices and only then sliced, so a rank's int8 weights and scales are the
 A column-parallel output is a whole int32 dot product, scaled as on one GPU.  A row-parallel projection stores its
 int32 partial sums (kernels/w8a8.py gemm_i32), all-reduced as integers (exact in any order), then the residual's next
 reader scales the total and adds it with the single-GPU epilogue's roundings (w8a8.Deferred, quant.norm_q8).  The
-per-token scale of a row-parallel input is the maximum over the whole row: its producer stores this rank's row maxima,
-those are all-reduced (max: exact), and a second launch quantizes with them (kernels/quant.py modes 1 and 2).  Every
-other kernel is per head, per token or replicated.  So letter logits, cache hits, batches and thoughts are bit for bit
-those of one GPU (tests/test_tp.py).
+per-token scale of a row-parallel input is the maximum over the whole row, all-reduced (max: exact) before its producer
+quantizes (kernels/quant.py modes 1 to 3).  Every other kernel is per head, per token or replicated.  So letter
+logits, cache hits, batches and thoughts are bit for bit those of one GPU (tests/test_tp.py).
 
-Communication: four all-reduces per layer (two maxima of one float per token, two int32 sums of a hidden-wide row per
-token), through NCCL inside the CUDA graphs.  Rank 0 talks to the followers through shared memory (Channel): a ring of
-fixed-size headers for the hot messages (a pass: its object, staging slot, buckets and table size; a decode step: slot
-and batch size) and an area for the rare pickled ones (constructors, method calls); a pass's tables are staged by rank
-0 in pinned shared memory, from which every rank copies them to its own GPU.  Image features are computed on rank 0
-and broadcast (NCCL) before the pass.
+Communication: four all-reduces per layer, two maxima of one float per token and two int32 sums of a hidden-wide row
+per token.  On passes of up to FAST_ROWS tokens the producers exchange the maxima themselves (per row, a 64-bit word
+that carries the pass number; quant.py mode 3), and on the shortest passes (PULL_ROWS: every decode step on 2 GPUs)
+the kernel that adds an output projection into the residual reads every rank's int32 sums from symmetric memory
+itself (quant.Sync); everything else goes through NCCL inside the CUDA graphs.
+
+Rank 0 talks to the followers through shared memory (Channel): a ring of fixed-size headers for the hot messages (a
+pass: its object, staging slot, buckets and table size; a decode step: slot and batch size) and an area for the rare
+pickled ones (constructors, method calls); a pass's tables are staged by rank 0 in pinned shared memory, from which
+every rank copies them to its own GPU.  Image features are computed on rank 0 and broadcast (NCCL) before the pass.
 """
 from __future__ import annotations
 
@@ -120,29 +123,30 @@ def shard_index(cfg, n, r):
 
 
 # ------------------------------------------------------------------------------------------------ the forward pass
-PARTS_ROWS = 8192                       # row-parallel outputs split over K (several int32 slots) only up to this
-FAST_ROWS = int(os.environ.get("FLASHJEV_TP_FAST_ROWS", "512"))   # passes up to this many rows: fused all-reduces
-MAX_SPLIT = 4                           # int32 slots per rank of an output projection on the fused path
-CHANNELS = 1024                         # fused all-reduce steps per pass (a body pass of the 27B has 252)
+# passes up to FAST_ROWS rows exchange the row maxima inside the producers (quant.py mode 3), longer ones through NCCL;
+# passes up to PULL_ROWS rows (per group size) leave the int32 sums in symmetric memory, read from every rank by the
+# kernel that adds them into the residual, longer ones all-reduce them through NCCL (docs/optimizations.md: the
+# measurements behind both)
+FAST_ROWS = int(os.environ.get("FLASHJEV_TP_FAST_ROWS", "16384"))
+PULL_ROWS = {2: 128, 4: 4}
+SPLIT_ROWS = 512                        # output projections split K (several int32 slots) only up to this many rows
+MAX_SPLIT = 4                           # (bench/cuda_gemm_micro.py's int32 entries: at most 4 splits, up to 512 rows)
+CHANNELS = 1024                         # fused sums per pass (a body pass of the 27B has 126)
 # measurement only (wrong results): every rank computes its shard without the all-reduces (its own row maxima, its own
 # partial sums) - the time of a pass without communication, for the all-reduces' share (docs/benchmarks.md)
 ABLATE = os.environ.get("FLASHJEV_TP_ABLATE") == "1"
 
 
 def quantize_rows(g, fn, rows, amax, *args):
-    """The input of a row-parallel projection: fn (quant.gated_norm_q8, rows_q8 or swiglu_q8) stores this rank's row
-    maxima (mode 1), then quantizes with the maximum over the ranks (mode 2): read from every rank's buffer by the
-    mode 2 kernel itself (a fused all-reduce, quant.Sync) on a short pass, all-reduced by NCCL in `amax` between the two
-    launches on a long one."""
+    """The input of a row-parallel projection, quantized with its row's maximum over the ranks by fn
+    (quant.gated_norm_q8, rows_q8 or swiglu_q8): on a short pass in one launch, the ranks' maxima exchanged per row as
+    64-bit words that carry the pass number (mode 3); on a long one this rank's maxima stored (mode 1), all-reduced by
+    NCCL in `amax`, then the row quantized (mode 2)."""
     if ABLATE:
         fn(*args)
         return
     if g.fast:
-        p = g.nmax % 2
-        g.nmax += 1
-        lo, hi = p * g.fast_rows, p * g.fast_rows + rows
-        fn(*args, mode=1, amax=g.ms[g.rank][lo:hi])
-        fn(*args, mode=2, amax=g.ms[g.rank][lo:hi], sync=g.sync([m[lo:hi] for m in g.ms]))
+        fn(*args, mode=3, amax=amax, sync=g.words())
         return
     fn(*args, mode=1, amax=amax)
     g.max_(amax[:rows])
@@ -151,22 +155,21 @@ def quantize_rows(g, fn, rows, amax, *args):
 
 def out_proj(g, a, a_s, w, w_s, flat, rows, n_rows, pdl=0):
     """A row-parallel output projection: this rank's int32 partial sums (w8a8.gemm_i32), as the residual add the next
-    norm_q8 / fold finishes (w8a8.Deferred) over every rank's sums: read from every rank's symmetric buffer by that
-    kernel (a fused all-reduce, quant.Sync) on a short pass, all-reduced by NCCL first on a long one (flat: int32 room
-    for the slots).  Integer sums: exact in any order."""
+    norm_q8 / fold finishes (w8a8.Deferred) over every rank's sums: on a pass of up to pull_rows rows that kernel
+    reads every rank's slots from symmetric memory itself (a quant.Sync), on a longer one NCCL all-reduces them first
+    (flat: int32 room for the slots).  Integer sums: exact in any order."""
     from .kernels import w8a8 as KW
     N = w.shape[0]
-    S_max = 4 if rows <= PARTS_ROWS else 1
+    S_max = MAX_SPLIT if rows <= SPLIT_ROWS else 1
     if ABLATE:
         slots = flat[:S_max * rows * N].view(S_max, rows, N)
         S = KW.gemm_i32(a, a_s, w, w_s, slots, n_rows, max_split=S_max, pdl=pdl)
         return KW.Deferred(S, a_s, w_s, slots[:S])
-    if g.fast:
-        p = g.nsum % 2
+    if g.pull:
+        lo = (g.nsum % 2) * g.parity
         g.nsum += 1
-        lo = p * MAX_SPLIT * g.fast_rows * N
-        views = [x[lo:lo + MAX_SPLIT * rows * N].view(MAX_SPLIT, rows, N) for x in g.xs]
-        S = KW.gemm_i32(a, a_s, w, w_s, views[g.rank], n_rows, max_split=MAX_SPLIT, pdl=pdl)
+        views = [x[lo:lo + S_max * rows * N].view(S_max, rows, N) for x in g.xs]
+        S = KW.gemm_i32(a, a_s, w, w_s, views[g.rank], n_rows, max_split=S_max, pdl=pdl)
         return KW.Deferred(S, a_s, w_s, views[g.rank][:S], g.sync(views))
     slots = flat[:S_max * rows * N].view(S_max, rows, N)
     S = KW.gemm_i32(a, a_s, w, w_s, slots, n_rows, max_split=S_max, pdl=pdl)
@@ -175,8 +178,8 @@ def out_proj(g, a, a_s, w, w_s, flat, rows, n_rows, pdl=0):
 
 
 def parts_elems(rows, hidden):
-    """int32 elements out_proj needs for passes of up to `rows` rows (4 slots up to PARTS_ROWS rows, then 1)."""
-    return max(4 * min(rows, PARTS_ROWS), rows) * hidden
+    """int32 elements out_proj needs for passes of up to `rows` rows (MAX_SPLIT slots up to SPLIT_ROWS rows, then 1)."""
+    return max(MAX_SPLIT * min(rows, SPLIT_ROWS), rows) * hidden
 
 
 # ------------------------------------------------------------------------------------------------ shared memory
@@ -323,25 +326,33 @@ class Group:
         self._closed = False
         if rank == 0:
             self.chan.check = self._check
-        self.xs = self.ms = self.fs = None       # fused all-reduces: every rank's buffers, as mapped here (setup)
-        self.fast, self.fast_rows, self.hidden = False, 0, 0
-        self.nsum = self.nmax = self.step = 0
+        self.xs = self.ws = self.fs = None       # fused all-reduces: every rank's buffers, as mapped here (setup)
+        self.fast = self.pull = False
+        self.fast_rows = self.pull_rows = self.parity = self.hidden = self.word_steps = 0
+        self.nsum = self.step = self.mstep = 0
 
     # ------------------------------------------------------------ fused all-reduces (quant.Sync)
-    def setup(self, hidden, fast_rows=FAST_ROWS):
-        """The fused all-reduces' buffers in symmetric memory (every rank's mapped here): two parities of int32 slots
-        for MAX_SPLIT x fast_rows rows of `hidden` sums, two of fast_rows row maxima, the flags, and this rank's pass
-        counter.  Called by every rank's Engine at the same point (a collective); once."""
+    def setup(self, hidden, words, fast_rows=FAST_ROWS, pull_rows=None):
+        """The fused all-reduces' buffers in symmetric memory (every rank's mapped here): the flags, two parities of
+        int32 slots for the output projections of passes of up to pull_rows rows (MAX_SPLIT slots each) of `hidden`
+        sums, the row maxima's words (int64, a step x row x rank each: `words` exchanges per pass at most) for passes
+        of up to fast_rows rows, and this rank's pass counter.  Called by every rank's Engine at the same point (a
+        collective); once."""
         if self.xs is not None:
             if hidden != self.hidden:
                 raise ValueError("one tensor-parallel group serves one model")
             return
-        self.hidden, self.fast_rows = hidden, fast_rows
+        if pull_rows is None:
+            env = os.environ.get("FLASHJEV_TP_PULL_ROWS")
+            pull_rows = int(env) if env else PULL_ROWS.get(self.world, 1)
+        self.hidden, self.fast_rows, self.pull_rows = hidden, fast_rows, max(0, min(pull_rows, fast_rows))
+        self.word_steps = words
         if fast_rows <= 0:
             return
+        self.parity = MAX_SPLIT * max(self.pull_rows, 1) * hidden
         self.fs = self.symmetric(CHANNELS * self.world, torch.int64)
-        self.xs = self.symmetric(2 * MAX_SPLIT * fast_rows * hidden, torch.int32)
-        self.ms = self.symmetric(2 * fast_rows, torch.float32)
+        self.xs = self.symmetric(2 * self.parity, torch.int32)
+        self.ws = self.symmetric(words * fast_rows * self.world, torch.int64)
         self.epoch = torch.zeros(1, dtype=torch.int64, device=self.device)
 
     def symmetric(self, n, dtype):
@@ -369,12 +380,14 @@ class Group:
         return out
 
     def begin(self, rows):
-        """At the start of a pass's forward, on every rank alike (recorded in its graph): fused all-reduces when it has
-        up to fast_rows rows (a new pass number for their flags), NCCL otherwise."""
+        """At the start of a pass's forward, on every rank alike (recorded in its graph): the maxima exchanged in the
+        kernels when it has up to fast_rows rows (a new pass number for their words and flags), the sums read by
+        their consumers up to pull_rows rows; NCCL otherwise."""
         from .kernels import quant as KQ
-        assert self.nsum % 2 == 0 and self.nmax % 2 == 0, "a pass's fused all-reduces must alternate buffers evenly"
+        assert self.nsum % 2 == 0, "a pass's fused sums must alternate buffers evenly"
         self.fast = self.xs is not None and rows <= self.fast_rows
-        self.nsum = self.nmax = self.step = 0
+        self.pull = self.fast and rows <= self.pull_rows
+        self.nsum = self.step = self.mstep = 0
         if self.fast:
             KQ.bump(self.epoch)
 
@@ -386,6 +399,14 @@ class Group:
         self.step += 1
         return KQ.Sync(self.epoch, tuple(self.fs), self.step - 1,
                        tuple(b for r, b in enumerate(buffers) if r != self.rank), self.rank, self.world)
+
+    def words(self):
+        """The next fused maximum's quant.Sync (mode 3): every rank's word buffer, the step's first row of words."""
+        from .kernels import quant as KQ
+        if self.mstep >= self.word_steps:
+            raise RuntimeError(f"more than {self.word_steps} row-maximum exchanges in one pass")
+        self.mstep += 1
+        return KQ.Sync(self.epoch, tuple(self.ws), (self.mstep - 1) * self.fast_rows, (), self.rank, self.world)
 
     # ------------------------------------------------------------ collectives (on the current stream; capturable)
     def sum_(self, x):
@@ -519,6 +540,8 @@ def start(world, gpus=None):
     atexit.register(_GROUP.close)
     if signal.getsignal(signal.SIGTERM) is signal.SIG_DFL:     # a terminated server stops its followers on the way
         signal.signal(signal.SIGTERM, lambda *_: sys.exit(0))
+    import faulthandler
+    faulthandler.register(signal.SIGUSR1, all_threads=True)       # kill -USR1: every thread's Python stack, to stderr
     threading.Thread(target=_GROUP._watch, daemon=True).start()
     return _GROUP
 
@@ -534,6 +557,8 @@ def _follow(rank, world, port, prefix):
     """A follower: build and run what rank 0 sends until it stops."""
     global _GROUP
     _die_with_parent()
+    import faulthandler
+    faulthandler.register(signal.SIGUSR1, all_threads=True)       # kill -USR1: every thread's Python stack, to stderr
     g = _GROUP = Group(rank, world, port, prefix)
 
     def res(x):

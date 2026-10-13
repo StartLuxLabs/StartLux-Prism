@@ -157,7 +157,7 @@ class Engine:
         self.w4 = self.opt.precision == "w4a8"
         if self.tp is not None:                      # int8 shards straight from the Q8_0 values: no bf16 copy
             self._tp_weights(w)
-            self.tp.setup(self.cfg.hidden)           # the fused all-reduces' symmetric buffers (every rank alike)
+            self.tp.setup(self.cfg.hidden, 2 * self.cfg.n_layer)   # the fused all-reduces' symmetric buffers
         elif self.w4:                                # the file's k-quant values as they are: no bf16 copy, no calibration
             self._w4_weights(w)
         else:
