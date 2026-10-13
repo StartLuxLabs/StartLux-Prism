@@ -16,6 +16,13 @@ Precision:
          Activations are quantized by the kernels that produce them (norms, gated norm, SwiGLU, attention output) and
          the output projections add straight into the fp32 residual stream.
 Everything else (linear attention, attention, norms) is the same Triton code in both.
+
+Images (Options.mmproj, vision.py): before the body graph of a batch with images, the vision tower encodes each image
+(PyTorch, bf16) and writes its features into the residual rows of the image's tokens, which the embedding kernel
+leaves alone; the attention layers turn image tokens with their three M-RoPE positions (an "mrope" table after the other
+tables, uploaded only when a batch has such tokens).  Text is computed as without the tower, bit for bit.  A pass turns
+the image rows into their residuals, so the features are written right before the pass that reads them (launch: a body
+graph that is still to be recorded is recorded first, since recording runs the pass once).
 """
 from __future__ import annotations
 
@@ -73,6 +80,9 @@ class Batch:
     t0: float
     t_staged: float
     t_launch: float = 0.0
+    n_tabs: int = -1                # int32 entries of the staged tables to upload (_stage_tables' count; -1: all of
+                                    # them)
+    images: int = 0                 # images the vision tower encoded for it
 
 
 @dataclasses.dataclass
@@ -100,6 +110,7 @@ class Options:
     pdl_mode: int = 2               # 1 no weight prefetch, 2 the first k-tiles of each panel, 3 whole panels
     think_seqs: int = 0             # sequences that can decode at once (engine/decode.py): state slots of their own
     think_kv_rows: int = 0          # KV-arena rows for the decoding sequences (each: its prompt, then its tokens)
+    mmproj: str = ""                # the vision tower (llama.cpp mmproj GGUF) for prompts with images; "": text only
 
 
 class Engine:
@@ -110,6 +121,13 @@ class Engine:
         w = gguf_weights.load(gguf_path)
         self.cfg = w.config
         self.tok = Tokenizer(model_dir)
+        self.vision = None
+        if self.opt.mmproj:
+            from ..vision import VisionTower
+            self.vision = VisionTower(self.opt.mmproj, device)
+            if self.vision.cfg.out != self.cfg.hidden:
+                raise ValueError(f"{self.opt.mmproj}: projects to {self.vision.cfg.out}, the decoder's hidden size is "
+                                 f"{self.cfg.hidden}")
         self.int8 = False
         self.w4 = self.opt.precision == "w4a8"
         if self.w4:                                  # the file's k-quant values as they are: no bf16 copy, no calibration
@@ -315,9 +333,12 @@ class Engine:
 
     def _table_shapes(self, T):
         R = self.opt.max_read
-        return dict(counts=(16,), ids=(T,), pos=(T,), kvrow=(T,), hist=(T, 3), chunks=(max_chunks(T), 2),
-                    segs0=(max_segs(T), 5), segs1=(max_segs(T), 5), saves=(3 * MAX_INSERTS, 3), ranges=(max_segs(T), 6),
-                    blocks=(max_blocks(T), 4), read=(R,), read_pos=(R,), read_blocks=(R, 4))
+        shapes = dict(counts=(16,), ids=(T,), pos=(T,), kvrow=(T,), hist=(T, 3), chunks=(max_chunks(T), 2),
+                      segs0=(max_segs(T), 5), segs1=(max_segs(T), 5), saves=(3 * MAX_INSERTS, 3),
+                      ranges=(max_segs(T), 6), blocks=(max_blocks(T), 4), read=(R,), read_pos=(R,), read_blocks=(R, 4))
+        if getattr(self, "vision", None) is not None:
+            shapes["mrope"] = (T, 3)          # last: a batch without image tokens uploads the tables before it only
+        return shapes
 
     def _buffer_bytes(self, T):
         """Device memory the buffers of a T-token engine take (sized on the meta device)."""
@@ -368,6 +389,7 @@ class Engine:
             self._tab_off[k] = (off, n)
             off += (n + 15) // 16 * 16
         self._tabs = m["tabs"]
+        self._tab_text = self._tab_off["mrope"][0] if "mrope" in self._tab_off else off     # the tables before mrope
         self.tab = {k: self._tabs[o_:o_ + n].view(shapes[k]) for k, (o_, n) in self._tab_off.items() if k != "counts"}
         self.counts = self._tabs[:16]
         self.count_names = ("tok", "chunks", "segs0", "segs1", "saves", "blocks", "read")
@@ -391,6 +413,7 @@ class Engine:
             h[i] = plan.counts[n]
         self._n_live = plan.n_tok                 # host copy, for calibration recording (eager only)
         self._r_live = plan.counts["read"]
+        return self._tab_text + 3 * plan.counts.get("mrope", 0)      # entries to upload
 
     def _upload(self, plan, slot=0):
         self._stage_tables(plan, slot)
@@ -414,7 +437,7 @@ class Engine:
         cfg, b, t, c, lw = self.cfg, self.buf, self.tab, self.cnt, self.layers[i]
         ai = self.attn_index[i]
         KA.qkv_norm_rope(proj, lw["q_norm"], lw["k_norm"], t["pos"], t["kvrow"], self.inv_freq, b["qbuf"], self.kv,
-                         ai, c["tok"], T, cfg, slots=slots, k8=self.k8)
+                         ai, c["tok"], T, cfg, slots=slots, k8=self.k8, mrope=t.get("mrope"))
         if slots == "all":
             mix = b["mix"][:T, :cfg.n_head * cfg.head_dim]
             KA.tree_attention(b["qbuf"], proj, self.kv, ai, mix, t["blocks"], c["blocks"], max_blocks(T),
@@ -480,7 +503,7 @@ class Engine:
         i = cfg.n_layer - 1
         lw, ai = self.layers[i], self.attn_index[i]
         KA.qkv_norm_rope(qg, lw["q_norm"], lw["k_norm"], t["read_pos"], t["read"], self.inv_freq, b["qr"], self.kv,
-                         ai, c["read"], R, cfg, slots="q", k8=self.k8)
+                         ai, c["read"], R, cfg, slots="q", k8=self.k8, mrope=t.get("mrope"))
         KA.tree_attention(b["qr"], qg, self.kv, ai, b["mixr"], t["read_blocks"], c["read"], R, t["ranges"], cfg,
                           k8=self.k8, read=True)
 
@@ -688,6 +711,8 @@ class Engine:
                             system=self.system, max_inserts=MAX_INSERTS - len(keep), max_trans=self.opt.max_trans,
                             bm=KA.launch("BM"), keep=keep)
         try:
+            if plan.feats and self.vision is None:
+                raise ValueError("this engine has no vision tower: it reads text only")
             T = self._bucket(plan.n_tok, TOKEN_BUCKETS)
             while (plan.counts["segs"] > max_segs(T) or plan.counts["chunks"] > max_chunks(T)
                    or plan.counts["blocks"] > max_blocks(T)):
@@ -711,20 +736,34 @@ class Engine:
         t0 = time.perf_counter()
         plan, T, R = self.plan(groups, keep)
         try:
-            self._stage_tables(plan, slot)
+            n_tabs = self._stage_tables(plan, slot)
         except Exception:
             if self.cache is not None:
                 self.cache.discard(plan.inserted)
             raise
-        return Batch(plan, T, R, slot, t0, time.perf_counter())
+        return Batch(plan, T, R, slot, t0, time.perf_counter(), n_tabs=n_tabs)
 
     @torch.no_grad()
     def launch(self, b):
-        """Queue the batch on the current stream: tables (one copy), both graphs, the logits back to pinned memory.
-        Returns at once; stream order keeps it behind the batch before it."""
+        """Queue the batch on the current stream: tables (one copy), the images' features (vision tower), both graphs,
+        the logits back to pinned memory.  Returns at once (after queueing the vision tower's kernels); stream order
+        keeps it behind the batch before it."""
         b.t_launch = time.perf_counter()
-        self._tabs.copy_(self._stage[b.slot], non_blocking=True)
-        if self.opt.graphs and b.T <= (self.opt.graph_max_tokens or self.max_tokens):
+        n = b.n_tabs if b.n_tabs >= 0 else self._tabs.numel()
+        self._tabs[:n].copy_(self._stage[b.slot][:n], non_blocking=True)
+        body_graph = self.opt.graphs and b.T <= (self.opt.graph_max_tokens or self.max_tokens)
+        if b.plan.feats:
+            try:
+                if body_graph:
+                    # a graph is recorded after one eager run of the pass, which turns the image tokens' rows of h into
+                    # their residuals (text rows are embedded again by every pass): record it before the features go in
+                    self._graph("body", b.T)
+                b.images = self.vision.write(b.plan.feats, self.buf["h"])
+            except Exception:
+                if self.cache is not None:          # the pass will not run: its new entries were never written
+                    self.cache.discard(b.plan.inserted)
+                raise
+        if body_graph:
             self._graph("body", b.T).replay()
         else:
             self._body(b.T)
@@ -746,6 +785,8 @@ class Engine:
         self.last = {"tokens": p.n_tok, "bucket": b.T, "read": p.counts["read"], "read_bucket": b.R,
                      "segments": p.counts["segs"], "host_ms": round((b.t_staged - b.t0) * 1000, 3),
                      "gpu_ms": round((t - b.t_launch) * 1000, 3)}
+        if b.images:
+            self.last["images"] = b.images
         return logits
 
     def run(self, groups):
@@ -760,6 +801,8 @@ class Engine:
             self._graph("body", T)
         for R in reads or [x for x in READ_BUCKETS if x <= self.opt.max_read]:
             self._graph("head", R)
+        if self.vision is not None:
+            self.vision.warm_up()
         torch.cuda.synchronize()
 
     def letter_logits(self, rows):
@@ -771,6 +814,10 @@ class Engine:
 
 
 def group(rows):
-    """prompt.Row objects of one request -> a batch.Group (the head boundary when every row has the same one)."""
+    """prompt.Row objects of one request -> a batch.Group (the head boundary when every row has the same one; with
+    images, the rows' positions and the images)."""
     heads = {getattr(r, "head", 0) for r in rows}
-    return B.Group([r.ids for r in rows], heads.pop() if len(heads) == 1 else 0)
+    g = B.Group([r.ids for r in rows], heads.pop() if len(heads) == 1 else 0)
+    if rows and getattr(rows[0], "images", ()):
+        g.pos, g.images = [r.pos for r in rows], rows[0].images
+    return g

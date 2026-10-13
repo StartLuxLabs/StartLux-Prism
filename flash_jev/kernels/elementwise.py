@@ -7,10 +7,14 @@ import triton.language as tl
 
 @triton.jit
 def _embed_kernel(ids_ptr, qs_ptr, d_ptr, h_ptr, n_tok_ptr, HID: tl.constexpr, HP: tl.constexpr, QK: tl.constexpr):
+    """Rows of the residual stream from the token embeddings.  An id below 0 (an image token, engine/batch.py) keeps
+    its row: the vision tower's features were written there before the pass."""
     t = tl.program_id(0).to(tl.int64)
     if t >= tl.load(n_tok_ptr):
         return
     tok = tl.load(ids_ptr + t).to(tl.int64)
+    if tok < 0:
+        return
     c = tl.arange(0, HP)
     m = c < HID
     q = tl.load(qs_ptr + tok * HID + c, mask=m, other=0).to(tl.float32)

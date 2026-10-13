@@ -15,6 +15,14 @@ With a prefix cache (engine/prefix_cache.py), a request whose evidence (its prom
 enough is always split at the head: when the evidence is cached its questions start from the cached state, keys and
 values (no evidence segment at all); otherwise the evidence is a segment that writes its state into a new cache slot
 and its keys and values into the cache's KV rows, and the questions follow it in wave 1.
+
+Images (images.py): a group whose rows carry M-RoPE positions and images gets them sliced into its segments.  The
+"pos" table holds a token's position when it is the same on all three axes (every text token), else -1 - k, k its row
+of the "mrope" table [n, 3] (time, height, width; image tokens); the image tokens' "ids" are -1 (the embedding kernel
+leaves their rows to the vision tower's features, Plan.feats).  Evidence with images is keyed by its tokens and the
+images' digests (image tokens are the same ids whatever the image), in the prefix cache and between the requests of a
+batch.  Plan.tables["read_pos"] is each row's last position: a token generated after it takes read_pos + 1 on every
+axis.
 """
 from __future__ import annotations
 
@@ -33,9 +41,12 @@ MIN_SHARE = 8                        # shared tokens below this are not split in
 class Group:
     """The prompt rows of one request (one per question), all starting with the same `head` tokens (system text +
     evidence; prompt.split_prompt).  head 0: unknown (the rows then share whatever common prefix they have).
-    Iterates and sizes like its list of rows."""
+    Iterates and sizes like its list of rows.  Rows with images: pos, their M-RoPE positions ([3, len] int32 each,
+    prompt.Row.pos), and images, (token offset, images.Image) of every image - in the head, so the same in every row."""
     rows: list
     head: int = 0
+    pos: list = None
+    images: tuple = ()
 
     def __iter__(self):
         return iter(self.rows)
@@ -57,6 +68,8 @@ class Seg:
     no_root: bool = False    # computed from position 0 (does not continue the system text)
     start: int = 0           # first packed token
     kv_start: int = 0        # first KV arena row
+    pos: np.ndarray = None   # [3, len(tokens)] M-RoPE positions (rows with images); None: pos0, pos0 + 1, ...
+    img: tuple = ()          # image tokens: (first token in this segment, image, its first token there, tokens)
 
 
 @dataclasses.dataclass
@@ -68,6 +81,8 @@ class Plan:
     tables: dict             # name -> np.int32 array (device tables, unpadded)
     counts: dict             # name -> live count
     inserted: list = dataclasses.field(default_factory=list)   # prefix-cache entries this batch writes
+    feats: list = dataclasses.field(default_factory=list)      # (first packed token, image, its first token, tokens)
+                                                                # of every image token run computed in this batch
 
 
 def plan_batch(groups, sys_len, kv_scratch0, root_kv=(0, 0), share=True, cache=None, system=None, max_inserts=16,
@@ -81,79 +96,91 @@ def plan_batch(groups, sys_len, kv_scratch0, root_kv=(0, 0), share=True, cache=N
     capacities: past them a request's evidence is computed without being cached, or its rows whole - the batch never
     fails for lack of room.
 
-    keep: prompts whose state stays for decoding (engine/decode.py), (tokens, slot, kv_row0) each: computed whole from
+    keep: prompts whose state stays for decoding (engine/decode.py), (tokens, slot, kv_row0) each, or (tokens, slot,
+    kv_row0, pos, images) for a prompt with images (Group's pos and images for one row): computed whole from
     position 0, the recurrent state and conv tail into persistent slot `slot`, the keys and values into KV rows
     kv_row0.. (not scratch); nothing is read.  They are the plan's last segments (conv-tail saves count against
     max_inserts' table like cache entries)."""
     segs, read_seg = [], []
     trans = 0
     inserted, fresh = [], {}                    # fresh: evidence key -> the segment computing it in this batch
-    groups = [(g.rows, g.head) if isinstance(g, Group) else (g, 0) for g in groups]
-    groups = [([np.asarray(r, dtype=np.int32) for r in rows], head) for rows, head in groups]
+    groups = [(g.rows, g.head, g.pos, g.images) if isinstance(g, Group) else (g, 0, None, ()) for g in groups]
+    groups = [([np.asarray(r, dtype=np.int32) for r in rows], head, pos, images)
+              for rows, head, pos, images in groups]
 
-    def evidence(rows, head):                   # the cacheable evidence of a request, or None
+    def evidence(rows, head, images):           # the cacheable evidence of a request and its key, or (None, None)
         if (cache is None or head - sys_len < cache.min_tokens or any(len(r) <= head for r in rows)
                 or (system is not None and not np.array_equal(rows[0][:sys_len], system))
                 or any(not np.array_equal(r[:head], rows[0][:head]) for r in rows[1:])):
-            return None
-        return rows[0][sys_len:head]
+            return None, None
+        ev = rows[0][sys_len:head]
+        return ev, ev.tobytes() + b"".join(im.digest for _, im in images)
+
+    def part(pos, images, i, a, b=None):        # Seg fields of tokens a..b of row i in a group with images
+        if pos is None:
+            return {}
+        b = pos[i].shape[1] if b is None else b
+        img = tuple((max(a, o) - a, im, max(a, o) - o, min(b, o + im.tokens) - max(a, o)) for o, im in images
+                    if max(a, o) < min(b, o + im.tokens))
+        return {"pos": pos[i][:, a:b], "img": img}
 
     # look every request's evidence up first, so that making room for new entries never evicts one this batch uses
     hits = {}
-    for rows, head in groups:
-        ev = evidence(rows, head)
-        if ev is not None and ev.tobytes() not in hits:
-            hits[ev.tobytes()] = cache.lookup(ev, count=False)
+    for rows, head, _, images in groups:
+        ev, key = evidence(rows, head, images)
+        if ev is not None and key not in hits:
+            hits[key] = cache.lookup(ev, count=False, key=key)
     pinned = {k for k, ent in hits.items() if ent is not None}
 
-    def shared(rows, c, e_seg):                 # the rows' remainders after c tokens, children of segment e_seg
-        for r in rows:
+    def shared(rows, c, e_seg, cut):            # the rows' remainders after c tokens, children of segment e_seg
+        for i, r in enumerate(rows):
             read_seg.append(len(segs))
-            segs.append(Seg(r[c:], c, e_seg, segs[e_seg].out_ref))
+            segs.append(Seg(r[c:], c, e_seg, segs[e_seg].out_ref, **cut(i, c)))
 
-    for rows, head in groups:
+    for rows, head, pos, images in groups:
+        cut = lambda i, a, b=None: part(pos, images, i, a, b)        # noqa: E731
         if system is not None and any(len(r) <= sys_len or not np.array_equal(r[:sys_len], system) for r in rows):
             # the prompt's tokens leave the system text's before it ends (BPE merged across the boundary, e.g. evidence
             # that starts with a newline): compute it whole, without the cached system state
-            for r in rows:
+            for i, r in enumerate(rows):
                 read_seg.append(len(segs))
-                segs.append(Seg(r, 0, -1, ZERO_SLOT, no_root=True))
+                segs.append(Seg(r, 0, -1, ZERO_SLOT, no_root=True, **cut(i, 0)))
             continue
         for r in rows:
             if len(r) <= sys_len:
                 raise ValueError("prompt has no tokens after the system text")
-        ev = evidence(rows, head)
+        ev, key = evidence(rows, head, images)
         if ev is not None:
-            key = ev.tobytes()
             ent = hits.get(key)
             if ent is not None:                 # cached: the questions start from the evidence's state
                 cache.count_hit(ent)
-                for r in rows:
+                for i, r in enumerate(rows):
                     read_seg.append(len(segs))
-                    segs.append(Seg(r[head:], head, -1, ent.slot, kv_parent=(ent.kv_start, ent.length)))
+                    segs.append(Seg(r[head:], head, -1, ent.slot, kv_parent=(ent.kv_start, ent.length), **cut(i, head)))
                 continue
             if key in fresh:                    # another request of this batch computes the same evidence
                 cache.stats["batch_shared"] += 1
-                shared(rows, head, fresh[key])
+                shared(rows, head, fresh[key], cut)
                 continue
-            ent = cache.insert(ev, pinned) if len(inserted) < max_inserts else cache.no_room()
+            ent = cache.insert(ev, pinned, key=key) if len(inserted) < max_inserts else cache.no_room()
             e = len(segs)
             if ent is not None:                 # computed into a new cache entry
                 pinned.add(key)
                 inserted.append(ent)
-                segs.append(Seg(ev, sys_len, -1, ROOT_SLOT, out_ref=ent.slot, save_conv=ent.slot, kv_fixed=ent.kv_start))
+                segs.append(Seg(ev, sys_len, -1, ROOT_SLOT, out_ref=ent.slot, save_conv=ent.slot, kv_fixed=ent.kv_start,
+                                **cut(0, sys_len, head)))
                 fresh[key] = e
-                shared(rows, head, e)
+                shared(rows, head, e, cut)
                 continue
             if len(rows) > 1 and trans < max_trans:     # no room: the same split, through a transient state
-                segs.append(Seg(ev, sys_len, -1, ROOT_SLOT, out_ref=-2 - trans))
+                segs.append(Seg(ev, sys_len, -1, ROOT_SLOT, out_ref=-2 - trans, **cut(0, sys_len, head)))
                 trans += 1
                 fresh[key] = e
-                shared(rows, head, e)
+                shared(rows, head, e, cut)
                 continue
-            for r in rows:                      # one question (or no transient left): computed whole
+            for i, r in enumerate(rows):        # one question (or no transient left): computed whole
                 read_seg.append(len(segs))
-                segs.append(Seg(r[sys_len:], sys_len, -1, ROOT_SLOT))
+                segs.append(Seg(r[sys_len:], sys_len, -1, ROOT_SLOT, **cut(i, sys_len)))
             continue
         c = sys_len
         if share and len(rows) > 1:
@@ -165,16 +192,18 @@ def plan_batch(groups, sys_len, kv_scratch0, root_kv=(0, 0), share=True, cache=N
             c = max(n, sys_len)
         if c - sys_len >= MIN_SHARE and trans < max_trans:
             e = len(segs)
-            segs.append(Seg(rows[0][sys_len:c], sys_len, -1, ROOT_SLOT, out_ref=-2 - trans))
+            segs.append(Seg(rows[0][sys_len:c], sys_len, -1, ROOT_SLOT, out_ref=-2 - trans, **cut(0, sys_len, c)))
             trans += 1
-            shared(rows, c, e)
+            shared(rows, c, e, cut)
         else:
-            for r in rows:
+            for i, r in enumerate(rows):
                 read_seg.append(len(segs))
-                segs.append(Seg(r[sys_len:], sys_len, -1, ROOT_SLOT))
-    for tokens, slot, kv0 in keep:
+                segs.append(Seg(r[sys_len:], sys_len, -1, ROOT_SLOT, **cut(i, sys_len)))
+    for k in keep:
+        tokens, slot, kv0 = k[:3]
+        pos, images = k[3:5] if len(k) > 3 else (None, ())
         segs.append(Seg(np.asarray(tokens, dtype=np.int32), 0, -1, ZERO_SLOT, out_ref=slot, save_conv=slot, kv_fixed=kv0,
-                        no_root=True))
+                        no_root=True, **part(None if pos is None else [pos], images, 0, 0)))
     plan = _layout(segs, read_seg, kv_scratch0, root_kv, trans, bm=bm)
     plan.inserted = inserted
     return plan
@@ -200,12 +229,24 @@ def _layout(segs, read_seg, kv0, root_kv, n_trans, kw=4, bm=BM):
     positions = np.empty(n_tok, np.int32)
     kvrow = np.empty(n_tok, np.int32)
     hist = np.full((n_tok, kw - 1), -1, np.int32)
+    mrope, n_mrope, feats = [], 0, []
     for s in segs:
         L = len(s.tokens)
         sl = slice(s.start, s.start + L)
         ids[sl] = s.tokens
-        positions[sl] = s.pos0 + np.arange(L)
         kvrow[sl] = s.kv_start + np.arange(L)
+        if s.pos is None:
+            positions[sl] = s.pos0 + np.arange(L)
+            continue
+        positions[sl] = s.pos[0]                       # M-RoPE (module docstring)
+        k = np.flatnonzero((s.pos[1] != s.pos[0]) | (s.pos[2] != s.pos[0]))
+        if len(k):
+            positions[s.start + k] = -1 - (n_mrope + np.arange(len(k), dtype=np.int32))
+            mrope.append(s.pos[:, k].T)
+            n_mrope += len(k)
+        for off, image, j0, n in s.img:
+            ids[s.start + off:s.start + off + n] = -1
+            feats.append((s.start + off, image, j0, n))
     def source(si, back):
         """Pre-conv row of the token `back` positions before the start of segment si (1 <= back <= kw-1)."""
         s = segs[si]
@@ -277,5 +318,7 @@ def _layout(segs, read_seg, kv0, root_kv, n_trans, kw=4, bm=BM):
               "blocks": t(blocks, 4), "read": np.asarray(read, np.int32), "read_pos": positions[read] if read else
               np.zeros(0, np.int32), "read_blocks": t(read_blocks, 4)}
     counts = {"tok": n_tok, "chunks": len(chunks), "segs0": len(wave[0]), "segs1": len(wave[1]), "saves": len(saves),
-              "blocks": len(blocks), "read": len(read), "segs": len(segs), "trans": n_trans}
-    return Plan(n_tok, segs, read, read_seg, tables, counts)
+              "blocks": len(blocks), "read": len(read), "segs": len(segs), "trans": n_trans, "mrope": n_mrope}
+    if mrope:
+        tables["mrope"] = np.ascontiguousarray(np.concatenate(mrope), dtype=np.int32)
+    return Plan(n_tok, segs, read, read_seg, tables, counts, feats=feats)

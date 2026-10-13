@@ -18,14 +18,20 @@ v1 folders answer exactly as StartLux-Decision v1 does, unless a request asks fo
 AutoThink folders think as v1.1 does (think.py: ThinkingDecider, whose think_mode "never" is this Decider); v1 folders
 answer in one pass: the v1.1 thinking controls are validated, and a request that asks for a thought is refused
 (request_controls).
+
+Images (images.py): a request's "images" take their places in the state and every prompt of the request (wide-choice
+rounds and thoughts included) holds them; a server without a vision tower refuses them (images.Settings.refused).
 """
 from __future__ import annotations
 
 import math
 import time
 
+from . import images as I
 from . import jevfmt as J
 from .prompt import rows_for
+
+TEXT_ONLY = I.Settings(refused="this backend reads text only: send the evidence without images")
 
 THINK_MODES = ("auto", "never", "always")
 THINK_MODE_ALIASES = {"hybrid": "auto", "plain": "never", "think": "always"}
@@ -133,20 +139,25 @@ def answer(row_record, p, question, null_ok=False):
 
 class Decider:
     """decide(state, questions) with a backend's letter_logits(rows); rows are prompt.Row objects.  none_check /
-    allow_none: the server's defaults (none_check None: on for v1.1 folders, off for v1 ones)."""
+    allow_none: the server's defaults (none_check None: on for v1.1 folders, off for v1 ones).  images: how the server
+    reads images (images.Settings; None: it reads none)."""
 
-    def __init__(self, tokenizer, backend, none_check=None, allow_none=False):
+    def __init__(self, tokenizer, backend, none_check=None, allow_none=False, images=None):
         self.tok, self.backend = tokenizer, backend
         self.v11 = getattr(tokenizer, "kind", "v1") != "v1"
         self.none_check = self.v11 if none_check is None else bool(none_check)
         self.allow_none = bool(allow_none)
+        self.images = images or TEXT_ONLY
         self._softmax = softmax_v11 if self.v11 else softmax_t
 
     def _probs(self, rows):
         logits = self.backend.letter_logits(rows)
         return [self._softmax(z[:r.n_options], self.tok.temperature.get(r.kind, 1.0)) for r, z in zip(rows, logits)]
 
-    def _wide(self, state, spec, none=False):
+    def _rows(self, recs, keys, media):
+        return rows_for(self.tok, recs, keys) if media is None else I.rows_for(self.tok, recs, keys, media, self.images)
+
+    def _wide(self, state, spec, none=False, media=None):
         """-> ({option: probability} over every option, tokens, the extra option's probability or None, abstain)"""
         keys = list(spec["criteria"])
         n_groups = -(-len(keys) // self.tok.group)
@@ -157,7 +168,7 @@ class Decider:
             groups.append(keys[start:end])
             start = end
         recs = [J.from_systemone(state, dict(spec, criteria={k: spec["criteria"][k] for k in g})) for g in groups]
-        rows = rows_for(self.tok, recs, [f"wide{i}" for i in range(len(recs))])
+        rows = self._rows(recs, [f"wide{i}" for i in range(len(recs))], media)
         first = self._probs(rows)
         tokens = sum(len(r.ids) for r in rows)
         first_p = {k: p for g, ps in zip(groups, first) for k, p in zip(g, ps)}
@@ -168,9 +179,9 @@ class Decider:
         fin_spec = dict(spec, criteria={k: spec["criteria"][k] for k in finalists})
         none_p, abstain = None, False
         if len(finalists) > J.MAX_OPTIONS:                     # v1: another knock-out round
-            final_p, more, _, _ = self._wide(state, fin_spec)
+            final_p, more, _, _ = self._wide(state, fin_spec, media=media)
         else:
-            row = rows_for(self.tok, [J.from_systemone(state, fin_spec, allow_none=none)], ["final"])
+            row = self._rows([J.from_systemone(state, fin_spec, allow_none=none)], ["final"], media)
             p = self._probs(row)[0]
             if none:
                 p, none_p, abstain = split_none(p)
@@ -182,10 +193,10 @@ class Decider:
         z = sum(probs.values())
         return {k: v / z for k, v in probs.items()}, tokens + more, none_p, abstain
 
-    def split(self, state, questions, allow_none=None, none_check=None):
+    def split(self, state, questions, allow_none=None, none_check=None, media=None):
         """-> (answers decided without the model or through wide rounds, [(key, record)], tokens spent, {key: whether
         its choice may be null}).  allow_none / none_check: the request's (None: the server's default); a choice
-        question's own "allow_none" overrides the request's."""
+        question's own "allow_none" overrides the request's.  media: the request's images (images.prepare)."""
         allow_none = self.allow_none if allow_none is None else allow_none
         none_check = self.none_check if none_check is None else none_check
         answers, recs, tokens, null_ok = {}, [], 0, {}
@@ -202,7 +213,7 @@ class Decider:
                 only = next(iter(crit))
                 answers[k] = {"type": "choice", "choice": only, "confidence": 1.0, "probabilities": {only: 1.0}}
             elif t == "choice" and isinstance(crit, dict) and len(crit) > J.MAX_OPTIONS - none:
-                p, n, none_p, abstain = self._wide(state, q, none)
+                p, n, none_p, abstain = self._wide(state, q, none, media)
                 tokens += n
                 if none:
                     answers[k] = choice_answer(p, none_p, abstain and bool(asked))
@@ -215,14 +226,19 @@ class Decider:
                 null_ok[k] = bool(asked) and none
         return answers, recs, tokens, null_ok
 
-    def decide(self, state, questions, marks=None, allow_none=None, none_check=None):
-        """-> (answers in request order, usage).  marks (a list) receives (stage, perf_counter) pairs."""
+    def decide(self, state, questions, marks=None, allow_none=None, none_check=None, images=None):
+        """-> (answers in request order, usage).  marks (a list) receives (stage, perf_counter) pairs.  images: the
+        request's "images" (base64 strings or data URIs; None or [] for none)."""
         mark = marks.append if marks is not None else (lambda x: None)
         mark(("start", time.perf_counter()))
-        answers, recs, tokens, null_ok = self.split(state, questions, allow_none, none_check)
+        media = None
+        if images is not None and images != []:
+            state, media = I.prepare(state, images, self.images)
+            mark(("images", time.perf_counter()))
+        answers, recs, tokens, null_ok = self.split(state, questions, allow_none, none_check, media)
         mark(("split", time.perf_counter()))
         if recs:
-            rows = rows_for(self.tok, [r for _, r in recs], [k for k, _ in recs])
+            rows = self._rows([r for _, r in recs], [k for k, _ in recs], media)
             mark(("rows", time.perf_counter()))
             tokens += sum(len(r.ids) for r in rows)
             probs = self._probs(rows)

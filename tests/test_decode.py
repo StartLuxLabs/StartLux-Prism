@@ -107,8 +107,8 @@ def prefill_logits(eng, dec, ids, positions):
             np.int32)
         plan.counts["read"] = len(P)
         R = eng._bucket(len(P), READ_BUCKETS)
-        eng._stage_tables(plan, 0)
-        b = eng.launch(Batch(plan, T, R, 0, time.perf_counter(), time.perf_counter()))
+        n_tabs = eng._stage_tables(plan, 0)
+        b = eng.launch(Batch(plan, T, R, 0, time.perf_counter(), time.perf_counter(), n_tabs=n_tabs))
         letters += eng.finish(b)
         h = eng.buf["hr"][:len(P)]
         if not eng.int8:

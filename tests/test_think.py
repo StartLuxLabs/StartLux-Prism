@@ -8,7 +8,8 @@
    random prefixes, cuts and whitespace.
 2. thinking prompts: think.Framing (the folder's chat template with thinking on, rendered once) against
    startlux_decide's think_prompt (transformers' apply_chat_template) on random questions: the same text byte for byte
-   and the same tokens; and the read prompts after a thought tokenized the same.
+   and the same tokens; and the read prompts after a thought tokenized the same.  A third of the states carry 1-3
+   images (their places as v1.1 puts them, rendered as the chat template's image placeholder).
 3. orchestration: whole requests (choice, yes/no, score, knock-out lists, none_check / allow_none, think_mode auto and
    always, gates, mixes, budgets, stream and chunked) through flash-jev's ThinkingDecider and through startlux_decide's
    Decider, both on deterministic fake engines that read the same pseudo-random letter logits for the same prompt text
@@ -31,6 +32,7 @@ from concurrent.futures import Future
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 sys.path.insert(0, os.path.dirname(__file__))
+from flash_jev import images as I  # noqa: E402
 from flash_jev import jevfmt as J  # noqa: E402
 from flash_jev import loops as FL  # noqa: E402
 from flash_jev import think as TH  # noqa: E402
@@ -110,17 +112,21 @@ def check_loops(n, seed):
 def check_prompts(n, seed, framing, ftok, htok):
     from startlux_decide import prompt as P
     r = random.Random(seed + 1)
-    bad = count = 0
+    bad = count = with_images = 0
     for _ in range(n):
         st, q = V.state(r), V.question(r)
         none = r.random() < 0.5 and q["type"] == "choice"
+        images = r.randrange(1, 4) if r.random() < 1 / 3 else 0
         try:
+            if images:                                   # the state as images.prepare leaves it
+                st = I.place_images(J.state_text(st), images)
             rec = J.from_systemone(st, q, allow_none=none)
-            ours = framing.prompt(rec)
+            ours = framing.prompt(rec).replace(I.SLOT, I.IMAGE_PLACEHOLDER)
         except (ValueError, KeyError, TypeError, AttributeError):
             continue
         theirs = P.think_prompt(htok, P.messages(P.from_systemone(st, q, none)))
         count += 1
+        with_images += bool(images)
         thought = r.choice(["", "B fits.", "The refund rule applies.\nB fits.", "x <think> y", "€ 25 → 30 ✓ 日本",
                             "a" * r.randrange(5000)])
         read = TH.read_prompt(TH.AutoThink(), ours, thought, r.choice(["closed", "loop", "budget"]))[1]
@@ -132,8 +138,8 @@ def check_prompts(n, seed, framing, ftok, htok):
               or ftok.encode(read) != htok(read, add_special_tokens=False)["input_ids"]):
             bad += 1
             print("tokens differ:", repr(ours[-200:]))
-    print(f"2. thinking prompts: {count} rendered, {'all identical (text and tokens, read prompts too)' if not bad else f'{bad} DIFFER'}",
-          flush=True)
+    print(f"2. thinking prompts: {count} rendered ({with_images} with images), "
+          f"{'all identical (text and tokens, read prompts too)' if not bad else f'{bad} DIFFER'}", flush=True)
     return bad
 
 

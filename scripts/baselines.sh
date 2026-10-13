@@ -28,7 +28,7 @@ JEV=${JEV:-$HOME/jev}
 source "$JEV/env.sh"
 MODEL=${MODEL:-$JEV/models/StartLux-Decision-4B-Q8_0-GGUF}
 HF=${HF:-$JEV/models/StartLux-Decision-4B-bf16-from-Q8_0}
-GGUF=${GGUF:-$(ls "$MODEL"/*.gguf | head -1)}
+GGUF=${GGUF:-$(ls "$MODEL"/*.gguf | grep -v "/mmproj-" | head -1)}  # not the vision tower (mmproj-*.gguf)
 LLAMA=${LLAMA:-/opt/llama.cpp-b10639}
 CAUSAL=${CAUSAL:-$JEV/models/startlux-causallm}
 CAUSAL_FLAT=${CAUSAL_FLAT:-$JEV/models/startlux-causallm-flat}

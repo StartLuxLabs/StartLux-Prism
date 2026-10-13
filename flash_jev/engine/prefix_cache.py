@@ -10,7 +10,9 @@ starts its questions from the cached state instead of recomputing the evidence. 
 
 The evidence here is the prompt head after the system text: StartLux's prompts are system text, "Evidence:" + the
 rendered state, then the question block, and every question of a request has the same head (prompt.split_prompt).
-Lookup is by exact token sequence.  Eviction is least recently used, never of an entry the batch being planned uses.
+Lookup is by exact token sequence (evidence with images: the tokens and the images' digests, since every image's tokens
+are the same ids - the planner passes that key).  Eviction is least recently used, never of an entry the batch being
+planned uses.
 
 This class is the host-side index only: the batch planner (batch.plan_batch) turns hits into segments that start from a
 cached slot and misses into evidence segments that write their state into a fresh slot.  An entry is written by the
@@ -46,9 +48,10 @@ class PrefixCache:
     def __len__(self):
         return len(self.entries)
 
-    def lookup(self, tokens, count=True):
-        """The entry for exactly these evidence tokens (np.int32), or None; marks it used."""
-        e = self.entries.get(tokens.tobytes())
+    def lookup(self, tokens, count=True, key=None):
+        """The entry for exactly these evidence tokens (np.int32; key: their key when not their bytes), or None;
+        marks it used."""
+        e = self.entries.get(tokens.tobytes() if key is None else key)
         if e is not None:
             self.clock += 1
             e.last_used = self.clock
@@ -62,9 +65,9 @@ class PrefixCache:
         self.stats["hits"] += 1
         self.stats["hit_tokens"] += e.length
 
-    def insert(self, tokens, pinned):
-        """A new entry for these evidence tokens (a slot and a KV range), evicting least recently used entries that
-        are not in `pinned` (keys the batch being planned uses); None when there is no room."""
+    def insert(self, tokens, pinned, key=None):
+        """A new entry for these evidence tokens (a slot and a KV range; key: as lookup's), evicting least recently
+        used entries that are not in `pinned` (keys the batch being planned uses); None when there is no room."""
         n = len(tokens)
         self.stats["misses"] += 1
         if n > self.kv_rows or not self.capacity:
@@ -80,7 +83,7 @@ class PrefixCache:
                 return None
             self._evict(min(victims, key=lambda e: e.last_used))
         self.clock += 1
-        e = Entry(tokens.tobytes(), self.free.pop(), start, n, self.clock)
+        e = Entry(tokens.tobytes() if key is None else key, self.free.pop(), start, n, self.clock)
         self.entries[e.key] = e
         self.stats["inserts"] += 1
         return e

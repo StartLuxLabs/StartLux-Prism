@@ -120,6 +120,16 @@ class Row:
     order: list             # option ids in letter order
     record: dict            # the rendered record (jevfmt)
     head: int = 0           # tokens of the head (system text + evidence) the request's rows share
+    pos: object = None      # prompts with images (images.rows_for): int32 [3, len(ids)], each token's (time, height,
+                            # width) position; None: token i is at position i on all three axes
+    images: tuple = ()      # prompts with images: (offset of its first token in ids, images.Image) per image
+
+    @property
+    def last_pos(self):
+        """Position of the last prompt token, the same on all three axes (it is text).  A token generated after the
+        prompt takes last_pos + 1 on every axis, the next one last_pos + 2, ...  len(ids) - 1 without images; with
+        images less, since the text after an image continues at its start + max(rows, columns), not + its tokens."""
+        return len(self.ids) - 1 if self.pos is None else int(self.pos[0, -1])
 
 
 def common_prefix(seqs):

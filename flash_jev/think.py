@@ -24,6 +24,11 @@ the same).
 
 Generation runs on the GPU (engine/decode.py) under ThinkScheduler: the server's scheduler, which interleaves decode
 steps with the one-pass batches, so a question that does not think waits for at most a decode step or two.
+
+Images (images.py): a request's images are in every prompt of its questions, the thinking prompt and the read-out after
+the thought included, as v1.1 sends them: the chat template's image placeholder at each image's place (also in the text
+whose SHA-1 seeds the thought), its tokens and M-RoPE positions as in a one-pass prompt.  The thought's tokens are text
+after the prompt's last position (Row.last_pos), the same on all three axes.
 """
 from __future__ import annotations
 
@@ -38,13 +43,14 @@ import threading
 import time
 from concurrent.futures import Future, ThreadPoolExecutor, wait
 
+from . import images as I
 from . import jevfmt as J
 from .decide import (THINK_MODE_ALIASES, THINK_MODES, THOUGHT_GENERATIONS, Decider, answer, choice_answer,
                      softmax_v11, split_none)
 from .engine.decode import EOS, Sampling
 from .engine.model import group
 from .loops import loop_cut, looping
-from .prompt import HEAD, TAIL, Row, rows_for
+from .prompt import HEAD, TAIL, Row
 from .server import Scheduler
 
 RELEASE_PREFIX = "Let me work through this carefully, step by step.\n"
@@ -407,6 +413,8 @@ class ThinkJob:
     pos: int = 0
     step: int = 0
     row: int = -1             # its row in the last decode step launched (-1: not yet in one)
+    mpos: object = None       # a prompt with images: its M-RoPE positions [3, len(ids)] (prompt.Row.pos); None: text
+    media: tuple = ()         # a prompt with images: (offset of its first token in ids, images.Image) per image
     done: bool = False
     t0: float = 0.0
     t_first: float = 0.0
@@ -568,7 +576,8 @@ class ThinkScheduler(Scheduler):
             batch.append(item)
             tokens += item[2]
             self.pending_tokens -= item[2]
-        keep = [(j.ids[:-1], j.slot, j.kv_start) for j in jobs]
+        keep = [(j.ids[:-1], j.slot, j.kv_start) if j.mpos is None else
+                (j.ids[:-1], j.slot, j.kv_start, j.mpos[:, :-1], j.media) for j in jobs]
         try:
             b = self.engine.launch(self.engine.prepare([rows for rows, _, _ in batch], slot, keep=keep))
         except Exception as e:                       # noqa: BLE001  every waiter of this batch gets the error
@@ -579,7 +588,8 @@ class ThinkScheduler(Scheduler):
             return None
         pos = b.plan.tables["pos"]
         for j, s in zip(jobs, b.plan.segs[len(b.plan.segs) - len(jobs):]):
-            j.pos = int(pos[s.start + len(s.tokens) - 1]) + 1      # the prompt's last token: the next position
+            j.pos = int(pos[s.start + len(s.tokens) - 1]) + 1      # the prompt's last token (text, also with images:
+                                                                      # one position on every axis): the next one
             j.kv_len, j.step, j.row = len(s.tokens), 0, -1
             j.t_first = time.perf_counter()
             self.decoding.append(j)
@@ -660,15 +670,26 @@ class ThinkingDecider(Decider):
     """Decider for AutoThink folders: v1.1's pipeline per question (module docstring).  think_mode "never" without
     details takes the one-pass Decider's path unchanged."""
 
-    def __init__(self, tokenizer, backend, sched, framing, auto, context, none_check=None, allow_none=False):
-        super().__init__(tokenizer, backend, none_check, allow_none)
+    def __init__(self, tokenizer, backend, sched, framing, auto, context, none_check=None, allow_none=False,
+                 images=None):
+        super().__init__(tokenizer, backend, none_check, allow_none, images)
         self.sched, self.framing, self.auto, self.context = sched, framing, auto, context
 
-    def decide(self, state, questions, marks=None, allow_none=None, none_check=None, ctl=None):
+    def decide(self, state, questions, marks=None, allow_none=None, none_check=None, ctl=None, images=None):
         if ctl is None or (ctl.think_mode == "never" and not ctl.details):
-            answers, usage = super().decide(state, questions, marks, allow_none, none_check)
+            answers, usage = super().decide(state, questions, marks, allow_none, none_check, images)
             return answers, usage, None
-        return self._decide(state, questions, marks, ctl)
+        return self._decide(state, questions, marks, ctl, images)
+
+    def _encode(self, text, media):
+        """A prompt's text (the image placeholders at the images' places) -> (ids, M-RoPE positions or None, images
+        placed: (offset of the first token, image) each), as images.rows_for makes a one-pass row."""
+        ids = self.tok.encode(text)
+        if not media:
+            return ids, None, ()
+        ids, offsets = I.expand(ids, media, self.images.pad_id)
+        pos, _ = I.positions(ids, offsets, media)
+        return ids.tolist(), pos, tuple(zip(offsets, media))
 
     # ------------------------------------------------------------------ preparation
     def _items(self, state, questions, ctl):
@@ -699,7 +720,7 @@ class ThinkingDecider(Decider):
             items.append(it)
         return items
 
-    def _knockout(self, state, items):
+    def _knockout(self, state, items, media=None):
         """The group rounds of every knocked-out list, in one forward; then each one's finalists (the best `keep` of
         each group, the best 26 - none overall when more qualify) as its question's record."""
         wide = [it for it in items if it.groups]
@@ -710,7 +731,7 @@ class ThinkingDecider(Decider):
             for g in it.groups:
                 recs.append(J.from_systemone(state, dict(it.spec, criteria={c: it.spec["criteria"][c] for c in g})))
                 owner.append(it)
-        rows = rows_for(self.tok, recs, [f"wide{i}" for i in range(len(recs))])
+        rows = self._rows(recs, [f"wide{i}" for i in range(len(recs))], media)
         probs = self._probs(rows)
         at = 0
         for it in wide:
@@ -764,16 +785,20 @@ class ThinkingDecider(Decider):
         return answer(it.record, p, it.spec)
 
     # ------------------------------------------------------------------ the pipeline
-    def _decide(self, state, questions, marks, ctl):
+    def _decide(self, state, questions, marks, ctl, images=None):
         t_start = time.perf_counter()
         mark = marks.append if marks is not None else (lambda x: None)
         mark(("start", t_start))
+        media = None
+        if images is not None and images != []:
+            state, media = I.prepare(state, images, self.images)
+            mark(("images", time.perf_counter()))
         items = self._items(state, questions, ctl)
         t0 = time.perf_counter()
-        self._knockout(state, items)
+        self._knockout(state, items, media)
         knock_ms = round((time.perf_counter() - t0) * 1000, 3)
         live = [it for it in items if it.only is None]
-        rows = rows_for(self.tok, [it.record for it in live], [it.key for it in live])
+        rows = self._rows([it.record for it in live], [it.key for it in live], media)
         mark(("rows", time.perf_counter()))
         t0 = time.perf_counter()
         p0s = self._probs(rows) if rows else []
@@ -784,7 +809,7 @@ class ThinkingDecider(Decider):
         for it, row, p0 in zip(live, rows, p0s):
             room = self.context - len(row.ids) - CONTEXT_MARGIN
             if (ctl.think_mode == "always" or (ctl.think_mode == "auto" and max(p0) < ctl.gate)) and room > MIN_ROOM:
-                jobs[it.key] = self._start_thought(it, min(ctl.budget, room), ctl)
+                jobs[it.key] = self._start_thought(it, min(ctl.budget, room), ctl, media)
         thoughts = self._finish_thoughts(live, rows, jobs, ctl) if jobs else {}
         mark(("thoughts", time.perf_counter()))
         usage = {"input_tokens": 0, "output_tokens": 0}
@@ -834,18 +859,20 @@ class ThinkingDecider(Decider):
                 "gate": gate, "mix": ctl.mix if th else None,
                 "total_ms": round((time.perf_counter() - t_start) * 1000, 3)}
 
-    def _start_thought(self, it, budget, ctl):
+    def _start_thought(self, it, budget, ctl, media=None):
         """Queue the question's thought; -> what _finish_thoughts needs."""
         base = self.framing.prompt(it.record)
+        if media:
+            base = base.replace(I.SLOT, I.IMAGE_PLACEHOLDER)
         prompt = base + self.auto.prefix
         seed = thought_seed(prompt)
-        ids = self.tok.encode(prompt)
+        ids, mpos, placed = self._encode(prompt, media)
         gen = "chunked" if ctl.thought_generation == "chunked" else "stream"
         t = {"base": base, "prompt": prompt, "ids": ids, "seed": seed, "budget": budget, "generation": gen,
-             "start": time.perf_counter()}
+             "start": time.perf_counter(), "media": media}
         if gen == "stream":
             job = ThinkJob(ids, budget, seed % (2 ** 31), StreamThought(self.tok.tok, ids, budget,
-                                                                        self.auto.chunk_tokens))
+                                                                        self.auto.chunk_tokens), mpos=mpos, media=placed)
             job.t0 = t["start"]
             t["future"] = self.sched.think(job)
         else:
@@ -860,8 +887,9 @@ class ThinkingDecider(Decider):
         start = end = time.perf_counter()
         while tokens < budget:
             step = min(auto.chunk_tokens, budget - tokens) if auto.chunk_tokens else budget
-            ids = self.tok.encode(t["prompt"] + text)
-            job = ThinkJob(ids, step, (t["seed"] + 7919 * rnd) % (2 ** 31), ChunkGeneration(self.tok.tok, ids, step))
+            ids, mpos, placed = self._encode(t["prompt"] + text, t["media"])
+            job = ThinkJob(ids, step, (t["seed"] + 7919 * rnd) % (2 ** 31), ChunkGeneration(self.tok.tok, ids, step),
+                           mpos=mpos, media=placed)
             job.t0 = time.perf_counter()
             (g_text, g_tokens, finish), _, end = self.sched.think(job).result()
             text += g_text
@@ -891,8 +919,8 @@ class ThinkingDecider(Decider):
                 t = jobs[k]
                 it, row = by_key[k]
                 thought, prompt = read_prompt(self.auto, t["base"], text, ended)
-                ids = self.tok.encode(prompt)
-                rr = Row(k, row.kind, ids, row.n_options, row.order, row.record, 0)
+                ids, mpos, placed = self._encode(prompt, t["media"])
+                rr = Row(k, row.kind, ids, row.n_options, row.order, row.record, 0, pos=mpos, images=placed)
                 out[k] = {"text": thought, "tokens": tokens, "ended": ended, "start": t["start"], "end": end,
                           "generation": t["generation"], "read_ids": len(ids)}
                 reads[k] = (self.sched.submit_async(group([rr])), time.perf_counter(), rr)
