@@ -17,6 +17,7 @@ numbers are from 2026-10-10 to 2026-10-12. Each chart is drawn from the table be
 - [Q4_K_M files: W4A8](#q4_k_m-files-w4a8)
 - [The longest request in one pass](#the-longest-request-in-one-pass)
 - [Accuracy: StartLux-Decision-v1's evaluation](#accuracy-startlux-decision-v1s-evaluation)
+- [StartLux-Decision v1.1 27B AutoThink: thinking](#startlux-decision-v11-27b-autothink-thinking)
 - [Stress tests](#stress-tests)
 - [Engine configurations](#engine-configurations) · [Crashes on the RTX 5090 server](#crashes-on-the-rtx-5090-server)
 
@@ -718,6 +719,50 @@ What this shows:
 Reproduce on the GPU server: `scripts/accuracy_v1.sh` (STARTLUX_V1: a checkout of StartLux-Decision-v1; BENCH: the
 folder its `eval/fetch_benchmarks.sh` fills), then `python bench/accuracy_tables.py` (these tables) and
 `bench/compare_preds.py` (agreement per suite). Results in `results/accuracy_v1/`.
+
+## StartLux-Decision v1.1 27B AutoThink: thinking
+
+StartLux-Decision-v1.1-27B-AutoThink from its Q8_0 GGUF (`StartLux-Decision-v1.1-27B-AutoThink-Q8_0.gguf`, 28.60 GB,
+SHA-256 `28757be9a8fae5253201edd155e553e7a7324d9f1130ad20ac1009780d90659d`, the release on Hugging Face), int8
+calibration computed on the first start, on one H200 of a second 8-GPU H200 server (the same driver and software as the
+first), 2026-10-13. flash-jev thinks as StartLux-Decision v1.1's package does: a thought when the first read-out's top
+probability is below 0.9 (sampled at temperature 0.6, top-k 20, top-p 0.95, at most 4,096 tokens), a second read-out
+after it, the two mixed 0.25 / 0.75; `think_mode` "never" is the one-pass answer.
+
+**JevBench** (the 231 public items, one request at a time):
+
+| precision, think_mode | correct, of 231 | mean / p50 ms per item | questions that thought | thought tokens mean / p50 / max | how thoughts ended |
+|---|---|---|---|---|---|
+| int8, never | 214 | 41.1 / 15.8 | - | - | - |
+| **int8, auto** | **224** | 1,196 / 19.2 | 67 (29%), 61 of them right | 369 / 135 / 3,948 | 67 closed |
+| bf16, never | 214 | 67.1 / 19.6 | - | - | - |
+| bf16, auto | 223 | 1,948 / 25.9 | 67 (29%), 60 of them right | 426 / 234 / 4,096 | 66 closed, 1 at the budget |
+
+The items that think take 4.05 s on average with int8, the others 30 ms. From 16 and 64 clients at once JevBench with
+thoughts runs at 3.57 and 3.78 requests/s (the longest thoughts set the pace), with the same thoughts and
+probabilities, bit for bit, as one request at a time.
+
+**StartLux-Decision-v1's evaluation suites** (int8; the 12,351 decisions of the
+[accuracy section](#accuracy-startlux-decision-v1s-evaluation), scored with its scorer):
+
+| think_mode | Easy | Original | Hard | Typed | ToolACE | AG News | WildJB | Average | Brier (Hard) | ECE (Hard) |
+|---|---|---|---|---|---|---|---|---|---|---|
+| never | 100.00 | 98.61 | 85.59 | 80.15 | 96.13 | 90.84 | 92.67 | 92.00 | 0.2243 | 0.0417 |
+| auto | 100.00 | 98.61 | 94.59 | 78.50 | 96.13 | 90.83 | 91.90 | **92.94** | 0.1093 | 0.0531 |
+
+Thinking adds 10 JevBench items (none lost) and 0.94 points of suite average, most of it on JevBench hard; Typed
+Decisions and WildJailBreak lose a little. (The model card reports 2.5 points from thinking on held-out items of the
+training distribution.)
+
+**Decode speed** (int8, `bench/decode_speed.py`; tokens/s, every sequence one token per step, 2026-10-13):
+
+| sequences decoding at once | 1 | 2 | 4 | 8 | 16 | 32 | 64 |
+|---|---|---|---|---|---|---|---|
+| prompts of 512 tokens | 95 | 191 | 372 | 721 | 1,337 | 2,362 | 3,883 |
+| prompts of 4,096 tokens | 96 | 192 | 373 | 712 | 1,266 | 2,112 | 3,188 |
+
+One sequence's step takes 10.4 ms, most of it reading the 27 GB of int8 weights; 64 sequences share that read (16.5 ms
+per step at 512 tokens, 20.1 at 4,096, where attention and the recurrent states' traffic grow).
 
 ## Stress tests
 
