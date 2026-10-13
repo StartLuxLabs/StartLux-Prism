@@ -446,13 +446,17 @@ class ThinkScheduler(Scheduler):
     server, under load the queued ones share a batch); thinking sequences are prefilled inside those batches (their
     prompts as `keep` segments: state into their own slots, keys and values into their own rows) and then advance one
     decode step at a time, all of them in every step.  When both kinds of work wait, prefill batches and decode steps
-    alternate, so a question that does not think waits for at most the step in flight; a decode step is queued behind
-    the one running (the sampled tokens stay on the GPU), and the host reads a step's tokens while the next one runs.
+    alternate, so a question that does not think waits for at most the step in flight; when no request has come for a
+    while (quiet_s), a decode step is queued behind the one running (the sampled tokens stay on the GPU) and the host
+    reads a step's tokens while the next one runs.
     A sequence that ended is dropped from the next step launched (one more step may have run it: its slot has a row to
     spare, and nothing reads that step's token); its slot and rows go back to the pool at once - work queued later on
     the same stream runs after the step that last used them."""
 
-    def __init__(self, engine, decoder, budget, overlap_tokens=1024, direct=True, max_prefills=16):
+    def __init__(self, engine, decoder, budget, overlap_tokens=1024, direct=True, max_prefills=16, quiet_s=0.05):
+        """quiet_s: a second decode step is queued behind the running one only when no batch has been launched for this
+        long - while requests arrive, one that comes during a step waits for that step alone (measured on the 27B: 13 ms
+        alone, 35 ms with two 11 ms steps in front of it), and a server that only thinks keeps the GPU busy."""
         self.dec = decoder
         o = engine.opt
         if not 0 < o.think_seqs <= decoder.max_B:
@@ -464,6 +468,7 @@ class ThinkScheduler(Scheduler):
         self.jobs_lock = threading.Lock()
         self.max_prefills = max_prefills
         self.last_decode = False
+        self.quiet_s, self.last_prefill = quiet_s, 0.0
         super().__init__(engine, budget, overlap_tokens, direct)
         self.stats.update(decode_steps=0, decode_tokens=0, decode_rows_max=0, thoughts=0, think_prefills=0)
 
@@ -538,7 +543,9 @@ class ThinkScheduler(Scheduler):
                     launched = self._launch_prefill(pslot)
                     pslot ^= 1
                     self.last_decode = False
-                elif self.decoding:
+                    self.last_prefill = time.perf_counter()
+                elif self.decoding and not (inflight and inflight[-1][0] == "decode"
+                                            and time.perf_counter() - self.last_prefill < self.quiet_s):
                     launched = self._launch_decode(dslot)
                     dslot ^= 1
                     self.last_decode = True
