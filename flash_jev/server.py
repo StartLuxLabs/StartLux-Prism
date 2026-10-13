@@ -2,9 +2,13 @@
 
     python -m flash_jev.server --gguf X.gguf --model-dir DIR [--precision int8] [--port 8092]
 
-POST /v1/systemone  {"state": ..., "questions": {key: {"type", "instructions", "criteria"}}}
+POST /v1/systemone  {"state": ..., "questions": {key: {"type", "instructions", "criteria"}}, optional "images"}
   -> {"answers": {...}, "usage": {"input_tokens", "output_tokens"}, "model", "latency_ms", "timings"}
 GET  /health, GET /v1/models
+
+Images (StartLux-Decision v1.1's "images": base64 strings or data URIs in the evidence): read when the server has the
+model's vision tower, --mmproj (by default the one mmproj-*.gguf beside --gguf of a folder whose config.json has a
+vision tower); otherwise a request with images gets a 422 that says why.
 
 Request threads parse, render and tokenize (the tokenizer releases the GIL) and run the decision logic; every forward
 they need (one per request, two for wide choice lists) goes to one scheduler thread, which takes everything queued at
@@ -32,6 +36,7 @@ from concurrent.futures import Future
 
 import torch
 
+from . import images as I
 from .decide import Decider, request_controls
 from .engine.model import Engine, Options, group
 from .httpserve import serve
@@ -188,7 +193,24 @@ def main():
                          "the most likely option")
     ap.add_argument("--switch-interval", type=float, default=0.0005,
                     help="Python GIL switch interval (s): how long a thread may hold the GIL while another waits")
+    ap.add_argument("--mmproj", default="auto",
+                    help="the vision tower for images in the evidence (llama.cpp's mmproj GGUF of the model, "
+                         "mmproj-*-F16.gguf); auto: the one mmproj-*.gguf beside --gguf (or in --model-dir) when the "
+                         "folder's config.json has a vision tower; none: text only")
+    ap.add_argument("--max-images", type=int, default=I.MAX_IMAGES, help="most images per request")
+    ap.add_argument("--max-pixels", type=int, default=I.MAX_PIXELS,
+                    help="each image is resized to at most this many pixels (one token per 32 x 32)")
     a = ap.parse_args()
+    from .vision import find_mmproj, is_mmproj
+    if is_mmproj(a.gguf):
+        sys.exit(f"{a.gguf} is a vision projector (mmproj): pass the model's GGUF as --gguf and this one as --mmproj")
+    try:
+        mmproj, text_only = find_mmproj(a.mmproj, a.gguf, a.model_dir)
+    except ValueError as e:
+        sys.exit(str(e))
+    if mmproj and a.max_images <= 0:
+        mmproj, text_only = "", ("this server reads text only (started with --max-images 0): send the evidence "
+                                 "without images")
     if a.precision == "auto":
         from .gguf import GGML_Q4_K, GGML_Q5_K, GGML_Q6_K, GGUFFile
         kinds = {t.type for n, t in GGUFFile(a.gguf).tensors.items() if n.endswith("ffn_gate.weight")}
@@ -205,7 +227,14 @@ def main():
                                                   graph_max_tokens=a.graph_max_tokens, mem_fraction=a.mem_fraction,
                                                   calib=a.calib, prefix_cache=a.prefix_cache,
                                                   prefix_cache_tokens=a.prefix_cache_tokens,
-                                                  prefix_cache_min=a.prefix_cache_min, attn_qk8=a.attn_qk8))
+                                                  prefix_cache_min=a.prefix_cache_min, attn_qk8=a.attn_qk8,
+                                                  mmproj=mmproj))
+    images = I.Settings(max_images=a.max_images, max_pixels=a.max_pixels, refused=text_only)
+    if engine.vision is not None:
+        with open(os.path.join(a.model_dir, "config.json")) as f:
+            pad_id = json.load(f).get("image_token_id", images.pad_id)
+        images = I.Settings(max_images=a.max_images, max_pixels=a.max_pixels, factor=engine.vision.cfg.factor,
+                            pad_id=pad_id)
     t0 = time.perf_counter()
     if not a.no_graphs:
         engine.warm_up()
@@ -222,7 +251,8 @@ def main():
                                      "flash-jev", "release_date": "2026-10-01"}]}).encode()
     health = json.dumps({"status": "ok", "model": a.name, "precision": a.precision, "max_tokens": engine.max_tokens,
                          "batch_tokens": budget, "kind": kind, "think_mode": "never", "none_check": none_check,
-                         "allow_none": a.allow_none}).encode()
+                         "allow_none": a.allow_none, "images": engine.vision is not None,
+                         "max_images": a.max_images if engine.vision is not None else 0}).encode()
 
     def handle(method, path, body):
         path = path.split("?", 1)[0].rstrip("/")
@@ -242,15 +272,15 @@ def main():
         try:
             ctl = request_controls(req)
             backend, marks = Backend(sched), [("parsed", time.perf_counter())]
-            answers, usage = Decider(tok, backend, none_check, a.allow_none).decide(
-                req.get("state"), req["questions"], marks, ctl["allow_none"], ctl["none_check"])
+            answers, usage = Decider(tok, backend, none_check, a.allow_none, images).decide(
+                req.get("state"), req["questions"], marks, ctl["allow_none"], ctl["none_check"], req.get("images"))
             timings = dict(backend.last or {})
             timings["stages_ms"] = {b[0]: round((b[1] - a_[1]) * 1000, 3) for a_, b in zip(marks, marks[1:])}
             return 200, json.dumps({"answers": answers, "usage": usage, "model": a.name,
                                     "latency_ms": round((time.perf_counter() - t0) * 1000, 3),
                                     "timings": timings}).encode()
         except (ValueError, KeyError, TypeError, AttributeError) as e:
-            return 422, json.dumps({"error": str(e), "detail": [{"loc": ["body"], "msg": str(e),
+            return 422, json.dumps({"error": str(e), "detail": [{"loc": getattr(e, "loc", ["body"]), "msg": str(e),
                                                                   "type": "value_error"}]}).encode()
         except Exception as e:                           # noqa: BLE001
             traceback.print_exc()

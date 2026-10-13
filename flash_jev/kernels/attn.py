@@ -9,7 +9,11 @@ tensor is built.
   qkv_norm_rope: q -> rmsnorm(q_norm) -> RoPE -> qbuf [T, H, HD] bf16; k -> rmsnorm(k_norm) -> RoPE -> arena; v -> arena
   tree_attention: softmax(q K^T / sqrt(HD)) V per head (GQA: head h reads kv head h // (H / HKV)) times sigmoid(gate),
                   as bf16 [T, H*HD] (input of the output projection)
-RoPE is rotate-half on the first ROT dims (text positions: Qwen3.5's interleaved M-RoPE with equal t/h/w positions).
+RoPE is rotate-half on the first ROT dims: Qwen3.5's interleaved M-RoPE, whose frequency i turns with the time,
+height or width position as i % 3 is 0, 1 or 2 (mrope_section [11, 11, 10] interleaved).  A text token has the same
+position on all three axes, so one position per token does; image tokens (engine with a vision tower) have
+pos = -1 - k and their three positions in row k of an mrope table (engine/batch.py), and a text token's rotation is the
+same arithmetic as without the table.
 
 Optional int8 scores (Engine option attn_qk8): keys are also kept as int8 with one scale per token and kv head
 (written with the bf16 keys), queries are quantized per row in the attention kernel, and q k^T runs on int8 tensor
@@ -44,11 +48,12 @@ def launch(name):
 @triton.jit
 def _qkv_norm_rope_kernel(qkv_ptr, P, qn_ptr, kn_ptr, pos_ptr, kvrow_ptr, inv_freq_ptr, qbuf_ptr, kv_ptr,
                           kv_layer_off, kv_kind_stride, kv_head_stride, n_tok_ptr, eps,
-                          k8_ptr, k8_layer_off, k8_head_stride, k8s_ptr, k8s_layer_off, k8s_head_stride,
+                          k8_ptr, k8_layer_off, k8_head_stride, k8s_ptr, k8s_layer_off, k8s_head_stride, mrope_ptr,
                           H: tl.constexpr, HKV: tl.constexpr, HD: tl.constexpr, ROT: tl.constexpr, SLOT0: tl.constexpr,
-                          K8: tl.constexpr):
+                          K8: tl.constexpr, MROPE: tl.constexpr):
     """One program per (token, head slot): slots 0..H-1 queries, then HKV keys, then HKV values; the grid covers
-    slots SLOT0.. (keys and values only for the last layer, whose queries run at the read positions)."""
+    slots SLOT0.. (keys and values only for the last layer, whose queries run at the read positions).  MROPE: positions
+    below 0 name a row of the mrope table (module docstring)."""
     t = tl.program_id(0).to(tl.int64)       # int64 row offsets: [T, P] rows pass 2^31 elements on large batches
     j = tl.program_id(1) + SLOT0
     if t >= tl.load(n_tok_ptr):
@@ -69,7 +74,18 @@ def _qkv_norm_rope_kernel(qkv_ptr, P, qn_ptr, kn_ptr, pos_ptr, kvrow_ptr, inv_fr
         partner = tl.where(d < half, d + half, tl.where(d < ROT, d - half, d))
         yp = tl.load(base + partner).to(tl.float32) * inv * tl.load(wptr + partner)
         fi = tl.where(d < half, d, d - half)
-        ang = tl.load(pos_ptr + t).to(tl.float32) * tl.load(inv_freq_ptr + fi, mask=d < ROT, other=0.0)
+        if MROPE:
+            p = tl.load(pos_ptr + t)
+            img = p < 0
+            k = tl.maximum(-1 - p, 0) * 3
+            pt = tl.where(img, tl.load(mrope_ptr + k, mask=img, other=0), p)
+            ph = tl.where(img, tl.load(mrope_ptr + k + 1, mask=img, other=0), p)
+            pw = tl.where(img, tl.load(mrope_ptr + k + 2, mask=img, other=0), p)
+            ax = fi % 3
+            pd = tl.where(ax == 1, ph, tl.where(ax == 2, pw, pt))
+            ang = pd.to(tl.float32) * tl.load(inv_freq_ptr + fi, mask=d < ROT, other=0.0)
+        else:
+            ang = tl.load(pos_ptr + t).to(tl.float32) * tl.load(inv_freq_ptr + fi, mask=d < ROT, other=0.0)
         c = tl.cos(ang)
         s = tl.sin(ang)
         rot = tl.where(d < half, y * c - yp * s, y * c + yp * s)
@@ -205,15 +221,17 @@ def _k8_args(k8, attn_layer, like):
 
 
 def qkv_norm_rope(qkv, q_norm, k_norm, pos, kvrow, inv_freq, qbuf, kv, attn_layer, n_tok, T, cfg, slots="all",
-                  k8=None):
+                  k8=None, mrope=None):
     """slots: "all" (queries, keys, values), "kv" (keys and values), "q" (queries only).  k8: int8 key arenas to fill
-    as well (see the module docstring), or None."""
+    as well (see the module docstring), or None.  mrope: the [n, 3] int32 positions of the tokens whose pos is
+    -1 - row (an engine with a vision tower), or None (no such tokens)."""
     H, HKV, HD = cfg.n_head, cfg.n_kv_head, cfg.head_dim
     slot0, n = {"all": (0, H + 2 * HKV), "kv": (H, 2 * HKV), "q": (0, H)}[slots]
     _qkv_norm_rope_kernel[(T, n)](
         qkv, qkv.stride(0), q_norm, k_norm, pos, kvrow, inv_freq, qbuf, kv,
         attn_layer * kv.stride(0), kv.stride(1), kv.stride(2), n_tok, cfg.eps, *_k8_args(k8, attn_layer, kv),
-        H=H, HKV=HKV, HD=HD, ROT=cfg.rope_dim, SLOT0=slot0, K8=k8 is not None, num_warps=4)
+        mrope if mrope is not None else pos,
+        H=H, HKV=HKV, HD=HD, ROT=cfg.rope_dim, SLOT0=slot0, K8=k8 is not None, MROPE=mrope is not None, num_warps=4)
 
 
 def tree_attention(qbuf, qkv, kv, attn_layer, out, blocks, n_blocks, max_blocks, ranges, cfg, k8=None, read=False):

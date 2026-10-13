@@ -3,11 +3,13 @@ conversion exactly, so engines that load transformers checkpoints (StartLux-Deci
 the very same weights as the GGUF engines (Q8_0 values dequantized, then rounded to bf16 - the same bf16 weights the
 flash-jev bf16 path uses).
 
-    python -m flash_jev.tools.gguf_to_hf --gguf X.gguf --model-dir GGUF_REPO_DIR --out OUT_DIR
+    python -m flash_jev.tools.gguf_to_hf --gguf X.gguf --model-dir GGUF_REPO_DIR --out OUT_DIR [--mmproj MMPROJ.gguf]
 
 Inverse of llama.cpp conversion/qwen.py for Qwen3_5: norm weights - 1 (except the gated norm), A_log = log(-ssm_a),
-linear-attention value heads from tiled back to grouped order, conv1d [C, K] -> [C, 1, K].  The text decoder only: the
-vision tower and the MTP head are not in the GGUF (transformers initializes the vision tower; it is unused for text).
+linear-attention value heads from tiled back to grouped order, conv1d [C, K] -> [C, 1, K].  The MTP head is not in
+the GGUF.  The vision tower is not in it either: without --mmproj transformers initializes it (unused for text); with
+the model's mmproj file (llama.cpp's clip GGUF, F16) its weights come from there (vision.py: the inverse of llama.cpp's
+Qwen3-VL mmproj conversion), so the checkpoint reads images as the GGUF engines do.
 """
 import argparse
 import json
@@ -19,7 +21,8 @@ import torch
 from .. import gguf_weights
 
 COPY = ("config.json", "decision_config.json", "tokenizer.json", "tokenizer_config.json", "vocab.json", "merges.txt",
-        "chat_template.jinja", "LICENSE", "NOTICE")
+        "chat_template.jinja", "generation_config.json", "preprocessor_config.json", "video_preprocessor_config.json",
+        "LICENSE", "NOTICE")
 
 
 def grouped(x, dim, k_heads, v_per_k, head_dim):
@@ -30,7 +33,7 @@ def grouped(x, dim, k_heads, v_per_k, head_dim):
     return x.reshape(shape)
 
 
-def convert(gguf_path, model_dir, out_dir, shard_bytes=4 << 30):
+def convert(gguf_path, model_dir, out_dir, shard_bytes=4 << 30, mmproj=None):
     w = gguf_weights.load(gguf_path)
     cfg = w.config
     vpk, K = cfg.v_heads // cfg.k_heads, cfg.k_heads
@@ -72,6 +75,9 @@ def convert(gguf_path, model_dir, out_dir, shard_bytes=4 << 30):
             sd[a + "conv1d.weight"] = conv.unsqueeze(1).to(bf)
             sd[a + "norm.weight"] = l.ssm_norm.to(bf)
             sd[a + "out_proj.weight"] = grouped(l.wout.dequant(torch.float32), 1, K, vpk, cfg.gdn_dim).to(bf)
+    if mmproj:                                                                   # the vision tower (model.visual.*)
+        from ..vision import load as load_vision
+        sd.update({k: t.to(bf) for k, t in load_vision(mmproj)[1].items()})
     from safetensors.torch import save_file
 
     os.makedirs(out_dir, exist_ok=True)
@@ -101,8 +107,9 @@ def main():
     ap.add_argument("--gguf", required=True)
     ap.add_argument("--model-dir", required=True)
     ap.add_argument("--out", required=True)
+    ap.add_argument("--mmproj", help="the model's vision tower (llama.cpp mmproj GGUF): its weights as model.visual.*")
     a = ap.parse_args()
-    n = convert(a.gguf, a.model_dir, a.out)
+    n = convert(a.gguf, a.model_dir, a.out, mmproj=a.mmproj)
     print(f"wrote {n} tensors to {a.out}")
 
 
