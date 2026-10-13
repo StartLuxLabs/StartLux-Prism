@@ -180,6 +180,14 @@ on an H200. Another model of the family:
 `scripts/prepare_model.sh` (its folders for every engine), then `scripts/new_model.sh` (dispatch-table entries for its
 projection shapes, int8 calibration, correctness tests).
 
+**StartLux-Decision v1.1.** The server reads the kind of a model folder as StartLux-Decision v1.1's own package does
+(`flash_jev/modelcfg.py`): `v1` (decision_config.json `"format": "StartLux-Decision-v1"`), `auto_think`, or `instant`
+(a prompt read bidirectionally: refused for now). AutoThink folders such as StartLux-Decision-v1.1-27B-AutoThink run
+from their Q8_0 GGUF (`--gguf` names the model file; the folder also holds the `mmproj` vision file) and answer in one
+pass, as v1.1 does with `think_mode` `"never"`: the same prompts, read-out and answers as v1.1's package, including
+`none_probability` (below). Thoughts (`think_mode` `"auto"`, `"always"`) and images are in progress; such requests get
+a 422 until then. v1 folders answer exactly as before (`tests/test_v11.py`).
+
 ## How it works
 
 **One forward pass per batch, recorded as CUDA graphs.** A batch is a packed forest of token segments: the system
@@ -239,6 +247,11 @@ kept, measured, tried and dropped, with numbers: [docs/optimizations.md](docs/op
   included (`tests/test_cuda_gemm.py`); prefix-cache hits equal recomputing (`tests/test_prefix_cache.py --exact`);
   64 answers sent by 32 clients at once equal the same requests one at a time (`tests/test_stress.py`). The bf16 path
   is deterministic run to run, but cuBLAS picks its kernels by batch size, so it is not batch-invariant.
+- **StartLux-Decision v1.1** (`tests/test_v11.py`): 5,787 random prompts (1,812 with the extra "None of the above")
+  render to the same text and tokens as v1.1's package; 4,000 random requests (choice lists up to 300 options, every
+  none_check / allow_none combination) get the same answers, every float, from the same letter logits; 1,000 v1 requests
+  answer exactly as before v1.1 support, and on the RTX 5090 the v1 letter logits and StartLux-Decision-v1's whole
+  evaluation (12,351 decisions) stayed bit-identical.
 
 ## Serving
 
@@ -257,6 +270,15 @@ bucket, and a request beyond the largest bucket is refused with HTTP 422.
 Prefix cache: `--prefix-cache N` entries (64; 0 turns it off), `--prefix-cache-tokens` KV rows (65,536),
 `--prefix-cache-min` the shortest evidence cached (64 tokens). Opt-in: `--attn-qk8` (q k^T on int8 tensor cores, 15%
 off at 50,000 tokens, at a small probability error). `FLASHJEV_FLAGS` passes flags through `scripts/serve.sh`.
+
+StartLux-Decision v1.1 request fields, as its package defines them: `none_check` (true by default on v1.1 folders, as
+`startlux-decide serve` has it, false on v1 folders; `--none-check on|off` changes the default) gives every choice
+question the extra last option "None of the above" and reports its probability as `none_probability`, with
+`probabilities` renormalised over the listed options; `allow_none` (`--allow-none` for the default, or a question's own
+`allow_none`) also lets `choice` be null when that option is the most likely. `think_mode`, `gate`, `mix`,
+`think_budget`, `return_details`, `return_thought` and `thought_generation` are validated as v1.1 does.
+`POST /v1/decisions` is the same endpoint; `/health` reports the folder's `kind` and the defaults. A malformed body
+gets 422 on v1.1 folders and 400 on v1 folders, as each release's own server answers.
 
 ## Tests and benchmarks
 
@@ -279,6 +301,7 @@ python bench/charts.py                                                        # 
 | `tests/test_prefix_cache.py --exact` | cache hits bit for bit |
 | `tests/test_batch.py`, `tests/test_prompt.py` | the forest planner; prompts byte for byte against the chat template |
 | `scripts/accuracy_v1.sh` | StartLux-Decision-v1's evaluation suites through every flash-jev precision and StartLux's own server (`bench/accuracy_tables.py`, `bench/compare_preds.py`) |
+| `tests/test_v11.py` | StartLux-Decision v1.1 compatibility on the CPU: prompts and answers against v1.1's own package (`STARTLUX_DECIDE` = its checkout), v1 folders against the code before v1.1 support |
 | `tests/test_stress.py` | a running server under load: long evidence counted in full, the capacity limit refused cleanly, 8k-token requests and JevBench from 8-32 clients without a failed request, bit-identical answers under load |
 
 ## Documents
