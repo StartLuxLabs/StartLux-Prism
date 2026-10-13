@@ -15,6 +15,7 @@ numbers are from 2026-10-10 to 2026-10-12. Each chart is drawn from the table be
 - [StartLux-Decision-27B on an H200](#startlux-decision-27b-on-an-h200)
 - [Q4_K_M files: W4A8](#q4_k_m-files-w4a8)
 - [The longest request in one pass](#the-longest-request-in-one-pass)
+- [Accuracy: StartLux-Decision-v1's evaluation](#accuracy-startlux-decision-v1s-evaluation)
 - [Stress tests](#stress-tests)
 - [Engine configurations](#engine-configurations) · [Crashes on the RTX 5090 server](#crashes-on-the-rtx-5090-server)
 
@@ -85,6 +86,10 @@ JevK5 202. SGLang's native endpoint renders its own prompts too.
 "-": not run (the long-evidence runs take one configuration per engine; flash-jev's 9B ran them with `--prefix-cache 0`, its largest batch then 65,536 tokens). flash-jev's `tests/test_stress.py` passed all
 11 checks in every run: int8 and W4A8, on the RTX 5090 and the H200 ([Stress tests](#stress-tests)).
 
+**Accuracy** on StartLux-Decision-v1's own evaluation (the seven Intern-Decision suites, 12,351 decisions), against
+StartLux-Decision's own server on the same weights: flash-jev int8 averages 91.14 against 91.15 (4B) and 90.80 against
+91.06 (9B), bf16 91.26 and 91.05; [Accuracy](#accuracy-startlux-decision-v1s-evaluation).
+
 ## Setup
 
 **RTX 5090 server.** NVIDIA GeForce RTX 5090 (32 GB, 170 SMs, driver 580.173.02, CUDA 13.0), Intel Core Ultra 9 285K,
@@ -100,6 +105,20 @@ its 8 GPUs the whole day. Every engine ran alone on one GPU (GPU 5; `compare.sh`
 other process computed on it, and the result files record its processes), one after another: the baselines
 10:34-15:13, flash-jev 16:36-17:42. The same package versions as the RTX 5090 server's, llama.cpp the same build
 (b10639, for sm_90), the same scripts and flags.
+
+**Models.** StartLux-Decision v1, StartLux's GGUF releases on Hugging Face (published 2026-09-29), unchanged. Every
+file run here is byte-identical to the release: the SHA-256 of each file on the servers, computed on 2026-10-13, equals
+the one Hugging Face lists for it. The repositories were named `StartLux-Decision-<size>-<precision>-GGUF` when we
+downloaded them (2026-10-08 to 2026-10-11) and now carry a `v1`; the old names redirect.
+
+| Model | File (Hugging Face repository) | Size | SHA-256 | Run on |
+|---|---|---|---|---|
+| StartLux-Decision-v1-4B | [`StartLux-Decision-4B-Q8_0.gguf`](https://huggingface.co/startlux-models/StartLux-Decision-v1-4B-Q8_0-GGUF) | 4.48 GB | `3de47f14ca2807813a670d697e70815fbecf020732ca4d7fc5f2e6c3898e34df` | RTX 5090 |
+|  | [`StartLux-Decision-4B-Q4_K_M.gguf`](https://huggingface.co/startlux-models/StartLux-Decision-v1-4B-Q4_K_M-GGUF) | 2.71 GB | `36c2aec2c3741f0602b0d931273c1f55a7a8650bdb0be8d4adc9848a19b34b30` | RTX 5090 |
+| StartLux-Decision-v1-9B | [`StartLux-Decision-9B-Q8_0.gguf`](https://huggingface.co/startlux-models/StartLux-Decision-v1-9B-Q8_0-GGUF) | 9.53 GB | `9daae5054f92c3d17d764f8aeaaede1d681d5659c65735165f04698ea9c32ffe` | RTX 5090 |
+|  | [`StartLux-Decision-9B-Q4_K_M.gguf`](https://huggingface.co/startlux-models/StartLux-Decision-v1-9B-Q4_K_M-GGUF) | 5.63 GB | `d2757a83badaa8baee0cda0aaf0e2eab131785322c169f19accc169a3df36ef2` | RTX 5090 |
+| StartLux-Decision-v1-27B | [`StartLux-Decision-27B-Q8_0.gguf`](https://huggingface.co/startlux-models/StartLux-Decision-v1-27B-Q8_0-GGUF) | 28.60 GB | `5868a8a2df103c63353adfbda6f57fec5b6393c9b8a1d97392855a0335001088` | H200 |
+|  | [`StartLux-Decision-27B-Q4_K_M.gguf`](https://huggingface.co/startlux-models/StartLux-Decision-v1-27B-Q4_K_M-GGUF) | 16.55 GB | `7c23c38501989d30bdde77a0a6d434aa8de08f675ff6b511835d0c6fe03f146a` | RTX 5090, H200 |
 
 **Weights.** Each model from its Q8_0 GGUF; every engine runs the weights of that one file. flash-jev and llama.cpp
 read the GGUF: llama.cpp computes with its Q8_0 blocks; flash-jev bf16 dequantizes them, and flash-jev int8 requantizes
@@ -598,6 +617,98 @@ flash-jev int8 is 1.56x SGLang at 16k and 1.11x at 128k (attention, quadratic in
 FlashAttention 3). With the RTX 5090's attention tiles it took 29.2 s at 128k. With their default chunked prefill
 SGLang and vLLM answer a 256,000-token request in 41.7 s and 45.9 s; flash-jev refuses anything beyond its largest
 batch (HTTP 422), never cuts it.
+
+## Accuracy: StartLux-Decision-v1's evaluation
+
+Does flash-jev's speed cost accuracy? StartLux-Decision-v1's own evaluation, unchanged (`eval/suites.py` of
+[StartLuxLabs/StartLux-Decision-v1](https://github.com/StartLuxLabs/StartLux-Decision-v1), byte-identical to its main
+branch on 2026-10-13): the seven accuracy suites of the Intern-Decision bundle (InternLM/Intern-Decision @ 2f81580: the
+three public JevBench tiers, Typed Decisions test, ToolACE test, AG News test and WildJailBreak test; 10,751 rows,
+12,351 decisions), scored with the upstream JevBench code at 7ce310c7 (accuracy per suite, their unweighted average,
+Brier and ECE on JevBench hard), and the bundle's calibration pilot (96 questions whose answer is a known probability
+distribution; its own scorer, expected Brier and ECE). Every engine through its `/v1/systemone`, one request at a time
+(`suites.py predict --endpoint`), on the RTX 5090, 2026-10-13. The reference is StartLux-Decision's own server
+(`startlux_decision.server`, the implementation the published numbers come from) on the same GPU, the same weights
+(bf16, converted from the same Q8_0 file) and the same client. It reproduces StartLux's published averages: 91.15 for the
+4B (published 91.17; StartLux's own rerun gives 91.15) and 91.06 for the 9B (91.08). flash-jev int8 also ran from 8
+clients at once.
+
+### StartLux-Decision-v1-4B (RTX 5090)
+
+| engine | Easy | Original | Hard | Typed | ToolACE | AG News | WildJB | Average | JevBench public | Brier (Hard) | ECE (Hard) | pilot Brier | pilot ECE |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| StartLux-Decision server (reference) | 100.00 | 100.00 | 75.68 | 79.95 | 94.19 | 90.83 | 97.38 | **91.15** | 204 | 0.3747 | 0.1074 | 0.4991 | 0.0584 |
+| flash-jev int8 | 100.00 | 100.00 | 76.58 | 79.30 | 94.19 | 90.74 | 97.19 | **91.14** | 205 | 0.3740 | 0.1153 | 0.4998 | 0.0615 |
+| flash-jev int8, 8 clients at once | 100.00 | 100.00 | 76.58 | 79.30 | 94.19 | 90.74 | 97.19 | **91.14** | 205 | 0.3740 | 0.1153 | 0.4998 | 0.0615 |
+| flash-jev bf16 | 100.00 | 100.00 | 76.58 | 79.80 | 94.19 | 90.82 | 97.42 | **91.26** | 205 | 0.3755 | 0.1034 | 0.4994 | 0.0585 |
+| flash-jev W4A8 (Q4_K_M file) | 100.00 | 100.00 | 72.97 | 78.90 | 93.55 | 90.95 | 96.88 | **90.46** | 201 | 0.3712 | 0.1024 | 0.4930 | 0.0568 |
+| StartLux-Decision-v1-4B, published (original weights) | 100.00 | 100.00 | 75.68 | 79.95 | 94.19 | 90.91 | 97.47 | 91.17 | | | | | |
+
+| engine, against | decisions | same decision | right → wrong | wrong → right | mean / max abs. probability difference | bit-identical |
+|---|---|---|---|---|---|---|
+| flash-jev int8, against StartLux-Decision server (reference) | 12,351 | 12,223 (98.96%) | 70 | 47 | 0.0055 / 0.235 | 0 |
+| flash-jev int8, 8 clients at once, against StartLux-Decision server (reference) | 12,351 | 12,223 (98.96%) | 70 | 47 | 0.0055 / 0.235 | 0 |
+| flash-jev bf16, against StartLux-Decision server (reference) | 12,351 | 12,330 (99.83%) | 11 | 9 | 0.0008 / 0.026 | 0 |
+| flash-jev W4A8 (Q4_K_M file), against StartLux-Decision server (reference) | 12,351 | 12,111 (98.06%) | 127 | 99 | 0.0098 / 0.423 | 0 |
+| flash-jev int8, 8 clients at once, against flash-jev int8 | 12,351 | 12,351 (100.00%) | 0 | 0 | 0.0000 / 0.000 | 12,351 |
+
+### StartLux-Decision-v1-9B (RTX 5090)
+
+| engine | Easy | Original | Hard | Typed | ToolACE | AG News | WildJB | Average | JevBench public | Brier (Hard) | ECE (Hard) | pilot Brier | pilot ECE |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| StartLux-Decision server (reference) | 100.00 | 97.22 | 74.77 | 81.35 | 94.84 | 91.99 | 97.24 | **91.06** | 201 | 0.3563 | 0.0785 | 0.4774 | 0.0376 |
+| flash-jev int8 | 100.00 | 95.83 | 74.77 | 81.35 | 94.52 | 91.91 | 97.19 | **90.80** | 200 | 0.3555 | 0.0905 | 0.4762 | 0.0299 |
+| flash-jev bf16 | 100.00 | 97.22 | 74.77 | 81.30 | 94.84 | 92.00 | 97.24 | **91.05** | 201 | 0.3566 | 0.0787 | 0.4774 | 0.0380 |
+| flash-jev W4A8 (Q4_K_M file) | 100.00 | 97.22 | 73.87 | 80.45 | 95.16 | 92.05 | 97.10 | **90.84** | 200 | 0.3571 | 0.0770 | 0.4784 | 0.0360 |
+| StartLux-Decision-v1-9B, published (original weights) | 100.00 | 97.22 | 74.77 | 81.45 | 94.84 | 91.97 | 97.33 | 91.08 | | | | | |
+
+| engine, against | decisions | same decision | right → wrong | wrong → right | mean / max abs. probability difference | bit-identical |
+|---|---|---|---|---|---|---|
+| flash-jev int8, against StartLux-Decision server (reference) | 12,351 | 12,261 (99.27%) | 49 | 40 | 0.0041 / 0.306 | 0 |
+| flash-jev bf16, against StartLux-Decision server (reference) | 12,351 | 12,339 (99.90%) | 6 | 6 | 0.0006 / 0.032 | 0 |
+| flash-jev W4A8 (Q4_K_M file), against StartLux-Decision server (reference) | 12,351 | 12,191 (98.70%) | 84 | 68 | 0.0078 / 0.744 | 0 |
+
+### StartLux-Decision-v1-27B, its Q4_K_M file (RTX 5090)
+
+The 27B's Q8_0 file and its bf16 weights do not fit the RTX 5090, so neither flash-jev int8 nor the reference server runs it there: the Q4_K_M file on W4A8 against StartLux's published rows. (The int8 path and the reference on the 27B need the H200; its GPUs were all in use on 2026-10-13.)
+
+| engine | Easy | Original | Hard | Typed | ToolACE | AG News | WildJB | Average | JevBench public | Brier (Hard) | ECE (Hard) | pilot Brier | pilot ECE |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| flash-jev W4A8 (Q4_K_M file) | 100.00 | 97.22 | 80.18 | 80.70 | 94.84 | 90.97 | 98.37 | **91.76** | 207 | 0.2548 | 0.1020 | 0.4826 | 0.0725 |
+| StartLux-Decision-v1-27B, published (original weights) | 100.00 | 100.00 | 79.28 | 80.20 | 94.52 | 90.57 | 98.19 | 91.82 | | | | | |
+
+Per suite, flash-jev int8 against the reference (same decision; right → wrong / wrong → right):
+
+| suite | decisions | 4B | 9B |
+|---|---|---|---|
+| JevBench easy | 48 | 100.00% (0 / 0) | 100.00% (0 / 0) |
+| JevBench original | 72 | 100.00% (0 / 0) | 98.61% (1 / 0) |
+| JevBench hard | 111 | 97.30% (0 / 1) | 100.00% (0 / 0) |
+| Typed Decisions | 2,000 | 97.50% (30 / 17) | 97.65% (23 / 23) |
+| ToolACE | 310 | 100.00% (0 / 0) | 99.03% (2 / 1) |
+| AG News | 7,600 | 99.17% (32 / 25) | 99.55% (20 / 14) |
+| WildJailBreak | 2,210 | 99.46% (8 / 4) | 99.77% (3 / 2) |
+| total | 12,351 | 98.96% (70 / 47) | 99.27% (49 / 40) |
+
+What this shows:
+
+* **bf16 is the reference's equal**: 99.8-99.9% of the decisions are the same, the rest bf16 rounding between two
+  implementations; the averages within 0.11 and the pilot within 0.0003.
+* **int8 (W8A8), the fast path**: the suite average is 91.14 against 91.15 on the 4B and 90.80 against 91.06 on the 9B,
+  whose gap is mostly one of the 72 items of the Original tier. 1.0% (4B) and 0.7% (9B) of the decisions change,
+  near-ties, mostly in Typed Decisions and AG News, slightly more often from right to wrong: 23 and 9 decisions net of
+  12,351 (0.19% and 0.07%; McNemar p = 0.04 and 0.40). Calibration does not move: the pilot's expected Brier within
+  0.0012 of the reference (4B +0.0007, 9B -0.0012). JevBench public: 205 and 200 (reference 204 and 201).
+* **Under load the answers do not change**: from 8 clients at once every int8 probability is bit-identical to one
+  request at a time (12,351 of 12,351).
+* **W4A8 on the Q4_K_M files** costs what the files' 4-bit weights cost: StartLux publishes 201 of 231 on JevBench for
+  the 4B and 9B Q4_K_M files and 208 for the 27B's; W4A8 gives 201, 200 and 207. Against the reference on the Q8_0
+  weights its suite average is 0.69 (4B) and 0.22 (9B) lower; the 27B's Q4_K_M on W4A8 averages 91.76 against the 91.82
+  StartLux publishes for the original weights.
+
+Reproduce on the GPU server: `scripts/accuracy_v1.sh` (STARTLUX_V1: a checkout of StartLux-Decision-v1; BENCH: the
+folder its `eval/fetch_benchmarks.sh` fills), then `python bench/accuracy_tables.py` (these tables) and
+`bench/compare_preds.py` (agreement per suite). Results in `results/accuracy_v1/`.
 
 ## Stress tests
 
