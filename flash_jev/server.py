@@ -201,8 +201,8 @@ def main():
                     help="AutoThink folders: KV rows of the thinking sequences (prompt + thought each; 0: think-seqs x "
                          "(budget + 1024))")
     ap.add_argument("--context-length", type=int, default=0,
-                    help="AutoThink folders: prompt + thought tokens one question may use (the room check; 0: the "
-                         "largest batch, at most --think-kv-rows)")
+                    help="AutoThink folders: prompt + thought tokens one question may use (the room check; at most the "
+                         "largest batch and --think-kv-rows, 0: that)")
     a = ap.parse_args()
     if a.precision == "auto":
         from .gguf import GGML_Q4_K, GGML_Q5_K, GGML_Q6_K, GGUFFile
@@ -241,7 +241,7 @@ def main():
         sched = TH.ThinkScheduler(engine, decoder, budget, a.overlap_tokens, direct=not a.no_direct)
         framing = TH.Framing(a.model_dir)
         defaults = TH.default_controls(auto, think_mode=a.think_mode, none_check=none_check, allow_none=a.allow_none)
-        context = min(a.context_length or engine.max_tokens, a.think_kv_rows)
+        context = min(a.context_length or engine.max_tokens, engine.max_tokens, a.think_kv_rows)
     else:
         sched = Scheduler(engine, budget, a.overlap_tokens, direct=not a.no_direct)
     free, total = torch.cuda.mem_get_info()

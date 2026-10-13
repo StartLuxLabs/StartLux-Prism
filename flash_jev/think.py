@@ -471,9 +471,10 @@ class ThinkScheduler(Scheduler):
 
     def think(self, job):
         """Queue a sequence to generate -> its future (the consumer's result, the sequence's timings)."""
-        if len(job.ids) + job.max_tokens + 2 > self.pool.kv_rows:
+        rows = min(self.pool.kv_rows, self.dec.max_len)
+        if len(job.ids) + job.max_tokens + 2 > rows:
             raise ValueError(f"a thought of {job.max_tokens} tokens after a {len(job.ids)}-token prompt does not fit "
-                             f"the {self.pool.kv_rows} decoding rows")
+                             f"the {rows} rows a decoding sequence may use")
         with self.jobs_lock:
             self.waiting.append(job)
         self.q.put(None)                             # wake the loop
