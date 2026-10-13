@@ -41,7 +41,7 @@ TypeSafe `/v1/systemone` API. Prompts, read-outs, thoughts and decision rules ar
 - **Several GPUs, the same answers.** Data parallelism for throughput (`flash_jev.dp`, one server per GPU behind a
   router): three H200s give 2.89x the read-out throughput of one. Tensor parallelism for latency (`--tp 2` or `4`): a
   JevBench item with thoughts takes 902 ms on two H200s and 768 on four (1,209 on one), an 8,192-token prompt 301 and
-  242 ms (428). Either way, every answer is the single GPU's, bit for bit.
+  242 ms (428). The two combine, and every answer is the single GPU's, bit for bit.
 - **Kernels per GPU.** Every projection's kernel, tile and K split comes from a table measured on the GPU model. On
   Hopper, the int8 GEMMs run on warpgroup MMA with TMA and warp specialization (1,240-1,420 TOPS).
 
@@ -215,10 +215,14 @@ Tensor parallelism, two and four H200s on NVSwitch:
 | read-outs from 64 clients, requests/s | 30.9 | 43.3 | **54.0** |
 | with thoughts from 64 clients, requests/s | 6.28 | 8.26 | **9.81** |
 
-Short prompts gain little: the sums and maxima exchanged between the GPUs take a fifth to a third of a pass on two GPUs
-and two fifths on four. For throughput per GPU, data parallelism is ahead (88.7 requests/s on three GPUs against 54.0
-on four); tensor parallelism is the one that shortens a request. Details:
-[docs/benchmarks.md](docs/benchmarks.md#tensor-parallelism-the-27b-on-2-and-4-h200s).
+Short prompts gain little: each kernel's fixed cost does not divide among the GPUs, and the sums and maxima exchanged
+between them take a fifth to a third of a pass on two GPUs and two fifths on four. For throughput per GPU, data
+parallelism is ahead (88.7 requests/s on three GPUs against 54.0 on four with tensor parallelism).
+
+Both at once, four H200s as two 2-GPU servers behind the router (`python -m flash_jev.dp --tp 2`):
+84.0 requests/s of read-outs from 64 clients and 12.1 with thoughts (one 4-GPU server: 54.0 and 9.8), each request as
+fast as on one 2-GPU server (36.0 ms per read-out on average, 902 with thoughts), the answers again the single GPU's,
+bit for bit. Details: [docs/benchmarks.md](docs/benchmarks.md#tensor-parallelism-the-27b-on-2-and-4-h200s).
 
 ## Accuracy
 
@@ -316,6 +320,8 @@ python -m flash_jev.server --tp 2 --gpus 0,1 --gguf $M/StartLux-Decision-v1.1-27
   --model-dir $M --precision int8 --calib ~/jev/calib/StartLux-Decision-v1.1-27B-AutoThink-Q8_0.pt --port 8092
 ```
 
+Both at once: `python -m flash_jev.dp --gpus 0,1,2,3 --tp 2 ...` runs two servers of two GPUs each behind the router.
+
 ## Models, GPUs and precisions
 
 | `--precision` | weights | activations | used for |
@@ -368,7 +374,8 @@ Server flags:
 | `--tp`, `--gpus` | 1, the visible GPUs | tensor parallelism: one model over this many GPUs (int8; 2 or 4 on the 27B) |
 
 **Several GPUs, data parallelism** (`python -m flash_jev.dp --gpus ...`, the server's flags pass through):
-- **Workers:** one whole server per GPU, each with its own prefix cache and thoughts.
+- **Workers:** one whole server per GPU, each with its own prefix cache and thoughts; with `--tp N`, one
+  tensor-parallel server per N GPUs.
 - **Routing:** the router forwards every request whole to the worker that last answered the same evidence, unless
   that worker has more than `--affinity-slack` (2) requests in flight beyond the least loaded one; otherwise to the
   least loaded worker.
@@ -538,7 +545,7 @@ python bench/charts.py                                                        # 
 | `tests/test_v11.py` | StartLux-Decision v1.1 on the CPU: prompts and answers against its own package (`STARTLUX_DECIDE` = its checkout); v1 folders against the code before v1.1 support |
 | `tests/test_think.py`, `tests/test_decode.py` | thoughts against v1.1's package (loop detector, prompts, whole requests with fake engines); decode steps against the prefill (teacher forcing, isolation, sampling) |
 | `tests/test_vision.py`, `tests/test_vision_engine.py`, `tests/vision_reference.py` | images: placement, pixels, tokens and positions against v1.1 and transformers; the tower and image batches on the GPU; answers against transformers' model |
-| `tests/test_dp.py` | the data-parallel router on the CPU, against fake workers: evidence affinity, routing by load, failover |
+| `tests/test_dp.py` | the data-parallel router on the CPU, against fake workers: evidence affinity, routing by load, failover, `--tp` groups |
 | `tests/test_tp.py` | tensor parallelism against one GPU, bit for bit: read-outs, cache hits, batches, wide choices, decode logits and tokens, images (`--tp 2 --gpus 2,3 --ref-gpu 1`); `--server`: JevBench with thoughts through a `--tp` server and a one-GPU server |
 | `tests/test_stress.py` | a running server under load: long evidence counted in full, the capacity limit refused cleanly, many clients without a failed request, bit-identical answers under load |
 | `scripts/accuracy_v1.sh` | StartLux-Decision-v1's evaluation suites through every flash-jev precision and StartLux's own server |

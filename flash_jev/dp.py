@@ -1,10 +1,11 @@
 """Data parallelism: one flash-jev server per GPU and a router in front of them, on one port.
 
-    python -m flash_jev.dp --gpus 0,1,2,3 --port 8092 --gguf X.gguf --model-dir DIR [any flash_jev.server flag]
+    python -m flash_jev.dp --gpus 0,1,2,3 [--tp 2] --port 8092 --gguf X.gguf --model-dir DIR [any flash_jev.server flag]
 
 Every worker is a whole server (flash_jev.server: its own engine, scheduler, prefix cache and thoughts) on its GPU, on
---worker-port + i of --worker-host; the server flags after the router's own pass through to every worker.  The router
-forwards each request whole - every question of a request on one GPU, so they share its evidence - to:
+--worker-port + i of --worker-host; the server flags after the router's own pass through to every worker.  With --tp N
+each worker is a tensor-parallel server over N of the GPUs, in order (--gpus 0,1,2,3 --tp 2: workers on 0,1 and 2,3).
+The router forwards each request whole - every question of a request on one worker, so they share its evidence - to:
 
 1. the worker that last answered a request with the same evidence (its prefix cache holds it), unless that worker has
    more than --affinity-slack requests in flight beyond the least loaded one;
@@ -36,6 +37,14 @@ from .httpserve import serve
 
 MAX_KEYS = 4096                     # evidence keys remembered (least recently used dropped)
 AFFINITY_BODY = 1 << 20             # bodies above this are routed by load alone (no parse)
+
+
+def gpu_groups(gpus, tp):
+    """The workers' GPUs: "0,1,2,3" and tp 2 -> ["0,1", "2,3"]."""
+    gpus = [g.strip() for g in gpus.split(",") if g.strip()]
+    if tp < 1 or not gpus or len(gpus) % tp:
+        raise ValueError(f"--gpus {','.join(gpus)} does not split into workers of --tp {tp} GPUs")
+    return [",".join(gpus[i:i + tp]) for i in range(0, len(gpus), tp)]
 
 
 class Worker:
@@ -173,7 +182,9 @@ def wait_health(w, timeout):
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
-    ap.add_argument("--gpus", required=True, help="GPUs, one worker each, e.g. 0,1,2,3")
+    ap.add_argument("--gpus", required=True, help="GPUs, one worker each (--tp of them with --tp), e.g. 0,1,2,3")
+    ap.add_argument("--tp", type=int, default=1,
+                    help="GPUs per worker: each worker a tensor-parallel server (flash_jev.server --tp; the int8 path)")
     ap.add_argument("--host", default="127.0.0.1")
     ap.add_argument("--port", type=int, default=8092)
     ap.add_argument("--worker-host", default="127.0.0.1")
@@ -187,14 +198,23 @@ def main():
     for flag in ("--port", "--host"):
         if flag in rest:
             sys.exit(f"{flag} is the router's; the workers listen on --worker-host / --worker-port")
-    gpus = [g.strip() for g in a.gpus.split(",") if g.strip()]
+    try:
+        groups = gpu_groups(a.gpus, a.tp)
+    except ValueError as e:
+        sys.exit(str(e))
     os.makedirs(a.log_dir, exist_ok=True)
-    workers = [Worker(i, g, a.worker_host, a.worker_port + i) for i, g in enumerate(gpus)]
+    workers = [Worker(i, g, a.worker_host, a.worker_port + i) for i, g in enumerate(groups)]
+    # a Triton cache of its own per worker (as flash_jev/tp.py gives each rank): workers compiling the same kernel into
+    # one cache directory at once raced (a worker read another's half-written entry: FileNotFoundError on its metadata)
+    cache = os.environ.get("TRITON_CACHE_DIR") or os.path.join(os.path.expanduser("~"), ".triton", "cache")
 
     def start(w):
-        env = dict(os.environ, CUDA_VISIBLE_DEVICES=w.gpu)
-        log = open(os.path.join(a.log_dir, f"worker{w.idx}-gpu{w.gpu}.log"), "w")
+        env = dict(os.environ, CUDA_VISIBLE_DEVICES=w.gpu,          # a --tp server runs on its visible GPUs
+                   TRITON_CACHE_DIR=os.path.join(cache, f"dp-worker{w.idx}"))
+        log = open(os.path.join(a.log_dir, f"worker{w.idx}-gpu{w.gpu.replace(',', '-')}.log"), "w")
         cmd = [sys.executable, "-m", "flash_jev.server", "--host", w.host, "--port", str(w.port)] + rest
+        if a.tp > 1:
+            cmd += ["--tp", str(a.tp)]
         w.proc = subprocess.Popen(cmd, env=env, stdout=log, stderr=subprocess.STDOUT, start_new_session=True)
 
     def stop(*_):
@@ -245,7 +265,7 @@ def main():
                                         workers=hs)).encode()
         return 404, b'{"error": "not found"}'
 
-    print(f"Ready: http://{a.host}:{a.port}/v1/systemone ({len(workers)} workers on GPUs {','.join(gpus)})",
+    print(f"Ready: http://{a.host}:{a.port}/v1/systemone ({len(workers)} workers on GPUs {' | '.join(groups)})",
           flush=True)
     serve(a.host, a.port, handle)
 

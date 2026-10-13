@@ -1003,6 +1003,9 @@ The 231 items one at a time through the three workers gave the single GPU's deci
 thoughts, a three-pass run cannot end before its longest thought: one of about 4,000 tokens takes some 40 s on its
 own, so the gain shows in longer runs.
 
+Workers that are tensor-parallel servers themselves (`--tp 2`): [below](#tensor-parallelism-the-27b-on-2-and-4-h200s),
+"Both at once".
+
 ## Tensor parallelism: the 27B on 2 and 4 H200s
 
 StartLux-Decision-v1.1-27B-AutoThink (the Q8_0 file of [the thinking section](#startlux-decision-v11-27b-autothink-thinking),
@@ -1068,14 +1071,21 @@ the 64-entry prefix cache, 64 thoughts at once with their KV rows):
 | 1 | 41.0 / 14.2 / 146 | 29.9 / 30.9 | 1,209 / 19.5 | 4.09 s | 5.07 / 6.28 | 113.9 GiB |
 | 2 | 34.4 / 14.9 / 114 | 40.6 / 43.3 | 902 / 19.4 | 3.04 s | 6.56 / 8.26 | 64.0 GiB |
 | 4 | 29.0 / 12.4 / 93 | 49.8 / 54.0 | 768 / 17.0 | 2.59 s | 7.75 / 9.81 | 37.7 GiB |
+| 4: two servers of 2 (`flash_jev.dp --tp 2`) | 36.0 / 15.7 / 118 | 77.0 / 84.0 | 902 / 19.9 | 3.04 s | 8.71 / 12.13 | 64.0 GiB |
 
 Every configuration scores 214 of 231 without thoughts and 224 with them, the same 67 items thinking the same
 thoughts. The many-client runs send three passes (never) or two (auto) of request-numbered items; the auto runs start
 their request numbers at the same seeded value in every configuration, so the same items think the same thoughts
-there too (223 and 220 right from 16 clients, 226 and 222 from 64, in all three). JevBench's mean falls 1.19x on two
+there too (223 and 220 right from 16 clients, 226 and 222 from 64, in all four). JevBench's mean falls 1.19x on two
 GPUs and 1.41x on four without thoughts, 1.34x and 1.57x with them; the median item (a short prompt) hardly moves -
 the long prompts and the thoughts carry the gain. From 16 and 64 clients: 1.36-1.40x and 1.66-1.75x without
 thoughts, 1.29-1.32x and 1.53-1.56x with them.
+
+**Both at once** (the last row): `python -m flash_jev.dp --gpus 1,2,3,4 --tp 2`, two 2-GPU servers behind the router,
+the same runs. The 231 items one at a time gave the single GPU's probabilities and thoughts, bit for bit, with and
+without thoughts. On four GPUs, two 2-GPU servers answer 1.56x the read-outs of one 4-GPU server from 64 clients
+(84.0 against 54.0 requests/s) and 1.24x with thoughts (12.13 against 9.81), each request at a 2-GPU server's speed
+plus the router's hop (36.0 against 34.4 ms on average).
 
 ## Stress tests
 

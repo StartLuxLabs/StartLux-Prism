@@ -351,7 +351,8 @@ batch and thought (`tests/test_tp.py`), and it holds at 2 and 4 GPUs.  Numbers: 
   mapping: every GPU copies them itself, no NCCL broadcast), its header through a shared ring (a follower polls it,
   and naps after 2 s idle).  Image features are encoded on rank 0 first (so nothing fails after the pass is published)
   and broadcast.  Every rank compiles its Triton kernels into a cache of its own: four ranks compiling the same kernel
-  into one cache directory raced (a rank read another's half-written entry).  The CUDA extension's source directory
+  into one cache directory raced (a rank read another's half-written entry).  So does every worker of `flash_jev.dp`
+  (`--tp 2` on four GPUs: two rank 0s on one cold cache died the same way at start).  The CUDA extension's source directory
   is resolved to its real path: a follower that imported flash_jev by another path (its PYTHONPATH) hashed another
   build command and rebuilt the extension, and two ranks rebuilding in turn waited on each other's build lock (a hang
   at start).

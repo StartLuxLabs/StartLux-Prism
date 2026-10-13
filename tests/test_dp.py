@@ -1,5 +1,6 @@
 """flash_jev/dp.py's router on the CPU, against fake workers (HTTP servers that answer with their own index after a
-delay): evidence affinity, routing by load, a failing worker skipped and brought back by /health.
+delay): evidence affinity, routing by load, a failing worker skipped and brought back by /health; the GPU groups
+of --tp workers.
 
     python tests/test_dp.py
 """
@@ -98,6 +99,18 @@ def main():
           f"6 requests on {sorted(set(later))}, back after /health: {back}, retries {router.stats['retries']}: "
           f"{'ok' if good else 'FAILED'}")
     ok &= good
+
+    # 5. --tp N: the GPUs split into workers of N, in order; a count that does not divide is refused
+    groups = dp.gpu_groups("0,1,2,3", 2)
+    try:
+        dp.gpu_groups("0,1,2", 2)
+        refused = False
+    except ValueError:
+        refused = True
+    split = groups == ["0,1", "2,3"] and dp.gpu_groups("4,5,6,7", 4) == ["4,5,6,7"] and dp.gpu_groups("3", 1) == ["3"]
+    print(f"5. --tp groups: 0,1,2,3 by 2 -> {groups}, 0,1,2 by 2 refused: {refused}: "
+          f"{'ok' if split and refused else 'FAILED'}")
+    ok &= split and refused
     print("all ok" if ok else "FAILED")
     sys.exit(0 if ok else 1)
 
