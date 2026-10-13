@@ -1,0 +1,273 @@
+"""Host side of a forward pass: groups of prompt rows -> a packed forest of segments and the device tables.
+
+Every prompt starts with the system text, whose state (GDN recurrent + conv state, attention K/V) is computed once and
+kept in the persistent arenas (slot ROOT).  The rows of one group (the questions of one request) usually share more:
+the evidence.  The shared part becomes one segment (computed once), and each row's remainder becomes a tail segment
+that starts from the evidence's state:
+
+    ROOT (cached) -> E (shared evidence, fresh) -> T1, T2, ... (one per question; read at their last token)
+
+A row that shares nothing (single question, or questions that differ right after the system text) is one segment whose
+parent is ROOT.  Wave 0 holds segments whose parent state already exists (ROOT, or a prefix-cache entry); wave 1 holds
+segments whose parent is computed in this batch, so each GDN layer scans wave 0, then wave 1.
+
+With a prefix cache (engine/prefix_cache.py), a request whose evidence (its prompt head after the system text) is long
+enough is always split at the head: when the evidence is cached its questions start from the cached state, keys and
+values (no evidence segment at all); otherwise the evidence is a segment that writes its state into a new cache slot
+and its keys and values into the cache's KV rows, and the questions follow it in wave 1.
+"""
+from __future__ import annotations
+
+import dataclasses
+
+import numpy as np
+
+CHUNK = 64                           # GDN chunk (kernels/gdn.py CHUNK)
+BM = 32                              # attention query block (the engine passes kernels/attn.py's for its GPU)
+
+ZERO_SLOT, ROOT_SLOT = 0, 1          # persistent state slots: all-zero state, the system prefix
+MIN_SHARE = 8                        # shared tokens below this are not split into their own segment
+
+
+@dataclasses.dataclass
+class Group:
+    """The prompt rows of one request (one per question), all starting with the same `head` tokens (system text +
+    evidence; prompt.split_prompt).  head 0: unknown (the rows then share whatever common prefix they have).
+    Iterates and sizes like its list of rows."""
+    rows: list
+    head: int = 0
+
+    def __iter__(self):
+        return iter(self.rows)
+
+    def __len__(self):
+        return len(self.rows)
+
+
+@dataclasses.dataclass
+class Seg:
+    tokens: np.ndarray       # token ids of this segment
+    pos0: int                # absolute position of its first token
+    parent: int              # index of the parent segment in this batch, or -1 for a cached parent
+    in_ref: int              # GDN state reference to start from (persistent slot >= 0, transient <= -2)
+    out_ref: int = -1        # where the final GDN state goes (-1: nowhere)
+    kv_parent: tuple = (0, 0)  # cached parent (parent -1, not ROOT): (arena row, length) of its keys and values
+    save_conv: int = -1      # persistent slot that receives this segment's final conv state (ROOT init, cache entries)
+    kv_fixed: int = -1       # first KV arena row when the keys and values must stay (a cache entry); else scratch
+    no_root: bool = False    # computed from position 0 (does not continue the system text)
+    start: int = 0           # first packed token
+    kv_start: int = 0        # first KV arena row
+
+
+@dataclasses.dataclass
+class Plan:
+    n_tok: int
+    segs: list
+    read: list               # per input row: packed index of its read position (last token)
+    read_seg: list           # per input row: its segment
+    tables: dict             # name -> np.int32 array (device tables, unpadded)
+    counts: dict             # name -> live count
+    inserted: list = dataclasses.field(default_factory=list)   # prefix-cache entries this batch writes
+
+
+def plan_batch(groups, sys_len, kv_scratch0, root_kv=(0, 0), share=True, cache=None, system=None, max_inserts=16,
+               max_trans=64, bm=BM):
+    """groups: per request, a Group (or a plain list of token rows: head unknown).  All rows start with the system
+    text (sys_len tokens, `system`; a row that does not is computed whole from the zero state).  cache: a PrefixCache
+    (see the module docstring).  Returns a Plan whose tables index packed tokens 0..n_tok-1; KV rows of this batch
+    start at kv_scratch0, except cache entries' (rows the cache assigns).
+
+    max_inserts (new cache entries: conv-state saves) and max_trans (transient evidence states) are the device tables'
+    capacities: past them a request's evidence is computed without being cached, or its rows whole - the batch never
+    fails for lack of room."""
+    segs, read_seg = [], []
+    trans = 0
+    inserted, fresh = [], {}                    # fresh: evidence key -> the segment computing it in this batch
+    groups = [(g.rows, g.head) if isinstance(g, Group) else (g, 0) for g in groups]
+    groups = [([np.asarray(r, dtype=np.int32) for r in rows], head) for rows, head in groups]
+
+    def evidence(rows, head):                   # the cacheable evidence of a request, or None
+        if (cache is None or head - sys_len < cache.min_tokens or any(len(r) <= head for r in rows)
+                or (system is not None and not np.array_equal(rows[0][:sys_len], system))
+                or any(not np.array_equal(r[:head], rows[0][:head]) for r in rows[1:])):
+            return None
+        return rows[0][sys_len:head]
+
+    # look every request's evidence up first, so that making room for new entries never evicts one this batch uses
+    hits = {}
+    for rows, head in groups:
+        ev = evidence(rows, head)
+        if ev is not None and ev.tobytes() not in hits:
+            hits[ev.tobytes()] = cache.lookup(ev, count=False)
+    pinned = {k for k, ent in hits.items() if ent is not None}
+
+    def shared(rows, c, e_seg):                 # the rows' remainders after c tokens, children of segment e_seg
+        for r in rows:
+            read_seg.append(len(segs))
+            segs.append(Seg(r[c:], c, e_seg, segs[e_seg].out_ref))
+
+    for rows, head in groups:
+        if system is not None and any(len(r) <= sys_len or not np.array_equal(r[:sys_len], system) for r in rows):
+            # the prompt's tokens leave the system text's before it ends (BPE merged across the boundary, e.g. evidence
+            # that starts with a newline): compute it whole, without the cached system state
+            for r in rows:
+                read_seg.append(len(segs))
+                segs.append(Seg(r, 0, -1, ZERO_SLOT, no_root=True))
+            continue
+        for r in rows:
+            if len(r) <= sys_len:
+                raise ValueError("prompt has no tokens after the system text")
+        ev = evidence(rows, head)
+        if ev is not None:
+            key = ev.tobytes()
+            ent = hits.get(key)
+            if ent is not None:                 # cached: the questions start from the evidence's state
+                cache.count_hit(ent)
+                for r in rows:
+                    read_seg.append(len(segs))
+                    segs.append(Seg(r[head:], head, -1, ent.slot, kv_parent=(ent.kv_start, ent.length)))
+                continue
+            if key in fresh:                    # another request of this batch computes the same evidence
+                cache.stats["batch_shared"] += 1
+                shared(rows, head, fresh[key])
+                continue
+            ent = cache.insert(ev, pinned) if len(inserted) < max_inserts else cache.no_room()
+            e = len(segs)
+            if ent is not None:                 # computed into a new cache entry
+                pinned.add(key)
+                inserted.append(ent)
+                segs.append(Seg(ev, sys_len, -1, ROOT_SLOT, out_ref=ent.slot, save_conv=ent.slot, kv_fixed=ent.kv_start))
+                fresh[key] = e
+                shared(rows, head, e)
+                continue
+            if len(rows) > 1 and trans < max_trans:     # no room: the same split, through a transient state
+                segs.append(Seg(ev, sys_len, -1, ROOT_SLOT, out_ref=-2 - trans))
+                trans += 1
+                fresh[key] = e
+                shared(rows, head, e)
+                continue
+            for r in rows:                      # one question (or no transient left): computed whole
+                read_seg.append(len(segs))
+                segs.append(Seg(r[sys_len:], sys_len, -1, ROOT_SLOT))
+            continue
+        c = sys_len
+        if share and len(rows) > 1:
+            n = min(len(r) for r in rows) - 1
+            first = rows[0]
+            for r in rows[1:]:
+                diff = np.nonzero(r[:n] != first[:n])[0]
+                n = int(diff[0]) if len(diff) else n
+            c = max(n, sys_len)
+        if c - sys_len >= MIN_SHARE and trans < max_trans:
+            e = len(segs)
+            segs.append(Seg(rows[0][sys_len:c], sys_len, -1, ROOT_SLOT, out_ref=-2 - trans))
+            trans += 1
+            shared(rows, c, e)
+        else:
+            for r in rows:
+                read_seg.append(len(segs))
+                segs.append(Seg(r[sys_len:], sys_len, -1, ROOT_SLOT))
+    plan = _layout(segs, read_seg, kv_scratch0, root_kv, trans, bm=bm)
+    plan.inserted = inserted
+    return plan
+
+
+def plan_prefix(tokens, kv_row0=0, bm=BM):
+    """The system text alone: one segment from the zero state, final GDN and conv state into ROOT_SLOT, K/V at
+    arena rows kv_row0.. (persistent)."""
+    seg = Seg(np.asarray(tokens, dtype=np.int32), 0, -1, ZERO_SLOT, out_ref=ROOT_SLOT, save_conv=ROOT_SLOT)
+    return _layout([seg], [0], kv_row0, (0, 0), 0, bm=bm)
+
+
+def _layout(segs, read_seg, kv0, root_kv, n_trans, kw=4, bm=BM):
+    # waves: parents first
+    order = [i for i, s in enumerate(segs) if s.parent < 0] + [i for i, s in enumerate(segs) if s.parent >= 0]
+    pos = 0
+    for i in order:
+        segs[i].start = pos
+        segs[i].kv_start = segs[i].kv_fixed if segs[i].kv_fixed >= 0 else kv0 + pos
+        pos += len(segs[i].tokens)
+    n_tok = pos
+    ids = np.empty(n_tok, np.int32)
+    positions = np.empty(n_tok, np.int32)
+    kvrow = np.empty(n_tok, np.int32)
+    hist = np.full((n_tok, kw - 1), -1, np.int32)
+    for s in segs:
+        L = len(s.tokens)
+        sl = slice(s.start, s.start + L)
+        ids[sl] = s.tokens
+        positions[sl] = s.pos0 + np.arange(L)
+        kvrow[sl] = s.kv_start + np.arange(L)
+    def source(si, back):
+        """Pre-conv row of the token `back` positions before the start of segment si (1 <= back <= kw-1)."""
+        s = segs[si]
+        while s.parent >= 0:
+            p = segs[s.parent]
+            if len(p.tokens) >= back:
+                return p.start + len(p.tokens) - back
+            back -= len(p.tokens)
+            s = p
+        slot = s.in_ref                               # a persistent parent: its saved conv rows
+        if slot < 0 or slot == ZERO_SLOT:
+            return -1
+        return -2 - (slot * (kw - 1) + (kw - 1 - back))
+    for si, s in enumerate(segs):
+        L = len(s.tokens)
+        for j in range(kw - 1):
+            back = kw - 1 - j                          # tap j reads the token `back` positions earlier
+            if L > back:
+                hist[s.start + back:s.start + L, j] = np.arange(s.start, s.start + L - back, dtype=np.int32)
+            for i in range(min(back, L)):
+                hist[s.start + i, j] = source(si, back - i)
+    # GDN chunks and the two waves of segments.  A first-wave segment with exactly one child runs as one chain: the
+    # scan writes the parent's state on the way and continues into the child's chunks (the same chunk boundaries and
+    # arithmetic as a second wave, without the wait for it).  Rows: (first chunk, chunks, in, out, chained chunks).
+    n_child = {}
+    for s in segs:
+        if s.parent >= 0:
+            n_child[s.parent] = n_child.get(s.parent, 0) + 1
+    chain = {s.parent: i for i, s in enumerate(segs) if s.parent >= 0 and n_child[s.parent] == 1}
+    chunks, wave = [], ([], [])
+
+    def add_chunks(s):
+        for c0 in range(0, len(s.tokens), CHUNK):
+            chunks.append((s.start + c0, min(CHUNK, len(s.tokens) - c0)))
+    for i in order:
+        s = segs[i]
+        if s.parent >= 0 and chain.get(s.parent) == i:
+            continue                                   # scanned with its parent
+        first = len(chunks)
+        add_chunks(s)
+        tail = 0
+        if s.parent < 0 and i in chain:
+            n0 = len(chunks)
+            add_chunks(segs[chain[i]])
+            tail = len(chunks) - n0
+        wave[0 if s.parent < 0 else 1].append((first, len(chunks) - first, s.in_ref, s.out_ref, tail))
+    # conv-state saves (ROOT init / kept segments)
+    saves = []
+    for si, s in enumerate(segs):
+        if s.save_conv >= 0:
+            L = len(s.tokens)
+            for r in range(kw - 1):
+                back = kw - 1 - r
+                code = s.start + L - back if L >= back else source(si, back - L)
+                saves.append((s.save_conv, r, code))
+    # attention: ranges per segment (a: system prefix, b: parent, own causal) and query blocks
+    ranges, blocks = [], []
+    for si, s in enumerate(segs):
+        a = (0, 0) if s.no_root else root_kv
+        b = (segs[s.parent].kv_start, len(segs[s.parent].tokens)) if s.parent >= 0 else s.kv_parent
+        ranges.append((a[0], a[1], b[0], b[1], s.kv_start, 0))
+        for q0 in range(0, len(s.tokens), bm):
+            blocks.append((s.start + q0, min(bm, len(s.tokens) - q0), si, q0))
+    read = [segs[si].start + len(segs[si].tokens) - 1 for si in read_seg]
+    read_blocks = [(i, 1, si, len(segs[si].tokens) - 1) for i, si in enumerate(read_seg)]
+    t = lambda x, w: np.asarray(x, np.int32).reshape(-1, w) if len(x) else np.zeros((0, w), np.int32)  # noqa: E731
+    tables = {"ids": ids, "pos": positions, "kvrow": kvrow, "hist": hist, "chunks": t(chunks, 2),
+              "segs0": t(wave[0], 5), "segs1": t(wave[1], 5), "saves": t(saves, 3), "ranges": t(ranges, 6),
+              "blocks": t(blocks, 4), "read": np.asarray(read, np.int32), "read_pos": positions[read] if read else
+              np.zeros(0, np.int32), "read_blocks": t(read_blocks, 4)}
+    counts = {"tok": n_tok, "chunks": len(chunks), "segs0": len(wave[0]), "segs1": len(wave[1]), "saves": len(saves),
+              "blocks": len(blocks), "read": len(read), "segs": len(segs), "trans": n_trans}
+    return Plan(n_tok, segs, read, read_seg, tables, counts)

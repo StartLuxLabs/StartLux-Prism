@@ -1,0 +1,460 @@
+// W4A8 GEMM on a Q4_K_M file's own weights (kernels/w4a8.py), for sm_80+ (built for sm_120): llama.cpp k-quant values
+// as they are, int8 activations with one scale per 256 inputs, int8 mma.sync tensor cores.
+//
+//   Q4_K (KIND 0)  W packed two 4-bit values per byte, per 32 inputs 16 bytes, byte t = q[t] | q[t + 16] << 4;
+//                  sc, mn uint8 [K / 256, N, 8] (per 32 inputs); d, dmin fp32 [K / 256, N].  w = d * sc * q - dmin * mn
+//   Q6_K (KIND 1)  W int8 (q - 32); sc int8 [K / 256, N, 16] (per 16 inputs); d fp32 [K / 256, N].   w = d * sc * q
+//   A int8 [M, K] row-major, a fp32 [K / 256, M], xs int8 [K / 256, M, 16] (Q4_K only: per 256 inputs the sums S of
+//   the eight groups of 32, |S| <= 32 * 127, split as S = (S & 63) + 64 (S >> 6): the eight S & 63, then the eight
+//   S >> 6).  The scales and sums are super-block-major, so a stage's copies of them read whole lines (row-major,
+//   each column's few bytes sat a row apart: most of the copy time of the K = 9216 projections).
+//
+// The arithmetic is kernels/w4a8.py's, bit for bit (tests/test_w4a8.py): per 256-input super-block, in increasing
+// order, the sub-blocks' int32 dot products times their integer scales (and Q4_K's mins times the activation sums) are
+// summed exactly in int32, then t = d * float(acc), t = fma(-dmin, float(mins), t) and y = fma(a, t, y), each rounded
+// once (explicit _rn intrinsics); the epilogue rounds y to bf16 or adds it into the fp32 residual.  So an output
+// element has the same bits whichever tile, config or batch computes it (batch invariance), as the W8A8 path.
+//
+// Main loop as w8a8_gemm.cu's: cp.async 16-byte copies (and 4/8-byte ones for the scales) STAGES deep, 128 inputs per
+// stage (two stages per super-block), XOR-swizzled 16-byte chunks read with ldmatrix.x4.  A Q4_K thread's B fragment
+// for one k32 step is one 32-bit word of the packed tile (bytes 4i..4i+3 of its row: k = 4i..4i+3 in the low nibbles,
+// 4i+16..4i+19 in the high ones), split by two masks; Q6_K runs each k32 step as two m16n8k16 MMAs (one scale per 16).
+// A Q4_K thread reads its columns' sub-block scales once per stage (a word: four sub-blocks), a Q6_K one per step (two
+// bytes).  The main loop runs a super-block (two stages) per iteration, so its first sub-block starts the integer sums
+// and its floating-point step follows the last one without a branch; the super-block's second stage also brings the
+// values only that step reads (d, dmin, mins, the activations' scales and split sums).  Q4_K's mins are not
+// accumulated per step: the floating-point step takes the sum of mins x sums from two m16n8k16 MMAs per tile (the low
+// and the high parts of the sums).  Tiles up to 128x128 with 32x32, 64x32 or 32x64 warp tiles (W4A8_CONFIGS; the
+// minimum CTAs per SM sets the register cap: 128 or 255 per thread).
+#include <cuda_bf16.h>
+#include <cuda_runtime.h>
+#include <stdint.h>
+#include <torch/extension.h>
+#include <c10/cuda/CUDAException.h>
+#include <c10/cuda/CUDAStream.h>
+
+namespace {
+
+__device__ __forceinline__ uint32_t smem_u32(const void* p) {
+  return static_cast<uint32_t>(__cvta_generic_to_shared(p));
+}
+__device__ __forceinline__ void cp_async16(uint32_t dst, const void* src, bool pred) {
+  asm volatile("cp.async.cg.shared.global [%0], [%1], 16, %2;\n" ::"r"(dst), "l"(src), "r"(pred ? 16 : 0));
+}
+__device__ __forceinline__ void cp_async8(uint32_t dst, const void* src, bool pred) {
+  asm volatile("cp.async.ca.shared.global [%0], [%1], 8, %2;\n" ::"r"(dst), "l"(src), "r"(pred ? 8 : 0));
+}
+__device__ __forceinline__ void cp_async4(uint32_t dst, const void* src, bool pred) {
+  asm volatile("cp.async.ca.shared.global [%0], [%1], 4, %2;\n" ::"r"(dst), "l"(src), "r"(pred ? 4 : 0));
+}
+__device__ __forceinline__ void cp_async_commit() { asm volatile("cp.async.commit_group;\n" ::); }
+template <int N>
+__device__ __forceinline__ void cp_async_wait() { asm volatile("cp.async.wait_group %0;\n" ::"n"(N)); }
+
+__device__ __forceinline__ void ldmatrix_x4(uint32_t addr, uint32_t& r0, uint32_t& r1, uint32_t& r2, uint32_t& r3) {
+  asm volatile("ldmatrix.sync.aligned.m8n8.x4.shared.b16 {%0, %1, %2, %3}, [%4];\n"
+               : "=r"(r0), "=r"(r1), "=r"(r2), "=r"(r3)
+               : "r"(addr));
+}
+// c = a b (fresh accumulators: one sub-block's dot products)
+__device__ __forceinline__ void mma_k32(int32_t* c, const uint32_t* a, uint32_t b0, uint32_t b1) {
+  asm(
+      "mma.sync.aligned.m16n8k32.row.col.s32.s8.s8.s32 {%0, %1, %2, %3}, {%4, %5, %6, %7}, {%8, %9}, "
+      "{%10, %10, %10, %10};\n"
+      : "=r"(c[0]), "=r"(c[1]), "=r"(c[2]), "=r"(c[3])
+      : "r"(a[0]), "r"(a[1]), "r"(a[2]), "r"(a[3]), "r"(b0), "r"(b1), "r"(0));
+}
+__device__ __forceinline__ void mma_k16(int32_t* c, uint32_t a0, uint32_t a1, uint32_t b0) {
+  asm(
+      "mma.sync.aligned.m16n8k16.row.col.s32.s8.s8.s32 {%0, %1, %2, %3}, {%4, %5}, {%6}, {%7, %7, %7, %7};\n"
+      : "=r"(c[0]), "=r"(c[1]), "=r"(c[2]), "=r"(c[3])
+      : "r"(a0), "r"(a1), "r"(b0), "r"(0));
+}
+
+// byte offset of 16-byte chunk c of row r in a tile of 64- or 128-byte rows (ldmatrix of 8 rows: distinct banks)
+template <int ROW>
+__device__ __forceinline__ int swz(int r, int c) {
+  if constexpr (ROW == 64) {
+    return r * 64 + ((c ^ ((r >> 1) & 3)) << 4);
+  } else {
+    return r * 128 + ((c ^ (r & 7)) << 4);
+  }
+}
+
+constexpr int BK = 128;  // inputs per stage: half a super-block
+
+template <int BM, int BN, int WARPS_M, int WARPS_N, int STAGES, int KIND>
+struct Cfg {
+  static constexpr int THREADS = WARPS_M * WARPS_N * 32;
+  static constexpr int WM = BM / WARPS_M, WN = BN / WARPS_N, MT = WM / 16, NT = WN / 8;
+  static constexpr int WROW = KIND == 0 ? BK / 2 : BK;  // weight bytes per row and stage
+  static constexpr int SCB = KIND == 0 ? 4 : 8;         // scale bytes per weight row and stage
+  static constexpr int OFF_W = BM * BK;
+  static constexpr int OFF_SC = OFF_W + BN * WROW;
+  static constexpr int OFF_MN = OFF_SC + BN * SCB;                      // Q4_K: the super-block's 8 mins per row
+  static constexpr int OFF_XS = OFF_MN + (KIND == 0 ? BN * 8 : 0);      // Q4_K: its 16 split-sum bytes per row
+  static constexpr int OFF_AS = OFF_XS + (KIND == 0 ? BM * 16 : 0);
+  static constexpr int OFF_D = OFF_AS + BM * 4;
+  static constexpr int OFF_DM = OFF_D + BN * 4;
+  static constexpr int STAGE = (OFF_DM + (KIND == 0 ? BN * 4 : 0) + 127) / 128 * 128;
+  static constexpr int SMEM = STAGES * STAGE;
+  static_assert(NT % 4 == 0 || KIND == 1, "Q4_K B fragments load four n8 tiles at a time");
+  static_assert(NT % 2 == 0, "B fragments load two n8 tiles at a time");
+};
+
+// Programmatic dependent launch (as csrc/w8a8_gemm.cu): the GEMM is launched while the kernel that writes its
+// activations (a norm or quantize kernel, which signals at its start) still runs.  The weights do not depend on it:
+// pdl 2 has the CTAs of the first row tile stream the first PDL_PF stages of their weight rows toward L2, pdl 3 every
+// CTA its whole rows (pdl 1 none); then each CTA waits for that kernel before it reads anything (even the row count).
+// The engine launches its W4A8 GEMMs without it: end to end it measured within noise (docs/optimizations.md).
+constexpr int PDL_PF = 4;
+
+template <int BM, int BN, int WARPS_M, int WARPS_N, int STAGES, int KIND, int EPI, int MINB>
+__global__ void __launch_bounds__(WARPS_M* WARPS_N * 32, MINB)
+    w4a8_kernel(const int8_t* __restrict__ A, const float* __restrict__ as, const int8_t* __restrict__ xs,
+                const uint8_t* __restrict__ Wq, const uint8_t* __restrict__ wsc, const uint8_t* __restrict__ wmn,
+                const float* __restrict__ wd, const float* __restrict__ wdm, void* __restrict__ out, int ldo,
+                const int* __restrict__ n_rows, int M, int N, int K, int pdl) {
+  using C = Cfg<BM, BN, WARPS_M, WARPS_N, STAGES, KIND>;
+  constexpr int THREADS = C::THREADS, WM = C::WM, WN = C::WN, MT = C::MT, NT = C::NT;
+  const int n0 = blockIdx.x * BN;
+  if (pdl) {
+    const int row_bytes = KIND == 0 ? K / 2 : K;
+    const int end = pdl == 3 ? row_bytes : pdl == 2 && blockIdx.y == 0 ? min(row_bytes, PDL_PF * C::WROW) : 0;
+    const int lines = (end + 127) / 128;
+    for (int i = threadIdx.x; i < BN * lines; i += THREADS) {
+      const int r = n0 + i / lines;
+      if (r < N) asm volatile("prefetch.global.L2 [%0];" ::"l"(Wq + (size_t)r * row_bytes + (i % lines) * 128));
+    }
+    asm volatile("griddepcontrol.wait;" ::: "memory");
+  }
+  const int live = *n_rows;
+  const int m0 = blockIdx.y * BM;
+  if (m0 >= live) return;
+  extern __shared__ __align__(128) uint8_t smem[];
+  const int tid = threadIdx.x, warp = tid / 32, lane = tid % 32;
+  const int wm = warp / WARPS_N, wn = warp % WARPS_N;
+  const int g = lane / 4, t4 = lane % 4;
+  const int NB = K / 256;
+
+  auto load_stage = [&](int stage, int kt) {
+    uint8_t* st = smem + stage * C::STAGE;
+    const int k0 = kt * BK, b = kt / 2;
+#pragma unroll
+    for (int i = tid; i < BM * (BK / 16); i += THREADS) {
+      const int r = i / (BK / 16), c = i % (BK / 16), gm = m0 + r;
+      cp_async16(smem_u32(st + swz<128>(r, c)), A + (size_t)min(gm, M - 1) * K + k0 + c * 16, gm < M);
+    }
+#pragma unroll
+    for (int i = tid; i < BN * (C::WROW / 16); i += THREADS) {
+      const int r = i / (C::WROW / 16), c = i % (C::WROW / 16), gn = n0 + r;
+      cp_async16(smem_u32(st + C::OFF_W + swz<C::WROW>(r, c)),
+                 Wq + (size_t)min(gn, N - 1) * (K / (KIND == 0 ? 2 : 1)) + k0 / (KIND == 0 ? 2 : 1) + c * 16,
+                 gn < N);
+    }
+    // the stage's sub-block scales of the tile's columns (consecutive in memory); the super-block's second stage
+    // also brings what its floating-point step reads: the columns' d (and Q4_K's dmin and mins), the rows' activation
+    // scales (and Q4_K's split sums)
+    const bool last = kt % 2 == 1;
+    for (int i = tid; i < BN; i += THREADS) {
+      const size_t gn = (size_t)b * N + min(n0 + i, N - 1);
+      const bool ok = n0 + i < N;
+      if constexpr (KIND == 0) {
+        cp_async4(smem_u32(st + C::OFF_SC + i * 4), wsc + gn * 8 + (kt % 2) * 4, ok);
+        if (last) {
+          cp_async8(smem_u32(st + C::OFF_MN + i * 8), wmn + gn * 8, ok);
+          cp_async4(smem_u32(st + C::OFF_DM + i * 4), wdm + gn, ok);
+        }
+      } else {
+        cp_async8(smem_u32(st + C::OFF_SC + i * 8), wsc + gn * 16 + (kt % 2) * 8, ok);
+      }
+      if (last) cp_async4(smem_u32(st + C::OFF_D + i * 4), wd + gn, ok);
+    }
+    if (last) {
+      for (int i = tid; i < BM; i += THREADS) {
+        const size_t gm = (size_t)b * M + min(m0 + i, M - 1);
+        const bool ok = m0 + i < M;
+        if constexpr (KIND == 0) cp_async16(smem_u32(st + C::OFF_XS + i * 16), xs + gm * 16, ok);
+        cp_async4(smem_u32(st + C::OFF_AS + i * 4), as + gm, ok);
+      }
+    }
+  };
+
+  float y[MT][NT][4];
+  int32_t acc[MT][NT][4];
+#pragma unroll
+  for (int i = 0; i < MT; ++i)
+#pragma unroll
+    for (int j = 0; j < NT; ++j)
+#pragma unroll
+      for (int e = 0; e < 4; ++e) y[i][j][e] = 0.f;
+
+  const int k_tiles = K / BK;
+#pragma unroll
+  for (int s = 0; s < STAGES - 1; ++s) {
+    if (s < k_tiles) load_stage(s, s);
+    cp_async_commit();
+  }
+  for (int kb = 0; kb < NB; ++kb) {  // a super-block (two stages) per iteration
+#pragma unroll
+    for (int h = 0; h < 2; ++h) {
+      const int kt = 2 * kb + h;
+      cp_async_wait<STAGES - 2>();
+      __syncthreads();
+      {
+        const int nk = kt + STAGES - 1;
+        if (nk < k_tiles) load_stage(nk % STAGES, nk);
+        cp_async_commit();
+      }
+      const uint8_t* st = smem + (kt % STAGES) * C::STAGE;
+      // this thread's columns' sub-block scales of the stage: Q4_K one byte per sub-block (a word per column), Q6_K
+      // eight int8 scales per column (read per step)
+      uint32_t scw[KIND == 0 ? NT : 1][2];
+      if constexpr (KIND == 0) {
+#pragma unroll
+        for (int jt = 0; jt < NT; ++jt)
+#pragma unroll
+          for (int c = 0; c < 2; ++c)
+            scw[jt][c] = *reinterpret_cast<const uint32_t*>(st + C::OFF_SC + (wn * WN + jt * 8 + 2 * t4 + c) * 4);
+      }
+      // fragments double-buffered across the stage's k32 steps: step ks + 1's ldmatrix loads issue before step ks's
+      // MMAs, so their latency hides behind tensor-core work (single-buffered Q6_K fragments spilled more, not less)
+      uint32_t af[2][MT][4], bf[2][NT][2];
+      auto load_frags = [&](uint32_t (&a)[MT][4], uint32_t (&b)[NT][2], int ks) {
+#pragma unroll
+        for (int i = 0; i < MT; ++i) {
+          const int r = wm * WM + i * 16 + (lane % 16);
+          ldmatrix_x4(smem_u32(st + swz<128>(r, ks * 2 + lane / 16)), a[i][0], a[i][1], a[i][2], a[i][3]);
+        }
+        if constexpr (KIND == 0) {
+#pragma unroll
+          for (int jt = 0; jt < NT; jt += 4) {
+            const int r = wn * WN + (jt + lane / 8) * 8 + (lane % 8);
+            uint32_t w0, w1, w2, w3;
+            ldmatrix_x4(smem_u32(st + C::OFF_W + swz<64>(r, ks)), w0, w1, w2, w3);
+            b[jt][0] = w0 & 0x0F0F0F0Fu, b[jt][1] = (w0 >> 4) & 0x0F0F0F0Fu;
+            b[jt + 1][0] = w1 & 0x0F0F0F0Fu, b[jt + 1][1] = (w1 >> 4) & 0x0F0F0F0Fu;
+            b[jt + 2][0] = w2 & 0x0F0F0F0Fu, b[jt + 2][1] = (w2 >> 4) & 0x0F0F0F0Fu;
+            b[jt + 3][0] = w3 & 0x0F0F0F0Fu, b[jt + 3][1] = (w3 >> 4) & 0x0F0F0F0Fu;
+          }
+        } else {
+#pragma unroll
+          for (int jt = 0; jt < NT; jt += 2) {
+            const int r = wn * WN + jt * 8 + (lane % 8) + (lane / 16) * 8;
+            ldmatrix_x4(smem_u32(st + C::OFF_W + swz<128>(r, ks * 2 + (lane / 8) % 2)), b[jt][0], b[jt][1],
+                        b[jt + 1][0], b[jt + 1][1]);
+          }
+        }
+      };
+      load_frags(af[0], bf[0], 0);
+#pragma unroll
+      for (int ks = 0; ks < BK / 32; ++ks) {  // k32 steps: Q4_K sub-block 4 h + ks of the super-block
+        if (ks + 1 < BK / 32) load_frags(af[(ks + 1) % 2], bf[(ks + 1) % 2], ks + 1);
+        const bool first = h == 0 && ks == 0;  // the super-block's first sub-block starts the integer sums
+#pragma unroll
+        for (int jt = 0; jt < NT; ++jt) {
+          if constexpr (KIND == 0) {
+            int32_t p[MT][4];  // this column tile's MMAs (MT of them in flight), then their scaling
+#pragma unroll
+            for (int i = 0; i < MT; ++i) mma_k32(p[i], af[ks % 2][i], bf[ks % 2][jt][0], bf[ks % 2][jt][1]);
+            const int sc0 = (scw[jt][0] >> (8 * ks)) & 0xFF, sc1 = (scw[jt][1] >> (8 * ks)) & 0xFF;
+#pragma unroll
+            for (int i = 0; i < MT; ++i) {
+              acc[i][jt][0] = (first ? 0 : acc[i][jt][0]) + sc0 * p[i][0];
+              acc[i][jt][1] = (first ? 0 : acc[i][jt][1]) + sc1 * p[i][1];
+              acc[i][jt][2] = (first ? 0 : acc[i][jt][2]) + sc0 * p[i][2];
+              acc[i][jt][3] = (first ? 0 : acc[i][jt][3]) + sc1 * p[i][3];
+            }
+          } else {  // sub-blocks 2 ks and 2 ks + 1 of the stage: bytes 2 ks, 2 ks + 1 of the column's eight
+            const int c0 = wn * WN + jt * 8 + 2 * t4;
+            const uint32_t v0 = *reinterpret_cast<const uint16_t*>(st + C::OFF_SC + c0 * 8 + 2 * ks);
+            const uint32_t v1 = *reinterpret_cast<const uint16_t*>(st + C::OFF_SC + (c0 + 1) * 8 + 2 * ks);
+            const int lo0 = (int8_t)v0, hi0 = (int8_t)(v0 >> 8), lo1 = (int8_t)v1, hi1 = (int8_t)(v1 >> 8);
+#pragma unroll
+            for (int i = 0; i < MT; ++i) {
+              int32_t pl[4], ph[4];
+              mma_k16(pl, af[ks % 2][i][0], af[ks % 2][i][1], bf[ks % 2][jt][0]);
+              mma_k16(ph, af[ks % 2][i][2], af[ks % 2][i][3], bf[ks % 2][jt][1]);
+              acc[i][jt][0] = (first ? 0 : acc[i][jt][0]) + lo0 * pl[0] + hi0 * ph[0];
+              acc[i][jt][1] = (first ? 0 : acc[i][jt][1]) + lo1 * pl[1] + hi1 * ph[1];
+              acc[i][jt][2] = (first ? 0 : acc[i][jt][2]) + lo0 * pl[2] + hi0 * ph[2];
+              acc[i][jt][3] = (first ? 0 : acc[i][jt][3]) + lo1 * pl[3] + hi1 * ph[3];
+            }
+          }
+        }
+      }
+      if (h == 1) {  // the super-block's floating-point step
+        const float* sa = reinterpret_cast<const float*>(st + C::OFF_AS);
+        const float* sd = reinterpret_cast<const float*>(st + C::OFF_D);
+        const float* sdm = reinterpret_cast<const float*>(st + C::OFF_DM);
+        // Q4_K's mins, sum over the eight sub-blocks of min x activation sum, as two m16n8k16 MMAs per tile: A = a
+        // row's 16 split-sum bytes (eight S & 63, then eight S >> 6), B = a column's eight mins against the first
+        // half (S & 63) or the second (S >> 6); mins = P_lo + 64 P_hi, exact
+        uint32_t ma[KIND == 0 ? MT : 1][2], mlo[KIND == 0 ? NT : 1], mhi[KIND == 0 ? NT : 1];
+        if constexpr (KIND == 0) {
+#pragma unroll
+          for (int i = 0; i < MT; ++i) {
+            const int r0 = wm * WM + i * 16 + g;
+            ma[i][0] = *reinterpret_cast<const uint32_t*>(st + C::OFF_XS + r0 * 16 + t4 * 4);
+            ma[i][1] = *reinterpret_cast<const uint32_t*>(st + C::OFF_XS + (r0 + 8) * 16 + t4 * 4);
+          }
+#pragma unroll
+          for (int jt = 0; jt < NT; ++jt) {
+            const uint32_t w = *reinterpret_cast<const uint32_t*>(st + C::OFF_MN + (wn * WN + jt * 8 + g) * 8 +
+                                                                  (t4 & 1) * 4);
+            mlo[jt] = t4 < 2 ? w : 0u;
+            mhi[jt] = t4 < 2 ? 0u : w;
+          }
+        }
+#pragma unroll
+        for (int jt = 0; jt < NT; ++jt) {
+          const int c0 = wn * WN + jt * 8 + 2 * t4;
+          const float d0 = sd[c0], d1 = sd[c0 + 1];
+          const float ndm0 = KIND == 0 ? -sdm[c0] : 0.f, ndm1 = KIND == 0 ? -sdm[c0 + 1] : 0.f;
+#pragma unroll
+          for (int i = 0; i < MT; ++i) {
+            const int r0 = wm * WM + i * 16 + g;
+            const float a0 = sa[r0], a1 = sa[r0 + 8];
+            int32_t plo[4] = {0, 0, 0, 0}, phi[4] = {0, 0, 0, 0};
+            if constexpr (KIND == 0) {
+              mma_k16(plo, ma[i][0], ma[i][1], mlo[jt]);
+              mma_k16(phi, ma[i][0], ma[i][1], mhi[jt]);
+            }
+#pragma unroll
+            for (int e = 0; e < 4; ++e) {
+              const float d = (e & 1) ? d1 : d0, a = (e & 2) ? a1 : a0;
+              float t = __fmul_rn(d, (float)acc[i][jt][e]);
+              if constexpr (KIND == 0) t = __fmaf_rn((e & 1) ? ndm1 : ndm0, (float)(plo[e] + 64 * phi[e]), t);
+              y[i][jt][e] = __fmaf_rn(a, t, y[i][jt][e]);
+            }
+          }
+        }
+      }
+    }
+  }
+  cp_async_wait<0>();
+
+#pragma unroll
+  for (int i = 0; i < MT; ++i) {
+#pragma unroll
+    for (int half = 0; half < 2; ++half) {
+      const int row = m0 + wm * WM + i * 16 + g + half * 8;
+      if (row >= live) continue;
+#pragma unroll
+      for (int jt = 0; jt < NT; ++jt) {
+        const int col = n0 + wn * WN + jt * 8 + 2 * t4;
+        if (col >= N) continue;
+        const float v0 = y[i][jt][half * 2], v1 = y[i][jt][half * 2 + 1];
+        if constexpr (EPI == 0) {
+          __nv_bfloat16* o = reinterpret_cast<__nv_bfloat16*>(out) + (size_t)row * ldo + col;
+          if (col + 1 < N) {
+            *reinterpret_cast<__nv_bfloat162*>(o) = __floats2bfloat162_rn(v0, v1);
+          } else {
+            o[0] = __float2bfloat16_rn(v0);
+          }
+        } else {
+          float* o = reinterpret_cast<float*>(out) + (size_t)row * ldo + col;
+          o[0] = __fadd_rn(o[0], v0);
+          if (col + 1 < N) o[1] = __fadd_rn(o[1], v1);
+        }
+      }
+    }
+  }
+}
+
+template <int BM, int BN, int WARPS_M, int WARPS_N, int STAGES, int KIND, int EPI, int MINB>
+void launch(const torch::Tensor& a, const torch::Tensor& as, const torch::Tensor& xs, const torch::Tensor& wq,
+            const torch::Tensor& wsc, const torch::Tensor& wmn, const torch::Tensor& wd, const torch::Tensor& wdm,
+            torch::Tensor& out, const torch::Tensor& n_rows, int pdl) {
+  using C = Cfg<BM, BN, WARPS_M, WARPS_N, STAGES, KIND>;
+  const int M = a.size(0), K = a.size(1), N = wd.size(1);
+  TORCH_CHECK(K % 256 == 0, "K must be a multiple of 256");
+  TORCH_CHECK(wd.size(0) == K / 256 && wd.is_contiguous() && wsc.is_contiguous() && wsc.size(1) == N &&
+                  as.size(0) == K / 256 && as.size(1) == M && as.is_contiguous(),
+              "super-block-major scales: d [K / 256, N], sc [K / 256, N, *], a [K / 256, M]");
+  TORCH_CHECK(C::SMEM <= 101376, "this tile config's stages exceed the shared memory of a block");
+  auto kern = w4a8_kernel<BM, BN, WARPS_M, WARPS_N, STAGES, KIND, EPI, MINB>;
+  static bool configured = false;
+  if (!configured) {
+    C10_CUDA_CHECK(cudaFuncSetAttribute(kern, cudaFuncAttributeMaxDynamicSharedMemorySize, C::SMEM));
+    configured = true;
+  }
+  cudaLaunchConfig_t config = {};
+  config.gridDim = dim3((N + BN - 1) / BN, (M + BM - 1) / BM);
+  config.blockDim = dim3(C::THREADS);
+  config.dynamicSmemBytes = C::SMEM;
+  config.stream = c10::cuda::getCurrentCUDAStream();
+  cudaLaunchAttribute attr[1];
+  attr[0].id = cudaLaunchAttributeProgrammaticStreamSerialization;  // may start while the previous kernel runs
+  attr[0].val.programmaticStreamSerializationAllowed = 1;
+  config.attrs = attr;
+  config.numAttrs = pdl ? 1 : 0;
+  C10_CUDA_CHECK(cudaLaunchKernelEx(
+      &config, kern, a.data_ptr<int8_t>(), as.data_ptr<float>(), KIND == 0 ? xs.data_ptr<int8_t>() : nullptr,
+      reinterpret_cast<const uint8_t*>(wq.data_ptr()), reinterpret_cast<const uint8_t*>(wsc.data_ptr()),
+      KIND == 0 ? wmn.data_ptr<uint8_t>() : nullptr, wd.data_ptr<float>(), KIND == 0 ? wdm.data_ptr<float>() : nullptr,
+      out.data_ptr(), (int)out.stride(0), n_rows.data_ptr<int>(), M, N, K, pdl));
+}
+
+}  // namespace
+
+// cfg: (BM, BN, warps M x N, minimum CTAs per SM - the register cap: 2 holds an 8-warp CTA to 128 registers a thread,
+// a 4-warp one to 255)  0 = 16x64 (1x2), 1 = 32x64 (1x2), 2 = 64x64 (2x2), 3 = 64x128 (2x4), 4 = 128x64 (4x2),
+// 5 = 128x128 (4x4), 6 = 16x32 (1x1), 7 = 32x128 (1x4); 64x32 and 32x64 warp tiles: 8 = 128x128 (2x4), 9 = 128x128
+// (4x2), 10 = 64x128 (1x4), 11 = 128x64 (2x2), 12 = 64x64 (1x2)
+#define W4A8_CONFIGS(X)  \
+  X(0, 16, 64, 1, 2, 2)    \
+  X(1, 32, 64, 1, 2, 2)    \
+  X(2, 64, 64, 2, 2, 2)    \
+  X(3, 64, 128, 2, 4, 2)   \
+  X(4, 128, 64, 4, 2, 2)   \
+  X(5, 128, 128, 4, 4, 1)  \
+  X(6, 16, 32, 1, 1, 2)    \
+  X(7, 32, 128, 1, 4, 2)   \
+  X(8, 128, 128, 2, 4, 1)  \
+  X(9, 128, 128, 4, 2, 1)  \
+  X(10, 64, 128, 1, 4, 2)  \
+  X(11, 128, 64, 2, 2, 2)  \
+  X(12, 64, 64, 1, 2, 2)
+
+void w4a8_gemm(torch::Tensor a, torch::Tensor as, torch::Tensor xs, torch::Tensor wq, torch::Tensor wsc,
+               std::optional<torch::Tensor> wmn, torch::Tensor wd, std::optional<torch::Tensor> wdm, torch::Tensor out,
+               torch::Tensor n_rows, int64_t kind, int64_t epi, int64_t cfg, int64_t stages, int64_t pdl) {
+  TORCH_CHECK(a.dtype() == torch::kInt8 && a.stride(1) == 1 && a.stride(0) == a.size(1), "contiguous int8 A");
+  TORCH_CHECK(epi == 0 ? out.dtype() == torch::kBFloat16 : out.dtype() == torch::kFloat32, "output dtype");
+  TORCH_CHECK(kind == 1 || (wmn.has_value() && wdm.has_value()), "Q4_K needs mins and dmin");
+  TORCH_CHECK(kind == 1 || (xs.dtype() == torch::kInt8 && xs.numel() == a.numel() / 16 && xs.is_contiguous() &&
+                            wmn->is_contiguous() && wdm->is_contiguous()),
+              "int8 split activation sums [K / 256, M, 16]");
+  const torch::Tensor mn = wmn.has_value() ? *wmn : wsc, dm = wdm.has_value() ? *wdm : wd;
+#define W4A8_STAGES(KIND, EPI, BM, BN, WMN, WNN, MB)                                                                  \
+  if (stages == 2) launch<BM, BN, WMN, WNN, 2, KIND, EPI, MB>(a, as, xs, wq, wsc, mn, wd, dm, out, n_rows, (int)pdl); \
+  else if (stages == 3) launch<BM, BN, WMN, WNN, 3, KIND, EPI, MB>(a, as, xs, wq, wsc, mn, wd, dm, out, n_rows,       \
+                                                                   (int)pdl);                                       \
+  else launch<BM, BN, WMN, WNN, 4, KIND, EPI, MB>(a, as, xs, wq, wsc, mn, wd, dm, out, n_rows, (int)pdl);
+#define W4A8_CASE(C, BM, BN, WMN, WNN, MB)                     \
+  case C:                                                      \
+    if (kind == 0) {                                           \
+      if (epi == 0) { W4A8_STAGES(0, 0, BM, BN, WMN, WNN, MB) } \
+      else { W4A8_STAGES(0, 1, BM, BN, WMN, WNN, MB) }          \
+    } else {                                                   \
+      if (epi == 0) { W4A8_STAGES(1, 0, BM, BN, WMN, WNN, MB) } \
+      else { W4A8_STAGES(1, 1, BM, BN, WMN, WNN, MB) }          \
+    }                                                          \
+    break;
+  switch (cfg) {
+    W4A8_CONFIGS(W4A8_CASE)
+    default:
+      TORCH_CHECK(false, "unknown w4a8 cfg");
+  }
+#undef W4A8_CASE
+#undef W4A8_STAGES
+}
+
+TORCH_LIBRARY_FRAGMENT(flash_jev, m) {
+  m.def("w4a8_gemm(Tensor a, Tensor a_s, Tensor xs, Tensor wq, Tensor wsc, Tensor? wmn, Tensor wd, Tensor? wdm, "
+        "Tensor(a!) out, Tensor n_rows, int kind, int epi, int cfg, int stages, int pdl=0) -> ()");
+}
+TORCH_LIBRARY_IMPL(flash_jev, CUDA, m) {
+  m.impl("w4a8_gemm", &w4a8_gemm);
+}
