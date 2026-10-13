@@ -38,8 +38,6 @@ import threading
 import time
 from concurrent.futures import Future, ThreadPoolExecutor, wait
 
-import numpy as np
-
 from . import jevfmt as J
 from .decide import (THINK_MODE_ALIASES, THINK_MODES, THOUGHT_GENERATIONS, Decider, answer, choice_answer,
                      softmax_v11, split_none)

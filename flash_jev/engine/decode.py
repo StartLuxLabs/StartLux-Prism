@@ -82,10 +82,15 @@ def load_head(gguf_path):
 
 
 class Decoder:
-    """attn: "split" (kernels/decode.py attention: the query heads of a kv head together, keys in fixed splits of 512
-    spread over the GPU) or "tree" (kernels/attn.py's one-query blocks, one program per query head).  max_len: the
-    longest sequence (prompt + thought) a step may see (default: the engine's largest batch, or its decoding rows if
-    fewer)."""
+    """Decode steps of up to max_seqs sequences on an Engine (whose Options think_seqs / think_kv_rows hold their slots
+    and rows; the caller assigns them): launch(rows, slot) queues one step, finish(step) returns its sampled tokens.
+    One CUDA graph per batch bucket (DEC_BUCKETS up to max_seqs); a row's sampling settings are part of the step's
+    tables, so one graph serves greedy and sampled rows alike.
+
+    attn: "split" (kernels/decode.py attention: the query heads of a kv head together, keys in fixed splits of 512 spread
+    over the GPU; at 64 sequences of 4,096 tokens 4.4 ms a step against 24 ms) or "tree" (kernels/attn.py's one-query
+    blocks, one program per query head).  max_len: the longest sequence (prompt + thought) a step may see (default:
+    the engine's largest batch, or its decoding rows if fewer)."""
 
     def __init__(self, engine, gguf_path, max_seqs=64, sampling=None, graphs=True, attn="split", max_len=0):
         e = self.eng = engine
