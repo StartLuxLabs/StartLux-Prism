@@ -898,6 +898,11 @@ What the experiment shows:
 
 **flash-jev int8 against flash-jev bf16** on the same Q8_0 weights (bf16: the blocks dequantized, cuBLAS), one H200.
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="images/v11-precision-dark.svg">
+  <img src="images/v11-precision.svg" width="840" alt="flash-jev int8 against bf16 on StartLux-Decision v1.1 27B, one H200. Prefill tokens per second: one prompt of 1,024 tokens 18,865 against 11,571; 8,192 tokens 19,219 against 11,424; 32,768 tokens 15,810 against 10,155; passes of 8,192 tokens of short prompts 20,855 against 11,958. Decode ms per step: 1 sequence 10.47 against 14.89; 8 sequences 11.06 against 15.90; 64 sequences 16.70 against 21.74.">
+</picture>
+
 Prefill (`bench/prefill_speed.py`):
 
 | one prompt per pass | 256 tokens | 1,024 | 4,096 | 8,192 | 16,384 | 32,768 | passes of 8,192 tokens (32 x 256, 64 x 128, 8 x 1,024) |

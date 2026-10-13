@@ -1,0 +1,76 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="840" height="586" viewBox="0 0 840 586" role="img" aria-labelledby="title desc" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif">
+<title id="title">StartLux-Decision v1.1 27B AutoThink on one H200</title>
+<desc id="desc">flash-jev int8 against the model's official engine (Startlux-decide-inference with its release flags on vLLM 0.31) in FP8, its faster setting; the same requests to both.</desc>
+<rect x="0.5" y="0.5" width="839" height="585" rx="8" fill="#fcfcfb" stroke="#e9e8e2"/>
+<text x="22.0" y="38.0" font-size="16" fill="#0b0b0b" text-anchor="start" font-weight="600">StartLux-Decision v1.1 27B AutoThink on one H200</text>
+<text x="22.0" y="62.0" font-size="12.5" fill="#52514e" text-anchor="start" font-weight="400">flash-jev int8 against the model's official engine (Startlux-decide-inference with its release flags on vLLM 0.31) in FP8, its faster</text>
+<text x="22.0" y="80.0" font-size="12.5" fill="#52514e" text-anchor="start" font-weight="400">setting; the same requests to both.</text>
+<rect x="22.0" y="94.0" width="11" height="11" rx="2" fill="#2a78d6"/>
+<text x="39.0" y="104.0" font-size="12.5" fill="#52514e" text-anchor="start" font-weight="400">flash-jev int8</text>
+<rect x="137.4" y="94.0" width="11" height="11" rx="2" fill="#b4b2aa"/>
+<text x="154.4" y="104.0" font-size="12.5" fill="#52514e" text-anchor="start" font-weight="400">official engine, FP8</text>
+<text x="22.0" y="134.0" font-size="12.5" fill="#0b0b0b" text-anchor="start" font-weight="600">One request at a time: mean ms per request (lower is better)</text>
+<text x="229.4" y="332.0" font-size="11" fill="#898781" text-anchor="middle" font-weight="400" style="font-variant-numeric: tabular-nums">0</text>
+<line x1="387.2" y1="149.0" x2="387.2" y2="317.0" stroke="#e1e0d9" stroke-width="1" shape-rendering="crispEdges"/>
+<text x="387.2" y="332.0" font-size="11" fill="#898781" text-anchor="middle" font-weight="400" style="font-variant-numeric: tabular-nums">500</text>
+<line x1="544.9" y1="149.0" x2="544.9" y2="317.0" stroke="#e1e0d9" stroke-width="1" shape-rendering="crispEdges"/>
+<text x="544.9" y="332.0" font-size="11" fill="#898781" text-anchor="middle" font-weight="400" style="font-variant-numeric: tabular-nums">1,000</text>
+<line x1="702.7" y1="149.0" x2="702.7" y2="317.0" stroke="#e1e0d9" stroke-width="1" shape-rendering="crispEdges"/>
+<text x="702.7" y="332.0" font-size="11" fill="#898781" text-anchor="middle" font-weight="400" style="font-variant-numeric: tabular-nums">1,500</text>
+<line x1="229.4" y1="149.0" x2="229.4" y2="317.0" stroke="#c3c2b7" stroke-width="1" shape-rendering="crispEdges"/>
+<text x="217.4" y="171.3" font-size="12.5" fill="#0b0b0b" text-anchor="end" font-weight="400">One question, ~256 tokens</text>
+<path d="M229.4,153.0 H232.4 A2.9971132000000003,2.9971132000000003 0 0 1 235.4,156.0 V163.0 A2.9971132000000003,2.9971132000000003 0 0 1 232.4,166.0 H229.4 Z" fill="#2a78d6"><title>One question, ~256 tokens, flash-jev int8: 19.0 ms</title></path>
+<text x="241.4" y="163.5" font-size="12" fill="#0b0b0b" text-anchor="start" font-weight="600" style="font-variant-numeric: tabular-nums" stroke="#fcfcfb" stroke-width="3" stroke-linejoin="round" paint-order="stroke">19.0</text>
+<text x="275.5" y="163.5" font-size="12" fill="#52514e" text-anchor="start" font-weight="400" stroke="#fcfcfb" stroke-width="3" stroke-linejoin="round" paint-order="stroke">2.8x faster</text>
+<path d="M229.4,168.0 H242.2 A4.0,4.0 0 0 1 246.2,172.0 V177.0 A4.0,4.0 0 0 1 242.2,181.0 H229.4 Z" fill="#b4b2aa"><title>One question, ~256 tokens, official engine, FP8: 53.1 ms</title></path>
+<text x="252.2" y="178.5" font-size="12" fill="#52514e" text-anchor="start" font-weight="400" style="font-variant-numeric: tabular-nums" stroke="#fcfcfb" stroke-width="3" stroke-linejoin="round" paint-order="stroke">53.1</text>
+<text x="217.4" y="213.3" font-size="12.5" fill="#0b0b0b" text-anchor="end" font-weight="400">One question, ~8,192 tokens</text>
+<path d="M229.4,195.0 H364.2 A4.0,4.0 0 0 1 368.2,199.0 V204.0 A4.0,4.0 0 0 1 364.2,208.0 H229.4 Z" fill="#2a78d6"><title>One question, ~8,192 tokens, flash-jev int8: 439.8 ms</title></path>
+<text x="374.2" y="205.5" font-size="12" fill="#0b0b0b" text-anchor="start" font-weight="600" style="font-variant-numeric: tabular-nums" stroke="#fcfcfb" stroke-width="3" stroke-linejoin="round" paint-order="stroke">439.8</text>
+<text x="415.8" y="205.5" font-size="12" fill="#52514e" text-anchor="start" font-weight="400" stroke="#fcfcfb" stroke-width="3" stroke-linejoin="round" paint-order="stroke">1.2x faster</text>
+<path d="M229.4,210.0 H393.0 A4.0,4.0 0 0 1 397.0,214.0 V219.0 A4.0,4.0 0 0 1 393.0,223.0 H229.4 Z" fill="#b4b2aa"><title>One question, ~8,192 tokens, official engine, FP8: 531.2 ms</title></path>
+<text x="403.0" y="220.5" font-size="12" fill="#52514e" text-anchor="start" font-weight="400" style="font-variant-numeric: tabular-nums" stroke="#fcfcfb" stroke-width="3" stroke-linejoin="round" paint-order="stroke">531.2</text>
+<text x="217.4" y="255.3" font-size="12.5" fill="#0b0b0b" text-anchor="end" font-weight="400">The README's three questions</text>
+<path d="M229.4,237.0 H232.2 A2.7447247200000002,2.7447247200000002 0 0 1 234.9,239.7 V247.3 A2.7447247200000002,2.7447247200000002 0 0 1 232.2,250.0 H229.4 Z" fill="#2a78d6"><title>The README's three questions, flash-jev int8: 17.4 ms</title></path>
+<text x="240.9" y="247.5" font-size="12" fill="#0b0b0b" text-anchor="start" font-weight="600" style="font-variant-numeric: tabular-nums" stroke="#fcfcfb" stroke-width="3" stroke-linejoin="round" paint-order="stroke">17.4</text>
+<text x="275.0" y="247.5" font-size="12" fill="#52514e" text-anchor="start" font-weight="400" stroke="#fcfcfb" stroke-width="3" stroke-linejoin="round" paint-order="stroke">5.3x faster</text>
+<path d="M229.4,252.0 H254.8 A4.0,4.0 0 0 1 258.8,256.0 V261.0 A4.0,4.0 0 0 1 254.8,265.0 H229.4 Z" fill="#b4b2aa"><title>The README's three questions, official engine, FP8: 92.9 ms</title></path>
+<text x="264.8" y="262.5" font-size="12" fill="#52514e" text-anchor="start" font-weight="400" style="font-variant-numeric: tabular-nums" stroke="#fcfcfb" stroke-width="3" stroke-linejoin="round" paint-order="stroke">92.9</text>
+<text x="217.4" y="297.3" font-size="12.5" fill="#0b0b0b" text-anchor="end" font-weight="400">The same, with thoughts</text>
+<path d="M229.4,279.0 H473.1 A4.0,4.0 0 0 1 477.1,283.0 V288.0 A4.0,4.0 0 0 1 473.1,292.0 H229.4 Z" fill="#2a78d6"><title>The same, with thoughts, flash-jev int8: 785.1 ms</title></path>
+<text x="483.1" y="289.5" font-size="12" fill="#0b0b0b" text-anchor="start" font-weight="600" style="font-variant-numeric: tabular-nums" stroke="#fcfcfb" stroke-width="3" stroke-linejoin="round" paint-order="stroke">785.1</text>
+<text x="524.7" y="289.5" font-size="12" fill="#52514e" text-anchor="start" font-weight="400" stroke="#fcfcfb" stroke-width="3" stroke-linejoin="round" paint-order="stroke">1.7x faster</text>
+<path d="M229.4,294.0 H634.3 A4.0,4.0 0 0 1 638.3,298.0 V303.0 A4.0,4.0 0 0 1 634.3,307.0 H229.4 Z" fill="#b4b2aa"><title>The same, with thoughts, official engine, FP8: 1,296.0 ms</title></path>
+<text x="644.3" y="304.5" font-size="12" fill="#52514e" text-anchor="start" font-weight="400" style="font-variant-numeric: tabular-nums" stroke="#fcfcfb" stroke-width="3" stroke-linejoin="round" paint-order="stroke">1,296.0</text>
+<text x="22.0" y="362.0" font-size="12.5" fill="#0b0b0b" text-anchor="start" font-weight="600">JevBench's 231 items from many clients: requests per second (higher is better)</text>
+<text x="229.4" y="518.0" font-size="11" fill="#898781" text-anchor="middle" font-weight="400" style="font-variant-numeric: tabular-nums">0</text>
+<line x1="357.4" y1="377.0" x2="357.4" y2="503.0" stroke="#e1e0d9" stroke-width="1" shape-rendering="crispEdges"/>
+<text x="357.4" y="518.0" font-size="11" fill="#898781" text-anchor="middle" font-weight="400" style="font-variant-numeric: tabular-nums">10</text>
+<line x1="485.3" y1="377.0" x2="485.3" y2="503.0" stroke="#e1e0d9" stroke-width="1" shape-rendering="crispEdges"/>
+<text x="485.3" y="518.0" font-size="11" fill="#898781" text-anchor="middle" font-weight="400" style="font-variant-numeric: tabular-nums">20</text>
+<line x1="613.2" y1="377.0" x2="613.2" y2="503.0" stroke="#e1e0d9" stroke-width="1" shape-rendering="crispEdges"/>
+<text x="613.2" y="518.0" font-size="11" fill="#898781" text-anchor="middle" font-weight="400" style="font-variant-numeric: tabular-nums">30</text>
+<line x1="741.1" y1="377.0" x2="741.1" y2="503.0" stroke="#e1e0d9" stroke-width="1" shape-rendering="crispEdges"/>
+<text x="741.1" y="518.0" font-size="11" fill="#898781" text-anchor="middle" font-weight="400" style="font-variant-numeric: tabular-nums">40</text>
+<line x1="229.4" y1="377.0" x2="229.4" y2="503.0" stroke="#c3c2b7" stroke-width="1" shape-rendering="crispEdges"/>
+<text x="217.4" y="399.3" font-size="12.5" fill="#0b0b0b" text-anchor="end" font-weight="400">Read-outs, 1 client</text>
+<path d="M229.4,381.0 H535.0 A4.0,4.0 0 0 1 539.0,385.0 V390.0 A4.0,4.0 0 0 1 535.0,394.0 H229.4 Z" fill="#2a78d6"><title>Read-outs, 1 client, flash-jev int8: 24.2 requests/s</title></path>
+<text x="545.0" y="391.5" font-size="12" fill="#0b0b0b" text-anchor="start" font-weight="600" style="font-variant-numeric: tabular-nums" stroke="#fcfcfb" stroke-width="3" stroke-linejoin="round" paint-order="stroke">24.2</text>
+<text x="579.0" y="391.5" font-size="12" fill="#52514e" text-anchor="start" font-weight="400" stroke="#fcfcfb" stroke-width="3" stroke-linejoin="round" paint-order="stroke">2.0x</text>
+<path d="M229.4,396.0 H380.2 A4.0,4.0 0 0 1 384.2,400.0 V405.0 A4.0,4.0 0 0 1 380.2,409.0 H229.4 Z" fill="#b4b2aa"><title>Read-outs, 1 client, official engine, FP8: 12.1 requests/s</title></path>
+<text x="390.2" y="406.5" font-size="12" fill="#52514e" text-anchor="start" font-weight="400" style="font-variant-numeric: tabular-nums" stroke="#fcfcfb" stroke-width="3" stroke-linejoin="round" paint-order="stroke">12.1</text>
+<text x="217.4" y="441.3" font-size="12.5" fill="#0b0b0b" text-anchor="end" font-weight="400">Read-outs, 64 clients</text>
+<path d="M229.4,423.0 H618.1 A4.0,4.0 0 0 1 622.1,427.0 V432.0 A4.0,4.0 0 0 1 618.1,436.0 H229.4 Z" fill="#2a78d6"><title>Read-outs, 64 clients, flash-jev int8: 30.7 requests/s</title></path>
+<text x="628.1" y="433.5" font-size="12" fill="#0b0b0b" text-anchor="start" font-weight="600" style="font-variant-numeric: tabular-nums" stroke="#fcfcfb" stroke-width="3" stroke-linejoin="round" paint-order="stroke">30.7</text>
+<text x="662.2" y="433.5" font-size="12" fill="#52514e" text-anchor="start" font-weight="400" stroke="#fcfcfb" stroke-width="3" stroke-linejoin="round" paint-order="stroke">1.17x</text>
+<path d="M229.4,438.0 H561.9 A4.0,4.0 0 0 1 565.9,442.0 V447.0 A4.0,4.0 0 0 1 561.9,451.0 H229.4 Z" fill="#b4b2aa"><title>Read-outs, 64 clients, official engine, FP8: 26.3 requests/s</title></path>
+<text x="571.9" y="448.5" font-size="12" fill="#52514e" text-anchor="start" font-weight="400" style="font-variant-numeric: tabular-nums" stroke="#fcfcfb" stroke-width="3" stroke-linejoin="round" paint-order="stroke">26.3</text>
+<text x="217.4" y="483.3" font-size="12.5" fill="#0b0b0b" text-anchor="end" font-weight="400">With thoughts, 64 clients</text>
+<path d="M229.4,465.0 H322.8 A4.0,4.0 0 0 1 326.8,469.0 V474.0 A4.0,4.0 0 0 1 322.8,478.0 H229.4 Z" fill="#2a78d6"><title>With thoughts, 64 clients, flash-jev int8: 7.6 requests/s</title></path>
+<text x="332.8" y="475.5" font-size="12" fill="#0b0b0b" text-anchor="start" font-weight="600" style="font-variant-numeric: tabular-nums" stroke="#fcfcfb" stroke-width="3" stroke-linejoin="round" paint-order="stroke">7.6</text>
+<text x="359.3" y="475.5" font-size="12" fill="#52514e" text-anchor="start" font-weight="400" stroke="#fcfcfb" stroke-width="3" stroke-linejoin="round" paint-order="stroke">1.17x</text>
+<path d="M229.4,480.0 H308.8 A4.0,4.0 0 0 1 312.8,484.0 V489.0 A4.0,4.0 0 0 1 308.8,493.0 H229.4 Z" fill="#b4b2aa"><title>With thoughts, 64 clients, official engine, FP8: 6.5 requests/s</title></path>
+<text x="318.8" y="490.5" font-size="12" fill="#52514e" text-anchor="start" font-weight="400" style="font-variant-numeric: tabular-nums" stroke="#fcfcfb" stroke-width="3" stroke-linejoin="round" paint-order="stroke">6.5</text>
+<text x="22.0" y="548.0" font-size="11.5" fill="#898781" text-anchor="start" font-weight="400">Same accuracy on StartLux-Decision v1's evaluation suites with thoughts: 92.94 (flash-jev) and 92.83 (FP8; 92.97 for the official BF16 server).</text>
+<text x="22.0" y="564.0" font-size="11.5" fill="#898781" text-anchor="start" font-weight="400">2026-10-13/14.</text>
+</svg>

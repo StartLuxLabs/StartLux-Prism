@@ -19,7 +19,7 @@ THEMES = {
                  accent="#3987e5", other="#62615c", line2="#898781", border="#2c2c2a"),
 }
 FONT = "system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif"
-W = 760              # chart width, px
+W = 840              # chart width, px (the docs show every chart at this width)
 PAD = 22             # outer padding
 ROW = 26             # one bar's row
 BAR = 14             # bar thickness (<= 24)
@@ -224,23 +224,29 @@ def bar_chart(theme, title, subtitle, rows, panels, legend=None, note=None, desc
 
 def group_chart(theme, title, subtitle, groups, panels, legend, note=None, desc=""):
     """Grouped horizontal bars (flash-jev, then another engine), panels stacked; a panel: dict(head, vals: one
-    (ours, theirs) pair per group, names: the other engine per group (or None), max, unit)."""
+    (ours, theirs) pair per group, names: the other engine per group (or None), max, unit, and optionally groups (this
+    panel's own group labels), fmt (the values' format, default ",.1f") and extra (a text after our value per group,
+    e.g. a speed-up))."""
     g = Svg(theme)
     y = header(g, title, subtitle, legend)
-    lw = max(text_w(lbl, 12.5) * 1.06 + 14 for lbl in groups)
+    lw = max(text_w(lbl, 12.5) * 1.06 + 14 for p in panels for lbl in p.get("groups", groups))
     px0 = PAD + lw
     pw = g.w - PAD - px0
     gh = 2 * GROUP_BAR + 2                                      # a group's bars, 2 px apart
     for p in panels:
+        groups_p = p.get("groups", groups)
+        fmt = p.get("fmt", ",.1f")
         y += 30
         for ln in wrap(p["head"], 12.5, g.w - 2 * PAD):
             g.text(PAD, y, ln, size=12.5, weight=600)
             y += 17
         y0 = y + 2
         step = gh + 14
-        bottom = y0 + step * len(groups) - 8
-        shown = [[f"{v:,.1f}" for v in pair] for pair in p["vals"]]
-        tails = [[s[0], s[1] + (f"  {n}" if n else "")] for s, n in zip(shown, p.get("names") or [None] * len(groups))]
+        bottom = y0 + step * len(groups_p) - 8
+        shown = [[format(v, fmt) for v in pair] for pair in p["vals"]]
+        extra = p.get("extra") or [None] * len(groups_p)
+        tails = [[s[0] + (f"  {e}" if e else ""), s[1] + (f"  {n}" if n else "")]
+                 for s, n, e in zip(shown, p.get("names") or [None] * len(groups_p), extra)]
         vl = max(text_w(t, 12) * 1.06 for pair in tails for t in pair) + 10
         plot = pw - vl
         vmax = p.get("max") or nice_max(max(max(pair) for pair in p["vals"]))
@@ -250,16 +256,20 @@ def group_chart(theme, title, subtitle, groups, panels, legend, note=None, desc=
                 g.line(x, y0 - 4, x, bottom + 4, "grid")
             g.text(x, bottom + 19, fmt_tick(t), size=11, color="muted", anchor="middle", num=True)
         g.line(px0, y0 - 4, px0, bottom + 4, "axis")
-        for k, (label, pair, tail) in enumerate(zip(groups, p["vals"], tails)):
+        for k, (label, pair, tail) in enumerate(zip(groups_p, p["vals"], tails)):
             top = y0 + k * step
             g.text(px0 - 12, top + gh / 2 + 4.3, label, size=12.5, anchor="end", color="ink")
             for s, v in enumerate(pair):
                 by = top + s * (GROUP_BAR + 2)
                 w = v / vmax * plot
                 name = legend[s][1] if s == 0 else (p["names"][k] if p.get("names") else legend[1][1])
-                g.hbar(px0, by, w, GROUP_BAR, "accent" if s == 0 else "other", f"{label}, {name}: {v:,.1f} {p['unit']}")
+                g.hbar(px0, by, w, GROUP_BAR, "accent" if s == 0 else "other",
+                       f"{label}, {name}: {format(v, fmt)} {p['unit']}")
                 if s == 0:
-                    g.text(px0 + w + 6, by + 10.5, tail[0], size=12, weight=600, num=True, halo=True)
+                    g.text(px0 + w + 6, by + 10.5, shown[k][0], size=12, weight=600, num=True, halo=True)
+                    if extra[k]:
+                        g.text(px0 + w + 6 + text_w(shown[k][0], 12) * 1.08 + 8, by + 10.5, extra[k], size=12,
+                               color="ink2", halo=True)
                 else:
                     g.text(px0 + w + 6, by + 10.5, shown[k][1], size=12, color="ink2", num=True, halo=True)
                     if p.get("names") and p["names"][k]:
@@ -344,7 +354,7 @@ def all_engines_chart(theme, title, subtitle, which, unit, note):
         theme, title, subtitle, [(r[0], r[0] == "flash-jev int8") for r in JEVBENCH],
         [dict(head=MODELS[m], vals=[r[k][m] for r in JEVBENCH], shown=[f"{r[k][m]:,.1f}" for r in JEVBENCH],
               unit=unit, max=LAT_MAX[m] if which == "lat" else None) for m in range(3)],
-        note=note, width=840)
+        note=note)
 
 
 def engines_chart(theme, title, m, note):
@@ -354,8 +364,7 @@ def engines_chart(theme, title, m, note):
     lat = [r[1][m] for r in rows]
     return bar_chart(
         theme, title,
-        "Every engine alone on the GPU, unique requests through the same HTTP client; the 231 public JevBench items. "
-        + STAND_IN,
+        "The 231 public JevBench items; every engine alone on the GPU, through the same HTTP client.",
         [(r[0], r[0] == "flash-jev int8") for r in rows],
         [dict(head="One request at a time: mean ms per item (lower is better)", vals=lat,
               shown=[f"{v:,.1f}" for v in lat], unit="ms", max=LAT_MAX[m]),
@@ -375,45 +384,40 @@ def chart(fn):
 @chart
 def jevbench_latency(theme):
     return all_engines_chart(
-        theme, "JevBench, one request at a time: every engine",
-        "Mean ms per item over the 231 public JevBench items (lower is better). StartLux-Decision-v1-4B and -9B on an "
-        "RTX 5090, -27B on an H200, from their Q8_0 files; every engine alone on the GPU, unique requests through the same HTTP client. "
-        + STAND_IN, "lat", "ms",
-        "Q8_0 weights for every engine (bf16 conversions of them for the PyTorch engines). The 27B's llama.cpp bar is "
-        "cut (589.2 ms). Scores, p50 and p95 per engine: docs/benchmarks.md.")
+        theme, "StartLux-Decision v1 on JevBench, one request at a time: every engine",
+        "Mean ms per item over the 231 public items (lower is better). Every engine alone on the GPU with the same "
+        "Q8_0 weights, through the same HTTP client.", "lat", "ms",
+        STAND_IN + " The 27B's llama.cpp bar is cut (589.2 ms). Scores, p50 and p95: docs/benchmarks.md.")
 
 
 @chart
 def jevbench_throughput(theme):
     return all_engines_chart(
-        theme, "JevBench from 32 clients: every engine",
-        "Requests per second while 32 clients send the 231 public items, three passes each (higher is better); no "
-        "engine failed a request. StartLux-Decision-v1-4B and -9B on an RTX 5090, -27B on an H200, from their Q8_0 files. "
-        + STAND_IN,
-        "tput", "requests/s",
-        "8 and 16 clients give every engine within a few percent of its 32-client rate: from 8 clients on, the GPU is "
-        "busy and more clients only queue.")
+        theme, "StartLux-Decision v1 on JevBench from 32 clients: every engine",
+        "Requests per second over three passes of the 231 public items (higher is better); no engine failed a request. "
+        "The same Q8_0 weights for every engine.", "tput", "requests/s",
+        STAND_IN + " 8 and 16 clients give every engine within a few percent of its 32-client rate.")
 
 
 @chart
 def rtx5090_4b(theme):
     return engines_chart(theme, "StartLux-Decision-v1-4B (Q8_0) on an RTX 5090", 0,
                          "Q8_0 weights for every engine (bf16 conversions of them for the PyTorch engines); "
-                         "2026-10-10.")
+                         "2026-10-10. " + STAND_IN)
 
 
 @chart
 def rtx5090_9b(theme):
     return engines_chart(theme, "StartLux-Decision-v1-9B (Q8_0) on an RTX 5090", 1,
                          "Q8_0 weights for every engine (bf16 conversions of them for the PyTorch engines); "
-                         "2026-10-10.")
+                         "2026-10-10. " + STAND_IN)
 
 
 @chart
 def h200_27b(theme):
     return engines_chart(theme, "StartLux-Decision-v1-27B (Q8_0) on an H200", 2,
                          "Q8_0 weights for every engine (bf16 conversions of them for the PyTorch engines); "
-                         "2026-10-12. llama.cpp's latency bar is cut (589.2 ms).")
+                         "2026-10-12. llama.cpp's latency bar is cut (589.2 ms). " + STAND_IN)
 
 
 def long_chart(theme, title, rows, cut8, cut50, note):
@@ -534,6 +538,47 @@ def v11_official_throughput(theme):
          dict(head="With thoughts, 64 clients", vals=[7.61, 6.52, 5.89], shown=["7.61", "6.52", "5.89"],
               unit="req/s")],
         note=V11_NOTE + " Three passes over the items per measurement, every request with its own evidence.")
+
+
+@chart
+def v11_hero(theme):
+    return group_chart(
+        theme, "StartLux-Decision v1.1 27B AutoThink on one H200",
+        "flash-jev int8 against the model's official engine (Startlux-decide-inference with its release flags on vLLM "
+        "0.31) in FP8, its faster setting; the same requests to both.",
+        [],
+        [dict(head="One request at a time: mean ms per request (lower is better)",
+              groups=["One question, ~256 tokens", "One question, ~8,192 tokens", "The README's three questions",
+                      "The same, with thoughts"],
+              vals=[(19.0, 53.1), (439.8, 531.2), (17.4, 92.9), (785.1, 1296.0)], unit="ms",
+              extra=["2.8x faster", "1.2x faster", "5.3x faster", "1.7x faster"]),
+         dict(head="JevBench's 231 items from many clients: requests per second (higher is better)",
+              groups=["Read-outs, 1 client", "Read-outs, 64 clients", "With thoughts, 64 clients"],
+              vals=[(24.2, 12.1), (30.7, 26.3), (7.61, 6.52)], unit="requests/s",
+              extra=["2.0x", "1.17x", "1.17x"])],
+        legend=[("accent", "flash-jev int8"), ("other", "official engine, FP8")],
+        note="Same accuracy on StartLux-Decision v1's evaluation suites with thoughts: 92.94 (flash-jev) and 92.83 "
+             "(FP8; 92.97 for the official BF16 server). 2026-10-13/14.")
+
+
+@chart
+def v11_precision(theme):
+    return group_chart(
+        theme, "flash-jev int8 against bf16: StartLux-Decision v1.1 27B on one H200",
+        "The same Q8_0 weights: int8 (W8A8) or dequantized to bf16 (cuBLAS); the engine alone, no HTTP.",
+        [],
+        [dict(head="Prefill: prompt tokens per second (higher is better)",
+              groups=["One prompt of 1,024 tokens", "One prompt of 8,192 tokens", "One prompt of 32,768 tokens",
+                      "Passes of 8,192 tokens of short prompts"],
+              vals=[(18865, 11571), (19219, 11424), (15810, 10155), (20855, 11958)], unit="tokens/s", fmt=",.0f",
+              extra=["1.63x", "1.68x", "1.56x", "1.74x"]),
+         dict(head="Decode: ms per step (lower is better)",
+              groups=["1 sequence", "8 sequences", "64 sequences"],
+              vals=[(10.47, 14.89), (11.06, 15.90), (16.70, 21.74)], unit="ms", fmt=",.2f",
+              extra=["1.42x", "1.44x", "1.30x"])],
+        legend=[("accent", "flash-jev int8"), ("other", "flash-jev bf16")],
+        note="Decode at a 512-token context. Thoughts written by int8 are slightly less accurate on hard items "
+             "(docs/benchmarks.md).")
 
 
 def main():

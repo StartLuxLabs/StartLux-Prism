@@ -1,10 +1,10 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="760" height="451" viewBox="0 0 760 451" role="img" aria-labelledby="title desc" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif">
+<svg xmlns="http://www.w3.org/2000/svg" width="840" height="451" viewBox="0 0 840 451" role="img" aria-labelledby="title desc" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif">
 <title id="title">The longest request in one pass (no chunked prefill)</title>
 <desc id="desc">One request at a time, the whole prompt in one forward pass; seconds per request. vLLM does not start without chunked prefill on this model.</desc>
-<rect x="0.5" y="0.5" width="759" height="450" rx="8" fill="#fcfcfb" stroke="#e9e8e2"/>
+<rect x="0.5" y="0.5" width="839" height="450" rx="8" fill="#fcfcfb" stroke="#e9e8e2"/>
 <text x="22.0" y="38.0" font-size="16" fill="#0b0b0b" text-anchor="start" font-weight="600">The longest request in one pass (no chunked prefill)</text>
-<text x="22.0" y="62.0" font-size="12.5" fill="#52514e" text-anchor="start" font-weight="400">One request at a time, the whole prompt in one forward pass; seconds per request. vLLM does not start without chunked</text>
-<text x="22.0" y="80.0" font-size="12.5" fill="#52514e" text-anchor="start" font-weight="400">prefill on this model.</text>
+<text x="22.0" y="62.0" font-size="12.5" fill="#52514e" text-anchor="start" font-weight="400">One request at a time, the whole prompt in one forward pass; seconds per request. vLLM does not start without chunked prefill on this</text>
+<text x="22.0" y="80.0" font-size="12.5" fill="#52514e" text-anchor="start" font-weight="400">model.</text>
 <line x1="22.0" y1="100.0" x2="40.0" y2="100.0" stroke="#2a78d6" stroke-width="2" stroke-linecap="round"/>
 <circle cx="31.0" cy="100.0" r="4" fill="#2a78d6" stroke="#fcfcfb" stroke-width="2"/>
 <text x="46.0" y="104.0" font-size="12.5" fill="#52514e" text-anchor="start" font-weight="400">flash-jev int8</text>
@@ -13,63 +13,63 @@
 <text x="168.4" y="104.0" font-size="12.5" fill="#52514e" text-anchor="start" font-weight="400">SGLang 0.5.21, --chunked-prefill-size -1</text>
 <text x="22.0" y="133.0" font-size="12.5" fill="#0b0b0b" text-anchor="start" font-weight="600">StartLux-Decision-v1-4B (Q8_0), RTX 5090</text>
 <text x="49.0" y="351.0" font-size="11" fill="#898781" text-anchor="end" font-weight="400" style="font-variant-numeric: tabular-nums">0 s</text>
-<line x1="56.0" y1="280.3" x2="319.0" y2="280.3" stroke="#e1e0d9" stroke-width="1" shape-rendering="crispEdges"/>
+<line x1="56.0" y1="280.3" x2="359.0" y2="280.3" stroke="#e1e0d9" stroke-width="1" shape-rendering="crispEdges"/>
 <text x="49.0" y="284.3" font-size="11" fill="#898781" text-anchor="end" font-weight="400" style="font-variant-numeric: tabular-nums">2 s</text>
-<line x1="56.0" y1="213.7" x2="319.0" y2="213.7" stroke="#e1e0d9" stroke-width="1" shape-rendering="crispEdges"/>
+<line x1="56.0" y1="213.7" x2="359.0" y2="213.7" stroke="#e1e0d9" stroke-width="1" shape-rendering="crispEdges"/>
 <text x="49.0" y="217.7" font-size="11" fill="#898781" text-anchor="end" font-weight="400" style="font-variant-numeric: tabular-nums">4 s</text>
-<line x1="56.0" y1="147.0" x2="319.0" y2="147.0" stroke="#e1e0d9" stroke-width="1" shape-rendering="crispEdges"/>
+<line x1="56.0" y1="147.0" x2="359.0" y2="147.0" stroke="#e1e0d9" stroke-width="1" shape-rendering="crispEdges"/>
 <text x="49.0" y="151.0" font-size="11" fill="#898781" text-anchor="end" font-weight="400" style="font-variant-numeric: tabular-nums">6 s</text>
-<line x1="56.0" y1="347.0" x2="319.0" y2="347.0" stroke="#c3c2b7" stroke-width="1" shape-rendering="crispEdges"/>
-<text x="98.1" y="363.0" font-size="11" fill="#898781" text-anchor="middle" font-weight="400" style="font-variant-numeric: tabular-nums">16k</text>
-<text x="140.2" y="363.0" font-size="11" fill="#898781" text-anchor="middle" font-weight="400" style="font-variant-numeric: tabular-nums">32k</text>
-<text x="182.2" y="363.0" font-size="11" fill="#898781" text-anchor="middle" font-weight="400" style="font-variant-numeric: tabular-nums">48k</text>
-<text x="224.3" y="363.0" font-size="11" fill="#898781" text-anchor="middle" font-weight="400" style="font-variant-numeric: tabular-nums">64k</text>
-<text x="308.5" y="363.0" font-size="11" fill="#898781" text-anchor="middle" font-weight="400" style="font-variant-numeric: tabular-nums">96k</text>
-<path d="M98.1,334.4 L140.2,314.4 L182.2,286.5 L224.3,251.6 L308.5,161.4" fill="none" stroke="#2a78d6" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
-<circle cx="98.1" cy="334.4" r="4" fill="#2a78d6" stroke="#fcfcfb" stroke-width="2"><title>flash-jev int8, 16k tokens: 0.377 s</title></circle>
-<circle cx="140.2" cy="314.4" r="4" fill="#2a78d6" stroke="#fcfcfb" stroke-width="2"><title>flash-jev int8, 32k tokens: 0.978 s</title></circle>
-<circle cx="182.2" cy="286.5" r="4" fill="#2a78d6" stroke="#fcfcfb" stroke-width="2"><title>flash-jev int8, 48k tokens: 1.814 s</title></circle>
-<circle cx="224.3" cy="251.6" r="4" fill="#2a78d6" stroke="#fcfcfb" stroke-width="2"><title>flash-jev int8, 64k tokens: 2.861 s</title></circle>
-<circle cx="308.5" cy="161.4" r="4" fill="#2a78d6" stroke="#fcfcfb" stroke-width="2"><title>flash-jev int8, 96k tokens: 5.567 s</title></circle>
-<path d="M98.1,323.9 L140.2,294.9 L182.2,261.7 L224.3,222.3" fill="none" stroke="#898781" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
-<circle cx="98.1" cy="323.9" r="4" fill="#898781" stroke="#fcfcfb" stroke-width="2"><title>SGLang 0.5.21, --chunked-prefill-size -1, 16k tokens: 0.692 s</title></circle>
-<circle cx="140.2" cy="294.9" r="4" fill="#898781" stroke="#fcfcfb" stroke-width="2"><title>SGLang 0.5.21, --chunked-prefill-size -1, 32k tokens: 1.562 s</title></circle>
-<circle cx="182.2" cy="261.7" r="4" fill="#898781" stroke="#fcfcfb" stroke-width="2"><title>SGLang 0.5.21, --chunked-prefill-size -1, 48k tokens: 2.559 s</title></circle>
-<circle cx="224.3" cy="222.3" r="4" fill="#898781" stroke="#fcfcfb" stroke-width="2"><title>SGLang 0.5.21, --chunked-prefill-size -1, 64k tokens: 3.741 s</title></circle>
-<text x="316.5" y="165.4" font-size="12" fill="#0b0b0b" text-anchor="start" font-weight="600" style="font-variant-numeric: tabular-nums" stroke="#fcfcfb" stroke-width="3" stroke-linejoin="round" paint-order="stroke">5.6 s</text>
-<text x="224.3" y="212.3" font-size="12" fill="#52514e" text-anchor="middle" font-weight="400" style="font-variant-numeric: tabular-nums" stroke="#fcfcfb" stroke-width="3" stroke-linejoin="round" paint-order="stroke">3.7 s</text>
-<text x="395.0" y="133.0" font-size="12.5" fill="#0b0b0b" text-anchor="start" font-weight="600">StartLux-Decision-v1-27B (Q8_0), H200</text>
-<text x="422.0" y="351.0" font-size="11" fill="#898781" text-anchor="end" font-weight="400" style="font-variant-numeric: tabular-nums">0 s</text>
-<line x1="429.0" y1="284.5" x2="692.0" y2="284.5" stroke="#e1e0d9" stroke-width="1" shape-rendering="crispEdges"/>
-<text x="422.0" y="288.5" font-size="11" fill="#898781" text-anchor="end" font-weight="400" style="font-variant-numeric: tabular-nums">5 s</text>
-<line x1="429.0" y1="222.0" x2="692.0" y2="222.0" stroke="#e1e0d9" stroke-width="1" shape-rendering="crispEdges"/>
-<text x="422.0" y="226.0" font-size="11" fill="#898781" text-anchor="end" font-weight="400" style="font-variant-numeric: tabular-nums">10 s</text>
-<line x1="429.0" y1="159.5" x2="692.0" y2="159.5" stroke="#e1e0d9" stroke-width="1" shape-rendering="crispEdges"/>
-<text x="422.0" y="163.5" font-size="11" fill="#898781" text-anchor="end" font-weight="400" style="font-variant-numeric: tabular-nums">15 s</text>
-<line x1="429.0" y1="347.0" x2="692.0" y2="347.0" stroke="#c3c2b7" stroke-width="1" shape-rendering="crispEdges"/>
-<text x="460.9" y="363.0" font-size="11" fill="#898781" text-anchor="middle" font-weight="400" style="font-variant-numeric: tabular-nums">16k</text>
-<text x="492.8" y="363.0" font-size="11" fill="#898781" text-anchor="middle" font-weight="400" style="font-variant-numeric: tabular-nums">32k</text>
-<text x="524.6" y="363.0" font-size="11" fill="#898781" text-anchor="middle" font-weight="400" style="font-variant-numeric: tabular-nums">48k</text>
-<text x="556.5" y="363.0" font-size="11" fill="#898781" text-anchor="middle" font-weight="400" style="font-variant-numeric: tabular-nums">64k</text>
-<text x="620.3" y="363.0" font-size="11" fill="#898781" text-anchor="middle" font-weight="400" style="font-variant-numeric: tabular-nums">96k</text>
-<text x="684.0" y="363.0" font-size="11" fill="#898781" text-anchor="middle" font-weight="400" style="font-variant-numeric: tabular-nums">128k</text>
-<path d="M460.9,335.6 L492.8,321.4 L524.6,303.8 L556.5,283.0 L620.3,231.6 L684.0,169.4" fill="none" stroke="#2a78d6" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
-<circle cx="460.9" cy="335.6" r="4" fill="#2a78d6" stroke="#fcfcfb" stroke-width="2"><title>flash-jev int8, 16k tokens: 0.910 s</title></circle>
-<circle cx="492.8" cy="321.4" r="4" fill="#2a78d6" stroke="#fcfcfb" stroke-width="2"><title>flash-jev int8, 32k tokens: 2.047 s</title></circle>
-<circle cx="524.6" cy="303.8" r="4" fill="#2a78d6" stroke="#fcfcfb" stroke-width="2"><title>flash-jev int8, 48k tokens: 3.460 s</title></circle>
-<circle cx="556.5" cy="283.0" r="4" fill="#2a78d6" stroke="#fcfcfb" stroke-width="2"><title>flash-jev int8, 64k tokens: 5.120 s</title></circle>
-<circle cx="620.3" cy="231.6" r="4" fill="#2a78d6" stroke="#fcfcfb" stroke-width="2"><title>flash-jev int8, 96k tokens: 9.234 s</title></circle>
-<circle cx="684.0" cy="169.4" r="4" fill="#2a78d6" stroke="#fcfcfb" stroke-width="2"><title>flash-jev int8, 128k tokens: 14.205 s</title></circle>
-<path d="M460.9,329.2 L492.8,309.7 L524.6,288.3 L556.5,264.4 L620.3,211.7 L684.0,150.7" fill="none" stroke="#898781" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
-<circle cx="460.9" cy="329.2" r="4" fill="#898781" stroke="#fcfcfb" stroke-width="2"><title>SGLang 0.5.21, --chunked-prefill-size -1, 16k tokens: 1.424 s</title></circle>
-<circle cx="492.8" cy="309.7" r="4" fill="#898781" stroke="#fcfcfb" stroke-width="2"><title>SGLang 0.5.21, --chunked-prefill-size -1, 32k tokens: 2.984 s</title></circle>
-<circle cx="524.6" cy="288.3" r="4" fill="#898781" stroke="#fcfcfb" stroke-width="2"><title>SGLang 0.5.21, --chunked-prefill-size -1, 48k tokens: 4.697 s</title></circle>
-<circle cx="556.5" cy="264.4" r="4" fill="#898781" stroke="#fcfcfb" stroke-width="2"><title>SGLang 0.5.21, --chunked-prefill-size -1, 64k tokens: 6.605 s</title></circle>
-<circle cx="620.3" cy="211.7" r="4" fill="#898781" stroke="#fcfcfb" stroke-width="2"><title>SGLang 0.5.21, --chunked-prefill-size -1, 96k tokens: 10.821 s</title></circle>
-<circle cx="684.0" cy="150.7" r="4" fill="#898781" stroke="#fcfcfb" stroke-width="2"><title>SGLang 0.5.21, --chunked-prefill-size -1, 128k tokens: 15.705 s</title></circle>
-<text x="692.0" y="173.4" font-size="12" fill="#0b0b0b" text-anchor="start" font-weight="600" style="font-variant-numeric: tabular-nums" stroke="#fcfcfb" stroke-width="3" stroke-linejoin="round" paint-order="stroke">14.2 s</text>
-<text x="692.0" y="154.7" font-size="12" fill="#52514e" text-anchor="start" font-weight="400" style="font-variant-numeric: tabular-nums" stroke="#fcfcfb" stroke-width="3" stroke-linejoin="round" paint-order="stroke">15.7 s</text>
-<text x="22.0" y="397.0" font-size="11.5" fill="#898781" text-anchor="start" font-weight="400">Prompt length in thousands of tokens. On the RTX 5090 flash-jev runs with --prefix-cache 0 (its largest batch then 98,304 tokens)</text>
-<text x="22.0" y="413.0" font-size="11.5" fill="#898781" text-anchor="start" font-weight="400">and SGLang with --mem-fraction-static 0.6 (it does not start otherwise); SGLang ran out of memory at 96k there, and between 128k</text>
-<text x="22.0" y="429.0" font-size="11.5" fill="#898781" text-anchor="start" font-weight="400">and 192k on the H200. flash-jev refuses a request beyond its largest batch (HTTP 422); it never cuts one.</text>
+<line x1="56.0" y1="347.0" x2="359.0" y2="347.0" stroke="#c3c2b7" stroke-width="1" shape-rendering="crispEdges"/>
+<text x="104.5" y="363.0" font-size="11" fill="#898781" text-anchor="middle" font-weight="400" style="font-variant-numeric: tabular-nums">16k</text>
+<text x="153.0" y="363.0" font-size="11" fill="#898781" text-anchor="middle" font-weight="400" style="font-variant-numeric: tabular-nums">32k</text>
+<text x="201.4" y="363.0" font-size="11" fill="#898781" text-anchor="middle" font-weight="400" style="font-variant-numeric: tabular-nums">48k</text>
+<text x="249.9" y="363.0" font-size="11" fill="#898781" text-anchor="middle" font-weight="400" style="font-variant-numeric: tabular-nums">64k</text>
+<text x="346.9" y="363.0" font-size="11" fill="#898781" text-anchor="middle" font-weight="400" style="font-variant-numeric: tabular-nums">96k</text>
+<path d="M104.5,334.4 L153.0,314.4 L201.4,286.5 L249.9,251.6 L346.9,161.4" fill="none" stroke="#2a78d6" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+<circle cx="104.5" cy="334.4" r="4" fill="#2a78d6" stroke="#fcfcfb" stroke-width="2"><title>flash-jev int8, 16k tokens: 0.377 s</title></circle>
+<circle cx="153.0" cy="314.4" r="4" fill="#2a78d6" stroke="#fcfcfb" stroke-width="2"><title>flash-jev int8, 32k tokens: 0.978 s</title></circle>
+<circle cx="201.4" cy="286.5" r="4" fill="#2a78d6" stroke="#fcfcfb" stroke-width="2"><title>flash-jev int8, 48k tokens: 1.814 s</title></circle>
+<circle cx="249.9" cy="251.6" r="4" fill="#2a78d6" stroke="#fcfcfb" stroke-width="2"><title>flash-jev int8, 64k tokens: 2.861 s</title></circle>
+<circle cx="346.9" cy="161.4" r="4" fill="#2a78d6" stroke="#fcfcfb" stroke-width="2"><title>flash-jev int8, 96k tokens: 5.567 s</title></circle>
+<path d="M104.5,323.9 L153.0,294.9 L201.4,261.7 L249.9,222.3" fill="none" stroke="#898781" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+<circle cx="104.5" cy="323.9" r="4" fill="#898781" stroke="#fcfcfb" stroke-width="2"><title>SGLang 0.5.21, --chunked-prefill-size -1, 16k tokens: 0.692 s</title></circle>
+<circle cx="153.0" cy="294.9" r="4" fill="#898781" stroke="#fcfcfb" stroke-width="2"><title>SGLang 0.5.21, --chunked-prefill-size -1, 32k tokens: 1.562 s</title></circle>
+<circle cx="201.4" cy="261.7" r="4" fill="#898781" stroke="#fcfcfb" stroke-width="2"><title>SGLang 0.5.21, --chunked-prefill-size -1, 48k tokens: 2.559 s</title></circle>
+<circle cx="249.9" cy="222.3" r="4" fill="#898781" stroke="#fcfcfb" stroke-width="2"><title>SGLang 0.5.21, --chunked-prefill-size -1, 64k tokens: 3.741 s</title></circle>
+<text x="354.9" y="165.4" font-size="12" fill="#0b0b0b" text-anchor="start" font-weight="600" style="font-variant-numeric: tabular-nums" stroke="#fcfcfb" stroke-width="3" stroke-linejoin="round" paint-order="stroke">5.6 s</text>
+<text x="249.9" y="212.3" font-size="12" fill="#52514e" text-anchor="middle" font-weight="400" style="font-variant-numeric: tabular-nums" stroke="#fcfcfb" stroke-width="3" stroke-linejoin="round" paint-order="stroke">3.7 s</text>
+<text x="435.0" y="133.0" font-size="12.5" fill="#0b0b0b" text-anchor="start" font-weight="600">StartLux-Decision-v1-27B (Q8_0), H200</text>
+<text x="462.0" y="351.0" font-size="11" fill="#898781" text-anchor="end" font-weight="400" style="font-variant-numeric: tabular-nums">0 s</text>
+<line x1="469.0" y1="284.5" x2="772.0" y2="284.5" stroke="#e1e0d9" stroke-width="1" shape-rendering="crispEdges"/>
+<text x="462.0" y="288.5" font-size="11" fill="#898781" text-anchor="end" font-weight="400" style="font-variant-numeric: tabular-nums">5 s</text>
+<line x1="469.0" y1="222.0" x2="772.0" y2="222.0" stroke="#e1e0d9" stroke-width="1" shape-rendering="crispEdges"/>
+<text x="462.0" y="226.0" font-size="11" fill="#898781" text-anchor="end" font-weight="400" style="font-variant-numeric: tabular-nums">10 s</text>
+<line x1="469.0" y1="159.5" x2="772.0" y2="159.5" stroke="#e1e0d9" stroke-width="1" shape-rendering="crispEdges"/>
+<text x="462.0" y="163.5" font-size="11" fill="#898781" text-anchor="end" font-weight="400" style="font-variant-numeric: tabular-nums">15 s</text>
+<line x1="469.0" y1="347.0" x2="772.0" y2="347.0" stroke="#c3c2b7" stroke-width="1" shape-rendering="crispEdges"/>
+<text x="505.7" y="363.0" font-size="11" fill="#898781" text-anchor="middle" font-weight="400" style="font-variant-numeric: tabular-nums">16k</text>
+<text x="542.5" y="363.0" font-size="11" fill="#898781" text-anchor="middle" font-weight="400" style="font-variant-numeric: tabular-nums">32k</text>
+<text x="579.2" y="363.0" font-size="11" fill="#898781" text-anchor="middle" font-weight="400" style="font-variant-numeric: tabular-nums">48k</text>
+<text x="615.9" y="363.0" font-size="11" fill="#898781" text-anchor="middle" font-weight="400" style="font-variant-numeric: tabular-nums">64k</text>
+<text x="689.4" y="363.0" font-size="11" fill="#898781" text-anchor="middle" font-weight="400" style="font-variant-numeric: tabular-nums">96k</text>
+<text x="762.8" y="363.0" font-size="11" fill="#898781" text-anchor="middle" font-weight="400" style="font-variant-numeric: tabular-nums">128k</text>
+<path d="M505.7,335.6 L542.5,321.4 L579.2,303.8 L615.9,283.0 L689.4,231.6 L762.8,169.4" fill="none" stroke="#2a78d6" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+<circle cx="505.7" cy="335.6" r="4" fill="#2a78d6" stroke="#fcfcfb" stroke-width="2"><title>flash-jev int8, 16k tokens: 0.910 s</title></circle>
+<circle cx="542.5" cy="321.4" r="4" fill="#2a78d6" stroke="#fcfcfb" stroke-width="2"><title>flash-jev int8, 32k tokens: 2.047 s</title></circle>
+<circle cx="579.2" cy="303.8" r="4" fill="#2a78d6" stroke="#fcfcfb" stroke-width="2"><title>flash-jev int8, 48k tokens: 3.460 s</title></circle>
+<circle cx="615.9" cy="283.0" r="4" fill="#2a78d6" stroke="#fcfcfb" stroke-width="2"><title>flash-jev int8, 64k tokens: 5.120 s</title></circle>
+<circle cx="689.4" cy="231.6" r="4" fill="#2a78d6" stroke="#fcfcfb" stroke-width="2"><title>flash-jev int8, 96k tokens: 9.234 s</title></circle>
+<circle cx="762.8" cy="169.4" r="4" fill="#2a78d6" stroke="#fcfcfb" stroke-width="2"><title>flash-jev int8, 128k tokens: 14.205 s</title></circle>
+<path d="M505.7,329.2 L542.5,309.7 L579.2,288.3 L615.9,264.4 L689.4,211.7 L762.8,150.7" fill="none" stroke="#898781" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+<circle cx="505.7" cy="329.2" r="4" fill="#898781" stroke="#fcfcfb" stroke-width="2"><title>SGLang 0.5.21, --chunked-prefill-size -1, 16k tokens: 1.424 s</title></circle>
+<circle cx="542.5" cy="309.7" r="4" fill="#898781" stroke="#fcfcfb" stroke-width="2"><title>SGLang 0.5.21, --chunked-prefill-size -1, 32k tokens: 2.984 s</title></circle>
+<circle cx="579.2" cy="288.3" r="4" fill="#898781" stroke="#fcfcfb" stroke-width="2"><title>SGLang 0.5.21, --chunked-prefill-size -1, 48k tokens: 4.697 s</title></circle>
+<circle cx="615.9" cy="264.4" r="4" fill="#898781" stroke="#fcfcfb" stroke-width="2"><title>SGLang 0.5.21, --chunked-prefill-size -1, 64k tokens: 6.605 s</title></circle>
+<circle cx="689.4" cy="211.7" r="4" fill="#898781" stroke="#fcfcfb" stroke-width="2"><title>SGLang 0.5.21, --chunked-prefill-size -1, 96k tokens: 10.821 s</title></circle>
+<circle cx="762.8" cy="150.7" r="4" fill="#898781" stroke="#fcfcfb" stroke-width="2"><title>SGLang 0.5.21, --chunked-prefill-size -1, 128k tokens: 15.705 s</title></circle>
+<text x="770.8" y="173.4" font-size="12" fill="#0b0b0b" text-anchor="start" font-weight="600" style="font-variant-numeric: tabular-nums" stroke="#fcfcfb" stroke-width="3" stroke-linejoin="round" paint-order="stroke">14.2 s</text>
+<text x="770.8" y="154.7" font-size="12" fill="#52514e" text-anchor="start" font-weight="400" style="font-variant-numeric: tabular-nums" stroke="#fcfcfb" stroke-width="3" stroke-linejoin="round" paint-order="stroke">15.7 s</text>
+<text x="22.0" y="397.0" font-size="11.5" fill="#898781" text-anchor="start" font-weight="400">Prompt length in thousands of tokens. On the RTX 5090 flash-jev runs with --prefix-cache 0 (its largest batch then 98,304 tokens) and SGLang with</text>
+<text x="22.0" y="413.0" font-size="11.5" fill="#898781" text-anchor="start" font-weight="400">--mem-fraction-static 0.6 (it does not start otherwise); SGLang ran out of memory at 96k there, and between 128k and 192k on the H200. flash-jev</text>
+<text x="22.0" y="429.0" font-size="11.5" fill="#898781" text-anchor="start" font-weight="400">refuses a request beyond its largest batch (HTTP 422); it never cuts one.</text>
 </svg>
