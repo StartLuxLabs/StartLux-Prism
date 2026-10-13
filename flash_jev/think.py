@@ -625,7 +625,12 @@ class ThinkScheduler(Scheduler):
         if j.slot >= 0:
             self.pool.release(j.slot, j.kv_start)
             j.slot = -1
-        self.stats["thoughts"] += 1
+        s = self.stats
+        s["thoughts"] += 1
+        ended = getattr(j.consumer, "ended", None) if error is None else "error"
+        if ended:                                    # streamed thoughts: how they ended, and their tokens
+            s[f"thoughts_{ended}"] = s.get(f"thoughts_{ended}", 0) + 1
+            s["thought_tokens"] = s.get("thought_tokens", 0) + j.consumer.tokens
         if error is not None:
             j.future.set_exception(error)
         else:
