@@ -17,7 +17,7 @@ JEV=${JEV:-$HOME/jev}
 cd "$(dirname "$0")/.."
 source "$JEV/env.sh"
 MODEL=${MODEL:?MODEL: the GGUF repository directory}
-GGUF=${GGUF:-$(ls "$MODEL"/*.gguf | head -1)}
+GGUF=${GGUF:-$(ls "$MODEL"/*.gguf | grep -v "/mmproj-" | head -1)}  # not the vision tower (mmproj-*.gguf)
 NAME=$(basename "$MODEL" | sed 's/-Q8_0-GGUF$//; s/-GGUF$//')            # StartLux-Decision-9B
 M=$JEV/models
 HF=${HF:-$M/$NAME-bf16-from-Q8_0}

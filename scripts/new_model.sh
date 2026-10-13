@@ -21,7 +21,7 @@ JEV=${JEV:-$HOME/jev}
 cd "$(dirname "$0")/.."
 source "$JEV/env.sh"
 MODEL=${MODEL:?MODEL: the GGUF repository directory}
-GGUF=${GGUF:-$(ls "$MODEL"/*.gguf | head -1)}
+GGUF=${GGUF:-$(ls "$MODEL"/*.gguf | grep -v "/mmproj-" | head -1)}  # not the vision tower (mmproj-*.gguf)
 NAME=$(basename "$GGUF" .gguf)
 CALIB=${CALIB:-$JEV/calib/$NAME.pt}
 JB=$JEV/src/jevbench-7ce310c7/datasets/public

@@ -10,7 +10,7 @@ set -uo pipefail
 JEV=${JEV:-$HOME/jev}
 source "$JEV/env.sh"
 MODEL=${MODEL:-$JEV/models/StartLux-Decision-4B-Q8_0-GGUF}
-GGUF=${GGUF:-$(ls "$MODEL"/*.gguf | head -1)}
+GGUF=${GGUF:-$(ls "$MODEL"/*.gguf | grep -v "/mmproj-" | head -1)}  # not the vision tower (mmproj-*.gguf)
 case "$(basename "$GGUF")" in
   StartLux-Decision-4B-Q8_0.gguf) CALIB=${CALIB:-$JEV/calib/startlux-4b-q8_0.pt} ;;
   *) CALIB=${CALIB:-$JEV/calib/$(basename "$GGUF" .gguf).pt} ;;
