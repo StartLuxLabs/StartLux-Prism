@@ -71,7 +71,7 @@ class Plan:
 
 
 def plan_batch(groups, sys_len, kv_scratch0, root_kv=(0, 0), share=True, cache=None, system=None, max_inserts=16,
-               max_trans=64, bm=BM):
+               max_trans=64, bm=BM, keep=()):
     """groups: per request, a Group (or a plain list of token rows: head unknown).  All rows start with the system
     text (sys_len tokens, `system`; a row that does not is computed whole from the zero state).  cache: a PrefixCache
     (see the module docstring).  Returns a Plan whose tables index packed tokens 0..n_tok-1; KV rows of this batch
@@ -79,7 +79,12 @@ def plan_batch(groups, sys_len, kv_scratch0, root_kv=(0, 0), share=True, cache=N
 
     max_inserts (new cache entries: conv-state saves) and max_trans (transient evidence states) are the device tables'
     capacities: past them a request's evidence is computed without being cached, or its rows whole - the batch never
-    fails for lack of room."""
+    fails for lack of room.
+
+    keep: prompts whose state stays for decoding (engine/decode.py), (tokens, slot, kv_row0) each: computed whole from
+    position 0, the recurrent state and conv tail into persistent slot `slot`, the keys and values into KV rows
+    kv_row0.. (not scratch); nothing is read.  They are the plan's last segments (conv-tail saves count against
+    max_inserts' table like cache entries)."""
     segs, read_seg = [], []
     trans = 0
     inserted, fresh = [], {}                    # fresh: evidence key -> the segment computing it in this batch
@@ -167,6 +172,9 @@ def plan_batch(groups, sys_len, kv_scratch0, root_kv=(0, 0), share=True, cache=N
             for r in rows:
                 read_seg.append(len(segs))
                 segs.append(Seg(r[sys_len:], sys_len, -1, ROOT_SLOT))
+    for tokens, slot, kv0 in keep:
+        segs.append(Seg(np.asarray(tokens, dtype=np.int32), 0, -1, ZERO_SLOT, out_ref=slot, save_conv=slot, kv_fixed=kv0,
+                        no_root=True))
     plan = _layout(segs, read_seg, kv_scratch0, root_kv, trans, bm=bm)
     plan.inserted = inserted
     return plan

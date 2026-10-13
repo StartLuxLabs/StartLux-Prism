@@ -98,6 +98,8 @@ class Options:
     pdl: int = 512                  # int8: token / read buckets up to this size launch their CUDA GEMMs to overlap the
                                     # kernel before (0: off; the W4A8 path measured no gain)
     pdl_mode: int = 2               # 1 no weight prefetch, 2 the first k-tiles of each panel, 3 whole panels
+    think_seqs: int = 0             # sequences that can decode at once (engine/decode.py): state slots of their own
+    think_kv_rows: int = 0          # KV-arena rows for the decoding sequences (each: its prompt, then its tokens)
 
 
 class Engine:
@@ -268,12 +270,12 @@ class Engine:
         z = lambda *s, dtype=f32: torch.zeros(*s, dtype=dtype, device=dev)  # noqa: E731
         HV, HK, D = cfg.v_heads, cfg.k_heads, cfg.gdn_dim
         n_gdn, n_attn = len(self.gdn_index), len(self.attn_index)
-        # persistent state slots: ZERO, ROOT (the system text), then the prefix cache's; KV rows: the system text,
-        # one batch (scratch), then the prefix cache's
+        # persistent state slots: ZERO, ROOT (the system text), the prefix cache's, then the decoding sequences'; KV
+        # rows: the system text, one batch (scratch), the prefix cache's, then the decoding sequences'
         n_cache = o.prefix_cache if o.prefix_cache > 0 else 0
-        rows = KV_SCRATCH0 + T + (o.prefix_cache_tokens if n_cache else 0)
-        out = dict(state=z(2 + n_cache, n_gdn, HV, D, D), conv_state=z(2 + n_cache, n_gdn, cfg.conv_kernel - 1,
-                                                                        cfg.conv_dim),
+        rows = KV_SCRATCH0 + T + (o.prefix_cache_tokens if n_cache else 0) + o.think_kv_rows
+        slots = 2 + n_cache + o.think_seqs
+        out = dict(state=z(slots, n_gdn, HV, D, D), conv_state=z(slots, n_gdn, cfg.conv_kernel - 1, cfg.conv_dim),
                    trans=z(o.max_trans, HV, D, D), kv=z(n_attn, 2, cfg.n_kv_head, rows, cfg.head_dim, dtype=bf))
         if o.attn_qk8 and self.int8:                 # int8 keys and one scale per token and kv head
             out["k8"] = z(n_attn, cfg.n_kv_head, rows, cfg.head_dim, dtype=torch.int8)
@@ -357,6 +359,7 @@ class Engine:
         n_cache = o.prefix_cache if o.prefix_cache > 0 else 0
         cache_rows = o.prefix_cache_tokens if n_cache else 0
         self.cache = PrefixCache(range(2, 2 + n_cache), cache_kv0, cache_rows, o.prefix_cache_min) if n_cache else None
+        self.think_slot0, self.think_kv0 = 2 + n_cache, cache_kv0 + cache_rows     # engine/decode.py's slots and rows
         self.buf = m["buf"]
         shapes = self._table_shapes(T)
         self._tab_off, off = {}, 0
@@ -679,11 +682,11 @@ class Engine:
             cache[size] = g
         return g
 
-    def plan(self, groups):
+    def plan(self, groups, keep=()):
         cache = self.cache if self.opt.share else None
         plan = B.plan_batch(groups, self.sys_len, self.kv_scratch0, self.root_kv, share=self.opt.share, cache=cache,
-                            system=self.system, max_inserts=MAX_INSERTS, max_trans=self.opt.max_trans,
-                            bm=KA.launch("BM"))
+                            system=self.system, max_inserts=MAX_INSERTS - len(keep), max_trans=self.opt.max_trans,
+                            bm=KA.launch("BM"), keep=keep)
         try:
             T = self._bucket(plan.n_tok, TOKEN_BUCKETS)
             while (plan.counts["segs"] > max_segs(T) or plan.counts["chunks"] > max_chunks(T)
@@ -701,11 +704,12 @@ class Engine:
                 cache.discard(plan.inserted)
             raise
 
-    def prepare(self, groups, slot=0):
+    def prepare(self, groups, slot=0, keep=()):
         """Host half of a forward: plan the batch and stage its tables in pinned buffer `slot` (0 or 1).  Runs while
-        the GPU is busy with the previous batch.  groups: per request, a batch.Group (or a list of token rows)."""
+        the GPU is busy with the previous batch.  groups: per request, a batch.Group (or a list of token rows); keep:
+        prompts prefilled for decoding (batch.plan_batch)."""
         t0 = time.perf_counter()
-        plan, T, R = self.plan(groups)
+        plan, T, R = self.plan(groups, keep)
         try:
             self._stage_tables(plan, slot)
         except Exception:
