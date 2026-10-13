@@ -281,6 +281,85 @@ two scan waves, output) take 0.67 ms of yesno's 4.1 ms for one 64-token chunk pe
   cuDNN chooses its kernel plan per process, so features and answers changed across restarts. The tower's attention is
   pinned to PyTorch's flash kernel.
 
+## Tensor parallelism: one 27B over 2 or 4 H200s (2026-10-14)
+
+`--tp N` (`flash_jev/tp.py`), the int8 path, for latency: the bar was the single GPU's bits for every answer, cache hit,
+batch and thought (`tests/test_tp.py`), and it holds at 2 and 4 GPUs.  Numbers: [benchmarks](benchmarks.md#tensor-parallelism-the-27b-on-2-and-4-h200s).
+
+* **Shards** (Megatron-style): attention q|gate, k, v by head (a GPU's 12 or 6 query heads read its 2 or 1 kv heads),
+  linear attention by key head with the value heads that read it (llama.cpp's tiled order: value head j reads key head
+  j % 16, so a GPU holds value heads m x 16 + its key heads, and the kernels' `h % HK` still holds), MLP by column;
+  o, out and down by input.  The decode output head by vocabulary (62,080 or 124,160 rows per GPU), gathered before the
+  top-k (below).  Embedding, norms, the residual stream and the letter read-out on every GPU.
+* **Exact by construction.**  SmoothQuant's per-channel smoothing and the per-row weight scales are computed on the
+  whole matrices and then sliced, so a GPU's int8 weights are the single GPU's rows or columns.  An output projection
+  stores int32 partial sums (`w8a8.gemm_i32`: the Triton kernel's new epilogue 3, the mma.sync tile kernel and the
+  wgmma TMA pipeline with one or more int32 slots - the C++ took one-split int32 slots, nothing else changed); the sums
+  of the GPUs are added as integers and the residual's next reader scales and adds them with the one-GPU epilogue's
+  roundings.  The int8 input of an output projection needs its row's maximum over the whole row, which the GPUs
+  exchange (below; a maximum is exact in any order).  `tests/test_cuda_gemm.py` folds every int32-capable kernel's
+  per-GPU sums into the one-GPU bits (2 and 4 GPUs, 31 kernels each).
+* **Found on the way: Triton's layouts set the order of a sum.**  The first two-GPU run was off on 1 row in 361 (a
+  scale 64 ulps away) and the four-GPU kernel test on 83: (1) the producer's first launch stored only the row maximum
+  and returned, so Triton chose its register layout from that one scalar store instead of the int8 row store - and the
+  layout fixes the order of the gated norm's sum of squares over a head's 128 values, so the maxima came out an ulp off;
+  now every launch runs the single-GPU kernel's code whole (int8 stores included) and adds one scalar store or load,
+  and the gated norm keeps the whole model's 64-head block; (2) at 4 GPUs the input projection's rows are 4,120 values
+  wide, which Triton does not specialize as divisible by 16 (16,480 is), and that changed the layouts of the kernels
+  reading those rows: the buffer's rows are padded to a multiple of 16.  Both found by comparing per-layer residuals
+  against one GPU, then the kernel alone on real inputs.
+* **All-reduces in the kernels where they beat NCCL** (measured on the engine, pass by pass, both ways:
+  `FLASHJEV_TP_FAST_ROWS`, `FLASHJEV_TP_PULL_ROWS`).  A layer has four all-reduces: two row maxima (a float per
+  token) and two int32 sums (a 5,120-wide row per token).  Through NCCL inside the CUDA graphs they took 4.4 ms of a
+  9.5 ms decode step at 4 GPUs (5.1 ms without them, `FLASHJEV_TP_ABLATE`).
+* **Maxima as words (kept, passes of up to 16,384 tokens).**  The producer (gated norm, attention output, SwiGLU)
+  writes its row's maximum, with the pass number in the upper half of a 64-bit word, into that row's slot on every
+  other GPU, and reads theirs from its own buffer until each carries this pass's number: one launch, no flag, no
+  barrier (a word is rewritten only by a later pass, after every GPU has finished this kernel).  Against NCCL's max
+  between two launches of the producer, at 4 GPUs: a decode step 7.19 against 9.48 ms (one sequence) and 10.11
+  against 12.90 (64 sequences); one prompt of 256 tokens 15.05 against 17.34 ms, of 8,192 tokens 241.3 against
+  248.4; at 2 GPUs alike (8.25 against 10.29 ms for one sequence, 301.5 against 312.2 for 8,192 tokens).
+* **Sums read by their consumer (kept for the shortest passes: up to 128 rows on 2 GPUs, 4 on 4).**  The output
+  projection leaves its int32 slots in symmetric memory (torch's `_symmetric_memory`: every GPU's buffer mapped by
+  every other) and the kernel that adds them into the residual (norm_q8 / fold) reads every GPU's slots itself over
+  NVLink, after a handshake: its grid's first program sets this GPU's flag for the step on every other GPU (the pass
+  number, from a counter every GPU bumps at the start of each pass; a release store, system scope), and every program
+  waits for the others' flags (strong loads, then a fence).  Two buffers alternate, so one is rewritten only after
+  every GPU has passed the next step's handshake, i.e. finished reading it.  It wins only where little data moves: at
+  2 GPUs a decode step takes 7.70 ms against NCCL's 8.25 (one sequence) and 12.90 against 13.75 (64), a 64-token
+  prompt 10.72 against 11.70 ms; 128 tokens tie (14.08, 14.27), 256 lose (18.38 against 17.40) and 1,024 lose badly
+  (56.9 against 45.2).  At 4 GPUs, where every GPU reads three others' slots, only the smallest decode batches gain
+  (one sequence: 6.51 against 7.19 ms); 8 sequences tie, 64 lose (14.63 against 10.11), and a 1,024-token prompt
+  took 113.8 ms against 37.2.
+* **The first version** exchanged the maxima through the same flags and a second launch of the producer, and read
+  the sums in the consumer, on every pass of up to 512 rows: 15.1 ms per 64-sequence decode step and 38.2 ms for a
+  256-token prompt at 4 GPUs (one GPU: 16.7 and 17.6 ms) - the 4-GPU prompt slower than one GPU by half.  Every
+  program of a consumer signalled every other GPU with an atomic exchange and spun with atomic adds; one writer per
+  flag (the first program, a plain release store) and plain loads for the wait made 4-GPU passes with in-kernel sums
+  7% faster at 1,024 tokens (122.8 -> 113.8 ms) and changed nothing at 2 GPUs: kept for its smaller cost, but the
+  sums' crossover with NCCL stayed where it was.
+* **Dropped: a two-shot int32 all-reduce** (each GPU sums its 1/N of the elements from every GPU's slots and writes
+  the total to every GPU, in one kernel with a barrier per program pair before and after; torch's symmetric-memory
+  all-reduces - one-shot, two-shot, multimem - have no int32).  Alone, in graphs, against NCCL: 10-15% faster at 2
+  GPUs from 128 rows (79.5 against 92.1 us at 1,024 rows), slower at 4 GPUs at every size (15.5 against 12.5 us at
+  one row, 132 against 115 at 1,024).
+* **Vocabulary-parallel decode head.**  The replicated head read the whole 1.27 GB Q8_0 head on every GPU per step;
+  each GPU now computes its share of the logits (a logit is the same arithmetic whatever columns run with it), and a
+  fused gather (the same flags) copies the other GPUs' shares into every GPU's full row before the top-k, so every GPU
+  samples the same token from the same 248,320 logits.
+* **Processes.** Rank 0 plans; a pass's tables go through pinned shared memory (`cudaHostRegister` on a /dev/shm
+  mapping: every GPU copies them itself, no NCCL broadcast), its header through a shared ring (a follower polls it,
+  and naps after 2 s idle).  Image features are encoded on rank 0 first (so nothing fails after the pass is published)
+  and broadcast.  Every rank compiles its Triton kernels into a cache of its own: four ranks compiling the same kernel
+  into one cache directory raced (a rank read another's half-written entry).  The CUDA extension's source directory
+  is resolved to its real path: a follower that imported flash_jev by another path (its PYTHONPATH) hashed another
+  build command and rebuilt the extension, and two ranks rebuilding in turn waited on each other's build lock (a hang
+  at start).
+* **Dispatch tables for the shards** (`bench/cuda_gemm_micro.py --tp N`): the column-parallel shapes, and the output
+  projections with int32 out (keys `NxKi`, a split charged with the fold reading every GPU's extra slots).  Without
+  them the shards ran the Triton fallback: the 4-GPU JevBench run with thoughts took 80 s from 16 clients against 65 s
+  on one GPU; with them and the all-reduces above, 41 s on 4 GPUs and 49 s on 2 (`tests/test_tp.py --server`).
+
 ## Opt-in
 
 * **int8 attention scores** (`--attn-qk8`, `Options.attn_qk8`): keys also kept as int8 (one scale per token and kv
@@ -332,6 +411,10 @@ two scan waves, output) take 0.67 ms of yesno's 4.1 ms for one 64-token chunk pe
 * Images: a deterministic attention kernel for the vision tower (the 3.4 ms per 1,024-token image cuDNN would save);
   base64 decoding holds the GIL (about 12 ms per 3 MB image); the tower runs on the scheduler's stream, so it does not
   overlap with the decoder's passes.
+* Tensor parallelism: the int8 path only (bf16 and W4A8 run on one GPU). At 4 GPUs the all-reduces still take about
+  two fifths of a prefill pass and a fifth to a third of a decode step, mostly NCCL's int32 sums of the output
+  projections. The in-kernel thresholds (`FLASHJEV_TP_FAST_ROWS`, `FLASHJEV_TP_PULL_ROWS`) were measured on H200s on
+  NVSwitch only.
 * Hopper (H200): W4A8 still runs on mma.sync (Q4_K_M's projections at 200-300 TOPS against W8A8's 1,250 on wgmma:
   90% of the 27B's W4A8 GPU time); the GEMMs at up to 64 rows (2.5-3.4 TB/s of 4.8); the TMA kernel's epilogue
   still does not overlap the next tile's main loop (one CTA per SM: a persistent kernel with two MMA warpgroups taking

@@ -38,8 +38,10 @@ TypeSafe `/v1/systemone` API. Prompts, read-outs, thoughts and decision rules ar
   reference's 91.15 (4B) and 90.80 against 91.06 (9B).
 - **4-bit files on their own weights.** Q4_K_M files run as W4A8 on int8 tensor cores, 3.9-6.9x faster than llama.cpp
   on the same file. This way the 27B fits a 32 GB RTX 5090.
-- **Several GPUs.** One server per GPU behind a router (`flash_jev.dp`): three H200s give 2.89x the read-out
-  throughput of one, with the same answers.
+- **Several GPUs, the same answers.** Data parallelism for throughput (`flash_jev.dp`, one server per GPU behind a
+  router): three H200s give 2.89x the read-out throughput of one. Tensor parallelism for latency (`--tp 2` or `4`): a
+  JevBench item with thoughts takes 902 ms on two H200s and 768 on four (1,209 on one), an 8,192-token prompt 301 and
+  242 ms (428). Either way, every answer is the single GPU's, bit for bit.
 - **Kernels per GPU.** Every projection's kernel, tile and K split comes from a table measured on the GPU model. On
   Hopper, the int8 GEMMs run on warpgroup MMA with TMA and warp specialization (1,240-1,420 TOPS).
 
@@ -184,8 +186,13 @@ Both paths run the same Q8_0 weights, dequantized to bf16 or requantized to int8
 
 ### Several GPUs
 
-With `flash_jev.dp`, three H200s, each running a whole int8 server behind the router, gave the following (27B v1.1,
-JevBench):
+Two ways to use more GPUs, both giving the single GPU's answers, bit for bit (27B v1.1 on H200s, int8, JevBench):
+- **Data parallelism** (`python -m flash_jev.dp`): one whole server per GPU behind a router. More throughput; a
+  request takes as long as on one GPU.
+- **Tensor parallelism** (`--tp 2` or `4`): one model split over the GPUs. Less time per request, mostly for long
+  prompts and thoughts.
+
+Data parallelism, three H200s:
 
 | | one GPU | three GPUs |
 |---|---|---|
@@ -193,8 +200,25 @@ JevBench):
 | with thoughts, requests/s (64 clients on one GPU, 192 on three) | 7.6 | **14.1** |
 | one request at a time, mean ms | 41.1 | 42.2 (the router's hop) |
 
-The answers are the single GPU's, bit for bit. A three-pass run with thoughts cannot end before its longest thought
-(about 40 s for 4,000 tokens), so that gain shows in longer runs.
+A three-pass run with thoughts cannot end before its longest thought (about 40 s for 4,000 tokens), so that gain shows
+in longer runs.
+
+Tensor parallelism, two and four H200s on NVSwitch:
+
+| | one GPU | two GPUs | four GPUs |
+|---|---|---|---|
+| prefill, one 8,192-token prompt, ms | 427.6 | 301.2 (1.42x) | **241.6** (1.77x) |
+| prefill, one 256-token prompt, ms | 17.5 | 17.3 (1.01x) | **15.1** (1.16x) |
+| a lone thought's decode step, ms | 10.47 | 7.68 (1.36x) | **6.51** (1.61x) |
+| JevBench one at a time, read-outs, mean ms | 41.0 | 34.4 | **29.0** |
+| JevBench one at a time, with thoughts, mean ms | 1,209 | 902 | **768** |
+| read-outs from 64 clients, requests/s | 30.9 | 43.3 | **54.0** |
+| with thoughts from 64 clients, requests/s | 6.28 | 8.26 | **9.81** |
+
+Short prompts gain little: the sums and maxima exchanged between the GPUs take a fifth to a third of a pass on two GPUs
+and two fifths on four. For throughput per GPU, data parallelism is ahead (88.7 requests/s on three GPUs against 54.0
+on four); tensor parallelism is the one that shortens a request. Details:
+[docs/benchmarks.md](docs/benchmarks.md#tensor-parallelism-the-27b-on-2-and-4-h200s).
 
 ## Accuracy
 
@@ -285,6 +309,13 @@ python -m flash_jev.dp --gpus 0,1,2,3 --port 8092 --gguf $M/StartLux-Decision-v1
   --model-dir $M --precision int8 --calib ~/jev/calib/StartLux-Decision-v1.1-27B-AutoThink-Q8_0.pt
 ```
 
+One model over two GPUs (tensor parallelism), for lower latency:
+
+```bash
+python -m flash_jev.server --tp 2 --gpus 0,1 --gguf $M/StartLux-Decision-v1.1-27B-AutoThink-Q8_0.gguf \
+  --model-dir $M --precision int8 --calib ~/jev/calib/StartLux-Decision-v1.1-27B-AutoThink-Q8_0.pt --port 8092
+```
+
 ## Models, GPUs and precisions
 
 | `--precision` | weights | activations | used for |
@@ -295,7 +326,8 @@ python -m flash_jev.dp --gpus 0,1,2,3 --port 8092 --gguf $M/StartLux-Decision-v1
 
 Measured:
 - **RTX 5090:** the 4B and 9B (Q8_0: int8 and bf16; Q4_K_M: W4A8) and the 27B's Q4_K_M (W4A8).
-- **H200:** the v1 27B (Q8_0: int8 and bf16; Q4_K_M: W4A8 and int8), and the v1.1 27B AutoThink (Q8_0: int8 and bf16).
+- **H200:** the v1 27B (Q8_0: int8 and bf16; Q4_K_M: W4A8 and int8), and the v1.1 27B AutoThink (Q8_0: int8 and bf16;
+  int8 on 2 and 4 GPUs).
 
 To add another model of the family, run `scripts/prepare_model.sh` (its folders for every engine), then
 `scripts/new_model.sh` (dispatch-table entries for its projection shapes, int8 calibration, correctness tests).
@@ -333,13 +365,23 @@ Server flags:
 | `--mmproj`, `--max-images`, `--max-pixels` | `auto`, 8, 1,048,576 | the vision tower (`auto`: the `mmproj-*.gguf` beside `--gguf`; `none`: text only); images need Pillow |
 | `--graph-max-tokens`, `--no-graphs` | | CUDA graphs for every token bucket (recorded at start-up) or fewer |
 | `--attn-qk8` | off | opt-in: q k^T on int8 tensor cores, 15% off at 50,000 tokens at a small probability error |
+| `--tp`, `--gpus` | 1, the visible GPUs | tensor parallelism: one model over this many GPUs (int8; 2 or 4 on the 27B) |
 
-**Several GPUs** (`python -m flash_jev.dp --gpus ...`, the server's flags pass through):
+**Several GPUs, data parallelism** (`python -m flash_jev.dp --gpus ...`, the server's flags pass through):
 - **Workers:** one whole server per GPU, each with its own prefix cache and thoughts.
 - **Routing:** the router forwards every request whole to the worker that last answered the same evidence, unless
   that worker has more than `--affinity-slack` (2) requests in flight beyond the least loaded one; otherwise to the
   least loaded worker.
 - **Failures:** a worker that fails is skipped until its `/health` answers again.
+
+**One model over several GPUs, tensor parallelism** (`--tp N --gpus a,b,...`, the int8 path):
+- **Sizes:** N divides the attention heads, kv heads, linear-attention key heads and FFN width: 2 or 4 on the 27B.
+- **Processes:** the server's process is rank 0 on the first GPU and starts one process per further GPU
+  (`python -m flash_jev.tp`, not run by hand), which replays its passes. If one of them dies, the server exits.
+- **Memory:** each GPU holds 1/N of the projections, of the KV rows and of the recurrent states (72 MiB per thought at
+  2 GPUs), so the buffers above are sized per GPU (the smallest GPU's choice; rank 0 also holds the vision tower).
+- **Tuning:** `FLASHJEV_TP_FAST_ROWS` (16,384) and `FLASHJEV_TP_PULL_ROWS` (128 on 2 GPUs, 4 on 4) set the longest
+  passes whose maxima and sums stay inside the kernels.
 
 ## How it works
 
@@ -406,6 +448,19 @@ GGUF's patch embedding, 27 blocks and 2 x 2 merger in bf16) encodes each image a
 vision model, with CUDA graphs per image size. Its features go into the residual rows of the image's tokens. Image
 tokens carry Qwen3.5's M-RoPE positions (time, row, column) in a table the attention layers read.
 
+**Tensor parallelism.** One process per GPU (`tp.py`). Each GPU holds its share of the heads (attention: its query
+heads and the kv heads they read; linear attention: its key heads and the value heads that read them), of the MLP's
+columns and, for decoding, of the vocabulary; embedding, norms and the residual stream are on every GPU.
+- **Exact sums:** the output projections leave int32 partial sums, added over the GPUs (exact in any order), then
+  scaled and added once as on one GPU. The per-token scales of their inputs take the maximum over the GPUs. So every
+  answer, cache hit, batch and thought is the single GPU's, bit for bit.
+- **Four all-reduces per layer:** the two maxima are exchanged inside the kernels that need them (per row, a 64-bit
+  word that carries the pass number). The two sums of the shortest passes (decode steps on 2 GPUs) are read by the
+  kernel that adds them into the residual, straight from the other GPUs' memory over NVLink. The other sums go through
+  NCCL inside the CUDA graphs.
+- **One plan:** the server's process plans every pass and publishes it to the others through shared memory, and every
+  GPU replays the same CUDA graphs.
+
 Code:
 
 | files | role |
@@ -417,7 +472,7 @@ Code:
 | `reference.py` | a plain fp32 PyTorch forward, the yardstick for every kernel |
 | `decide.py`, `think.py`, `engine/decode.py`, `loops.py` | requests and answers; thoughts |
 | `images.py`, `vision.py` | images |
-| `server.py`, `dp.py` | HTTP and scheduler; several GPUs |
+| `server.py`, `dp.py`, `tp.py` | HTTP and scheduler; several GPUs: data and tensor parallelism |
 
 What was kept, measured, tried and dropped, with numbers: [docs/optimizations.md](docs/optimizations.md).
 
@@ -432,7 +487,7 @@ What was kept, measured, tried and dropped, with numbers: [docs/optimizations.md
     (`tests/test_cuda_gemm.py`);
   - prefix-cache hits equal recomputing (`tests/test_prefix_cache.py --exact`);
   - 64 answers sent by 32 clients at once equal the same requests one at a time (`tests/test_stress.py`);
-  - the answers through several GPUs equal one GPU's.
+  - the answers through the data-parallel router equal one GPU's.
 
   The bf16 path is deterministic run to run, but cuBLAS picks its kernels by batch size, so it is not batch-invariant.
 - **StartLux-Decision v1.1** (`tests/test_v11.py`):
@@ -452,6 +507,14 @@ What was kept, measured, tried and dropped, with numbers: [docs/optimizations.md
   - 36 prompts with 1 to 8 images are token-identical to v1.1's, with its positions;
   - the 53 questions of 24 image requests get transformers' decisions, all right;
   - text answers stay bit-identical with the tower loaded.
+- **Tensor parallelism** (`tests/test_tp.py`, the v1.1 27B on 2 and 4 GPUs against one, bit for bit):
+  - the letter logits of 30 requests alone, again from the prefix cache and as one 7,492-token batch;
+  - long evidence as a miss, a hit, another question about it and inside mixed batches; a 33-option list;
+  - six thoughts' 64 decode steps, greedy, joining a running batch and sampled (each step's 248,320 logits and token);
+  - 24 questions about images; on the v1 27B, the same 30 requests;
+  - JevBench with thoughts through the server (231 items from 16 clients, 67 of them thinking): the same answers,
+    probabilities and thoughts, to the last character;
+  - every int32-capable GEMM's per-GPU sums, added and folded, give the one-GPU bits (`tests/test_cuda_gemm.py`).
 
 ## Tests and benchmarks
 
@@ -476,15 +539,16 @@ python bench/charts.py                                                        # 
 | `tests/test_think.py`, `tests/test_decode.py` | thoughts against v1.1's package (loop detector, prompts, whole requests with fake engines); decode steps against the prefill (teacher forcing, isolation, sampling) |
 | `tests/test_vision.py`, `tests/test_vision_engine.py`, `tests/vision_reference.py` | images: placement, pixels, tokens and positions against v1.1 and transformers; the tower and image batches on the GPU; answers against transformers' model |
 | `tests/test_dp.py` | the data-parallel router on the CPU, against fake workers: evidence affinity, routing by load, failover |
+| `tests/test_tp.py` | tensor parallelism against one GPU, bit for bit: read-outs, cache hits, batches, wide choices, decode logits and tokens, images (`--tp 2 --gpus 2,3 --ref-gpu 1`); `--server`: JevBench with thoughts through a `--tp` server and a one-GPU server |
 | `tests/test_stress.py` | a running server under load: long evidence counted in full, the capacity limit refused cleanly, many clients without a failed request, bit-identical answers under load |
 | `scripts/accuracy_v1.sh` | StartLux-Decision-v1's evaluation suites through every flash-jev precision and StartLux's own server |
-| `bench/run_jevbench.py`, `bench/prefill_speed.py`, `bench/decode_speed.py`, `bench/vision_latency.py` | JevBench through any `/v1/systemone` server (latency, throughput, agreement); prefill and decode on the engine itself; images |
+| `bench/run_jevbench.py`, `bench/prefill_speed.py`, `bench/decode_speed.py`, `bench/vision_latency.py` | JevBench through any `/v1/systemone` server (latency, throughput, agreement); prefill and decode on the engine itself (`--tp N` too); images |
 
 ## Documents
 
 | Document | Contents |
 |---|---|
-| [Benchmarks and stress tests](docs/benchmarks.md) | every model, GPU and engine: methods, tables, charts, many clients, long context, the official v1.1 engine, images, several GPUs, stress tests |
+| [Benchmarks and stress tests](docs/benchmarks.md) | every model, GPU and engine: methods, tables, charts, many clients, long context, the official v1.1 engine, images, several GPUs (data and tensor parallelism), stress tests |
 | [Optimization log](docs/optimizations.md) | where the time goes; what was kept, measured, tried and dropped |
 
 ## License

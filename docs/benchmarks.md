@@ -21,6 +21,7 @@ numbers are from 2026-10-10 to 2026-10-12. Each chart is drawn from the table be
 - [StartLux-Decision v1.1 27B AutoThink against its official engine](#startlux-decision-v11-27b-autothink-against-its-official-engine)
 - [Images](#images)
 - [Several GPUs: data parallelism](#several-gpus-data-parallelism)
+- [Tensor parallelism: the 27B on 2 and 4 H200s](#tensor-parallelism-the-27b-on-2-and-4-h200s)
 - [Stress tests](#stress-tests)
 - [Engine configurations](#engine-configurations) · [Crashes on the RTX 5090 server](#crashes-on-the-rtx-5090-server)
 
@@ -986,7 +987,7 @@ own rounds differ by up to 0.47 ms.
 ## Several GPUs: data parallelism
 
 `python -m flash_jev.dp`: one flash-jev int8 server per GPU behind the router (README, Serving), StartLux-Decision-v1.1-27B-AutoThink on
-GPUs 1-3 of the H200 server, 2026-10-14; JevBench as above (requests/s over three passes, each request with its own
+GPUs 1-3 of the second H200 server, 2026-10-14; JevBench as above (requests/s over three passes, each request with its own
 evidence).
 
 | | one GPU | three GPUs | |
@@ -1001,6 +1002,80 @@ evidence).
 The 231 items one at a time through the three workers gave the single GPU's decisions and probabilities. With
 thoughts, a three-pass run cannot end before its longest thought: one of about 4,000 tokens takes some 40 s on its
 own, so the gain shows in longer runs.
+
+## Tensor parallelism: the 27B on 2 and 4 H200s
+
+StartLux-Decision-v1.1-27B-AutoThink (the Q8_0 file of [the thinking section](#startlux-decision-v11-27b-autothink-thinking),
+int8) with `--tp 2` and `--tp 4` (`flash_jev/tp.py`), on the second H200 server: eight H200s on NVSwitch (NV18 between
+every pair), torch 2.14.1, Triton 3.8.0, NCCL 2.30.7, 2026-10-14. Two GPUs ran on GPUs 1-2, four on GPUs 3-6, one on
+GPU 6 (speed) and GPU 1 (server), at most two configurations at a time on disjoint GPUs (other users' jobs ran on GPUs
+0 and 7). Every answer is the single GPU's, bit for bit (README, [Correctness](../README.md#correctness)): letter
+logits, prefix-cache hits, batches, wide choices, decode logits and tokens, images, and JevBench with thoughts through
+the server.
+
+**Prefill** (`bench/prefill_speed.py --tp N`; ms per pass, from launch to the logits on the host, median of 10):
+
+| prompt | 1 GPU | 2 GPUs | 4 GPUs |
+|---|---|---|---|
+| 256 tokens | 17.49 | 17.32 (1.01x) | 15.12 (1.16x) |
+| 1,024 tokens | 54.07 | 45.11 (1.20x) | 37.32 (1.45x) |
+| 4,096 tokens | 210.3 | 155.1 (1.36x) | 125.8 (1.67x) |
+| 8,192 tokens | 427.6 | 301.2 (1.42x) | 241.6 (1.77x) |
+| 16,384 tokens | 919.6 | 621.7 (1.48x) | 485.1 (1.90x) |
+| 32,768 tokens | 2,092.6 | 1,402.8 (1.49x) | 1,032.8 (2.03x) |
+| 32 prompts of 256 tokens in one pass | 398.3 | 275.8 (1.44x) | 214.8 (1.85x) |
+
+(64 prompts of 128 tokens and 8 of 1,024 take the same time as 32 of 256, within a millisecond.) Short prompts gain
+little: at 256 tokens two GPUs are no faster than one, four 1.16x. From 1,024 tokens on, two GPUs give 1.2-1.5x and
+four 1.45-2.0x.
+
+**Decode** (`bench/decode_speed.py --tp N`; ms per step, every sequence one token per step):
+
+| sequences decoding at once | 1 | 2 | 4 | 8 | 16 | 32 | 64 |
+|---|---|---|---|---|---|---|---|
+| 1 GPU, prompts of 512 tokens | 10.47 | 10.44 | 10.73 | 11.07 | 11.95 | 13.53 | 16.69 |
+| 2 GPUs | 7.68 | 7.71 | 7.98 | 8.15 | 9.03 | 10.54 | 12.93 |
+| 4 GPUs | 6.51 | 6.61 | 6.82 | 7.18 | 7.63 | 8.81 | 10.14 |
+| 1 GPU, prompts of 4,096 tokens | 10.57 | 10.57 | 10.92 | 11.41 | 12.78 | 15.29 | 20.30 |
+| 2 GPUs | 7.75 | 7.81 | 8.11 | 8.33 | 9.36 | 11.37 | 14.70 |
+| 4 GPUs | 6.56 | 6.67 | 6.92 | 7.34 | 7.81 | 9.15 | 10.98 |
+
+A lone thought's step: 10.5 ms on one GPU, 7.7 on two (1.36x), 6.5 on four (1.61x); 64 thoughts at once with
+4,096-token prompts 1.38x and 1.85x.
+
+**The all-reduces' share** (`FLASHJEV_TP_ABLATE=1`: every GPU computes its shard without them - wrong results, the
+time of the rest; share = 1 - without / with):
+
+| | 256 tokens | 1,024 | 4,096 | 8,192 | 16,384 | 32 x 256 | decode, 1 sequence | 8 | 64 |
+|---|---|---|---|---|---|---|---|---|---|
+| 2 GPUs | 32% | 28% | 23% | 21% | 19% | 22% | 11% | 12% | 23% |
+| 4 GPUs | 43% | 42% | 42% | 42% | 40% | 43% | 21% | 28% | 31% |
+
+Without them four GPUs would prefill 2.0x (256 tokens) to 3.1x (16,384) faster than one; the rest of the gap is what
+does not divide by four (the replicated norms and residual, each kernel's fixed cost: a one-sequence step without the
+all-reduces still takes 5.1 ms at 4 GPUs, 6.8 at 2). What remains is mostly NCCL's int32 sums of the output
+projections on every pass of more than 4 tokens (4 GPUs) or 128 (2 GPUs): the maxima travel inside the kernels, and
+the sums of the shortest passes are read by their consumer
+([optimizations](optimizations.md#tensor-parallelism-one-27b-over-2-or-4-h200s-2026-10-14): what was measured, kept
+and dropped).
+
+**JevBench through the server** (`python -m flash_jev.server --tp N`, `bench/run_jevbench.py`, the 231 public items;
+the memory in use on the first GPU after start, every configuration with the same buffers: 131,072 tokens per pass,
+the 64-entry prefix cache, 64 thoughts at once with their KV rows):
+
+| GPUs | think_mode never, one at a time: mean / p50 / p95 ms | never, requests/s from 16 / 64 clients | auto, one at a time: mean / p50 ms | auto, the 67 thinking items' mean | auto, requests/s from 16 / 64 clients | GPU memory in use |
+|---|---|---|---|---|---|---|
+| 1 | 41.0 / 14.2 / 146 | 29.9 / 30.9 | 1,209 / 19.5 | 4.09 s | 5.07 / 6.28 | 113.9 GiB |
+| 2 | 34.4 / 14.9 / 114 | 40.6 / 43.3 | 902 / 19.4 | 3.04 s | 6.56 / 8.26 | 64.0 GiB |
+| 4 | 29.0 / 12.4 / 93 | 49.8 / 54.0 | 768 / 17.0 | 2.59 s | 7.75 / 9.81 | 37.7 GiB |
+
+Every configuration scores 214 of 231 without thoughts and 224 with them, the same 67 items thinking the same
+thoughts. The many-client runs send three passes (never) or two (auto) of request-numbered items; the auto runs start
+their request numbers at the same seeded value in every configuration, so the same items think the same thoughts
+there too (223 and 220 right from 16 clients, 226 and 222 from 64, in all three). JevBench's mean falls 1.19x on two
+GPUs and 1.41x on four without thoughts, 1.34x and 1.57x with them; the median item (a short prompt) hardly moves -
+the long prompts and the thoughts carry the gain. From 16 and 64 clients: 1.36-1.40x and 1.66-1.75x without
+thoughts, 1.29-1.32x and 1.53-1.56x with them.
 
 ## Stress tests
 
