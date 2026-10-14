@@ -7,8 +7,10 @@ buffered file objects - a few hundred microseconds per request in this interpret
 """
 from __future__ import annotations
 
+import errno
 import socket
 import threading
+import time
 import uuid
 
 REASONS = {200: "OK", 400: "Bad Request", 404: "Not Found", 411: "Length Required", 413: "Payload Too Large",
@@ -72,12 +74,35 @@ def _connection(conn, handle):
                 return
 
 
+def more_files():
+    """Raise this process's open-file limit to its hard limit.  Every connection is a file: at the usual soft limit of
+    1,024 a router with 500 clients ran out (each client's connection and one to a worker) and accept() failed."""
+    try:
+        import resource
+        soft, hard = resource.getrlimit(resource.RLIMIT_NOFILE)
+        want = hard if hard != resource.RLIM_INFINITY else max(soft, 1 << 20)
+        if soft != resource.RLIM_INFINITY and soft < want:
+            resource.setrlimit(resource.RLIMIT_NOFILE, (want, hard))
+    except (ImportError, ValueError, OSError):
+        pass
+
+
 def serve(host, port, handle, backlog=1024):
+    more_files()
     srv = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     srv.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     srv.bind((host, port))
     srv.listen(backlog)
     while True:
-        conn, _ = srv.accept()
+        try:
+            conn, _ = srv.accept()
+        except OSError as e:                     # out of files or memory for now: wait for connections to close
+            if e.errno in (errno.EMFILE, errno.ENFILE, errno.ENOBUFS, errno.ENOMEM, errno.ECONNABORTED, errno.EINTR):
+                time.sleep(0.05)
+                continue
+            raise
         conn.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)   # responses must not wait for delayed ACKs
-        threading.Thread(target=_connection, args=(conn, handle), daemon=True).start()
+        try:
+            threading.Thread(target=_connection, args=(conn, handle), daemon=True).start()
+        except RuntimeError:                     # no thread for it: drop this connection, keep serving
+            conn.close()

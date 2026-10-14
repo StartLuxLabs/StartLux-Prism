@@ -22,6 +22,8 @@ from __future__ import annotations
 
 import argparse
 import collections
+import ctypes
+import errno
 import hashlib
 import http.client
 import json
@@ -34,10 +36,20 @@ import threading
 import time
 
 from . import calib as CAL
-from .httpserve import serve
+from .httpserve import more_files, serve
 
 MAX_KEYS = 4096                     # evidence keys remembered (least recently used dropped)
 AFFINITY_BODY = 1 << 20             # bodies above this are routed by load alone (no parse)
+
+
+def _worker_session():
+    """A worker's own session (a Ctrl-C at the router's terminal is the router's to handle), ended with the router
+    however it ends: PR_SET_PDEATHSIG, so a router that dies leaves no server holding a GPU."""
+    os.setsid()
+    try:
+        ctypes.CDLL("libc.so.6").prctl(1, signal.SIGTERM)
+    except OSError:
+        pass
 
 
 def flag(args, name):
@@ -142,6 +154,9 @@ class Router:
                 w.served += 1
                 return status, data
             except Exception as e:                  # noqa: BLE001  the worker failed: try another one
+                if isinstance(e, OSError) and e.errno in (errno.EMFILE, errno.ENFILE):
+                    # the router's own shortage (no file for a connection), not the worker's: mark nothing down
+                    return 503, json.dumps({"error": f"the router is out of open files: {e}"}).encode()
                 w.up = False
                 tried.add(w.idx)
                 self.stats["retries"] += 1
@@ -206,6 +221,7 @@ def main():
                          "it has cached")
     ap.add_argument("--startup-timeout", type=float, default=1800.0)
     a, rest = ap.parse_known_args()
+    more_files()                                     # a client's connection and a worker's per request in flight
     for name in ("--port", "--host"):
         if name in rest:
             sys.exit(f"{name} is the router's; the workers listen on --worker-host / --worker-port")
@@ -226,7 +242,7 @@ def main():
         cmd = [sys.executable, "-m", "flash_jev.server", "--host", w.host, "--port", str(w.port)] + rest
         if a.tp > 1:
             cmd += ["--tp", str(a.tp)]
-        w.proc = subprocess.Popen(cmd, env=env, stdout=log, stderr=subprocess.STDOUT, start_new_session=True)
+        w.proc = subprocess.Popen(cmd, env=env, stdout=log, stderr=subprocess.STDOUT, preexec_fn=_worker_session)
 
     def stop(*_):
         for w in workers:
