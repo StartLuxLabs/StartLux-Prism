@@ -273,8 +273,8 @@ class Engine:
         engine's.  self.cfg becomes the shard's config (its heads, its FFN columns; tp.shard_config)."""
         from .. import tp as TP
         if not (self.opt.calib and os.path.exists(self.opt.calib)):
-            raise ValueError("tensor parallelism needs the int8 activation ranges (--calib FILE): compute them once "
-                             "on one GPU (the same flag without --tp)")
+            raise ValueError("tensor parallelism needs the int8 activation ranges (--calib FILE; flash_jev.server "
+                             "computes them before it starts the group: flash_jev/calib.py)")
         amax = self._load_or_calibrate(w)
         dev, full = self.device, self.cfg
         n, r = self.tp.world, self.tp.rank
@@ -330,7 +330,9 @@ class Engine:
         amax = self.calibrate()
         if path:
             os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
-            torch.save({f"{k[0]}:{k[1]}": v for k, v in amax.items()}, path)
+            tmp = f"{path}.{os.getpid()}.tmp"
+            torch.save({f"{k[0]}:{k[1]}": v for k, v in amax.items()}, tmp)
+            os.replace(tmp, path)                    # whole or absent: a server starting meanwhile never reads half
         return amax
 
     @torch.no_grad()

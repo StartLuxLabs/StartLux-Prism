@@ -33,10 +33,21 @@ import sys
 import threading
 import time
 
+from . import calib as CAL
 from .httpserve import serve
 
 MAX_KEYS = 4096                     # evidence keys remembered (least recently used dropped)
 AFFINITY_BODY = 1 << 20             # bodies above this are routed by load alone (no parse)
+
+
+def flag(args, name):
+    """The value of a server flag among the arguments passed through ("--name V" or "--name=V"), else ""."""
+    for i, x in enumerate(args):
+        if x == name and i + 1 < len(args):
+            return args[i + 1]
+        if x.startswith(name + "="):
+            return x[len(name) + 1:]
+    return ""
 
 
 def gpu_groups(gpus, tp):
@@ -195,9 +206,9 @@ def main():
                          "it has cached")
     ap.add_argument("--startup-timeout", type=float, default=1800.0)
     a, rest = ap.parse_known_args()
-    for flag in ("--port", "--host"):
-        if flag in rest:
-            sys.exit(f"{flag} is the router's; the workers listen on --worker-host / --worker-port")
+    for name in ("--port", "--host"):
+        if name in rest:
+            sys.exit(f"{name} is the router's; the workers listen on --worker-host / --worker-port")
     try:
         groups = gpu_groups(a.gpus, a.tp)
     except ValueError as e:
@@ -225,8 +236,15 @@ def main():
 
     signal.signal(signal.SIGTERM, stop)
     signal.signal(signal.SIGINT, stop)
-    calib = rest[rest.index("--calib") + 1] if "--calib" in rest else ""
-    first = workers[:1] if calib and not os.path.exists(calib) else []   # int8: one worker writes the calibration
+    gguf, precision, calib = flag(rest, "--gguf"), flag(rest, "--precision") or "auto", flag(rest, "--calib")
+    if precision == "auto" and gguf and os.path.exists(gguf):
+        precision = CAL.auto_precision(gguf)
+    if precision == "int8" and gguf and os.path.exists(gguf) and not calib:
+        calib = CAL.default_path(gguf)               # the workers' default too: name it for every worker
+        rest += ["--calib", calib]
+    if precision == "int8" and a.tp > 1:             # tensor-parallel workers read them: computed first, on one GPU
+        CAL.ensure(gguf, flag(rest, "--model-dir"), calib, groups[0].split(",")[0])
+    first = workers[:1] if precision == "int8" and not os.path.exists(calib) else []   # one worker writes them
     try:
         for w in first:
             start(w)

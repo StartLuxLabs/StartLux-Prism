@@ -1,6 +1,9 @@
 """Tensor parallelism: one model replica over N GPUs of one server (NVLink), for lower latency.
 
-    python -m flash_jev.server --tp 2 --gpus 4,5 --gguf X.gguf --model-dir DIR --precision int8 --calib C.pt
+    python -m flash_jev.server --tp 2 --gpus 4,5 --gguf X.gguf --model-dir DIR
+
+The int8 path.  The shards are cut from the Q8_0 values with the int8 activation ranges, which the server measures on
+one GPU before it starts the group when they are not kept yet (flash_jev/calib.py).
 
 One process per GPU.  Rank 0 is the whole server - HTTP, scheduler, planner, decisions, thoughts, the vision tower -
 and its Engine and Decoder; ranks 1..N-1 are followers that hold their shard of the same model and replay what rank 0

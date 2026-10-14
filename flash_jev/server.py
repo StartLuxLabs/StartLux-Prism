@@ -168,7 +168,9 @@ def main():
     ap.add_argument("--model-dir", required=True)
     ap.add_argument("--precision", default="auto", choices=("auto", "bf16", "int8", "w4a8"),
                     help="auto: w4a8 for a k-quant file (Q4_K_M: its own 4-bit weights), int8 (W8A8) for Q8_0")
-    ap.add_argument("--calib", default="")
+    ap.add_argument("--calib", default="",
+                    help="int8: the activation ranges file, computed and saved on the first start (default: "
+                         "~/.cache/flash-jev/calib/<model file>-<size>-v1.pt, under $FLASHJEV_CACHE if set)")
     ap.add_argument("--host", default="127.0.0.1")
     ap.add_argument("--port", type=int, default=8092)
     ap.add_argument("--max-tokens", type=int, default=0,
@@ -233,13 +235,15 @@ def main():
     if mmproj and a.max_images <= 0:
         mmproj, text_only = "", ("this server reads text only (started with --max-images 0): send the evidence "
                                  "without images")
+    from . import calib as CAL
     if a.precision == "auto":
-        from .gguf import GGML_Q4_K, GGML_Q5_K, GGML_Q6_K, GGUFFile
-        kinds = {t.type for n, t in GGUFFile(a.gguf).tensors.items() if n.endswith("ffn_gate.weight")}
-        a.precision = "w4a8" if kinds & {GGML_Q4_K, GGML_Q5_K, GGML_Q6_K} else "int8"
+        a.precision = CAL.auto_precision(a.gguf)
+    if a.precision == "int8" and not a.calib:
+        a.calib = CAL.default_path(a.gguf)
     if a.tp > 1:
         if a.precision != "int8":
             sys.exit(f"--tp runs the int8 path (a Q8_0 file), not {a.precision}")
+        CAL.ensure(a.gguf, a.model_dir, a.calib, CAL.first_gpu(a.gpus))   # the shards need them: once, on one GPU
         from . import tp as TP
         TP.start(a.tp, a.gpus or None)              # before anything uses CUDA: the group's GPUs become the visible ones
     a.name = a.name or re.sub(r"-Q8_0$", "", os.path.basename(a.gguf).removesuffix(".gguf")) + " (flash-jev)"
