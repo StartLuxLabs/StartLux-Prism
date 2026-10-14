@@ -1,9 +1,9 @@
 """Write a Hugging Face checkpoint (bf16 safetensors) from a StartLux-Decision qwen35 GGUF file, undoing llama.cpp's
 conversion exactly, so engines that load transformers checkpoints (StartLux-Decision's own server, vLLM, SGLang) run
 the very same weights as the GGUF engines (Q8_0 values dequantized, then rounded to bf16 - the same bf16 weights the
-flash-jev bf16 path uses).
+StartLux-Prism bf16 path uses).
 
-    python -m flash_jev.tools.gguf_to_hf --gguf X.gguf --model-dir GGUF_REPO_DIR --out OUT_DIR [--mmproj MMPROJ.gguf]
+    python -m startlux_prism.tools.gguf_to_hf --gguf X.gguf --model-dir GGUF_REPO_DIR --out OUT_DIR [--mmproj MMPROJ.gguf]
 
 Inverse of llama.cpp conversion/qwen.py for Qwen3_5: norm weights - 1 (except the gated norm), A_log = log(-ssm_a),
 linear-attention value heads from tiled back to grouped order, conv1d [C, K] -> [C, 1, K].  The MTP head is not in

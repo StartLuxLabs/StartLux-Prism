@@ -1,4 +1,4 @@
-"""Where a request's time goes outside the GPU on the flash-jev server, at one request at a time: how much a native
+"""Where a request's time goes outside the GPU on the StartLux-Prism server, at one request at a time: how much a native
 front end (HTTP, JSON, prompt rendering, planning in C++ instead of Python) could save at most.
 
     python bench/host_overhead.py --url http://127.0.0.1:8092/v1/systemone [--n 300] [--json out.json]

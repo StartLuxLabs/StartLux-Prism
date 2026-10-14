@@ -52,7 +52,7 @@ operands), L2 reads 6.2-7.1 TB/s, DRAM reads 1.70 TB/s.
   partial sums in its own slot and the next kernel that reads the residual anyway (`norm_q8`, or `quant.fold` after
   the last layer) adds them, scales the total and adds it into the residual: 7.4 us, plus 1-10 us in the norm
   (measured, and charged to the choice in the table: splitting stops paying at a few thousand rows).
-  `FLASHJEV_NONDETERMINISTIC=1` re-enables atomic split-K.
+  `STARTLUX_PRISM_NONDETERMINISTIC=1` re-enables atomic split-K.
 * **Prefix cache across requests** (`engine/prefix_cache.py`, `engine/batch.py`): a request whose evidence is cached
   runs only its questions' tokens, from the entry's linear-attention state and conv tail (an arena slot) and with the
   entry's keys and values as the attention's parent range. Follow-ups: 9.3 -> 4.7 ms (230 evidence tokens), 19.1 ->
@@ -122,7 +122,7 @@ code (about 0.5 ms on short requests). Measured upper bounds (logs: `results/eva
   (floor at 1.70 TB/s: 2.1 ms) and about 200 small per-layer kernels take 1.3 ms of 4.1.
 * **Large-matrix GEMM** (`bench/gemm_ceiling.py`, `bench/cuda_gemm_micro.py`): sustained, the int8 mma.sync peak is
   988 TOPS (2.27 GHz, 311 W), but every real GEMM at 4,096 rows runs into the 575 W board limit (and lower clocks).
-  There, on the wide projections (inputs, qkv, gate|up), flash-jev is at or above cuBLASLt (555-559 against 538-551
+  There, on the wide projections (inputs, qkv, gate|up), StartLux-Prism is at or above cuBLASLt (555-559 against 538-551
   TOPS); on the K-heavy, 2,560-wide output projections cuBLASLt is 17-24% faster - about half of which is our fused
   residual add (an fp32 read and write per output, 42 MB at 4,096 rows) that cuBLASLt's bare int32 product does not
   do. Matching cuBLASLt there: 2.6 ms of a 74 ms pass at 4,096 tokens (3.5%), 0.6 ms at 2,560 (1.4%), nothing at
@@ -193,7 +193,7 @@ two scan waves, output) take 0.67 ms of yesno's 4.1 ms for one 64-token chunk pe
     (`bench/w4a8_table.py`, `kernels/w4a8_table_rtx5090.json`), the rule (`pick_rule`) for anything else.
 * **Second pass: result** (`bench/w4a8_micro.py`, 4B shapes, against the first version): Q4_K 11-20% faster at 4,096
   rows and ~17% at 256, Q6_K 7%; at 4,096 rows Q4_K now takes 1.04-1.6x W8A8's time and Q6_K 2.3-2.6x.  End to end
-  (`scripts/compare.sh flash-jev-w4a8`): JevBench mean 22.1 -> 19.7 ms (p50 8.2 -> 6.6) on the 4B and 36.6 -> 32.1 (11.7 ->
+  (`scripts/compare.sh startlux-prism-w4a8`): JevBench mean 22.1 -> 19.7 ms (p50 8.2 -> 6.6) on the 4B and 36.6 -> 32.1 (11.7 ->
   10.0) on the 9B, the HTTP suites' p50 8-27% lower, throughput 186 -> 198 and 105 -> 117 requests/s.  The tuning
   table alone: 12% below the rule at up to 64 rows, 5% at 64-512, 1% beyond (worst rule choice 1.9x).
 * **Second pass: tried, not kept:** programmatic dependent launch as on the W8A8 path (launched during the activation
@@ -263,7 +263,7 @@ two scan waves, output) take 0.67 ms of yesno's 4.1 ms for one 64-token chunk pe
   they were 33.5, 82.2 and 386 ms.  The batch's GPU time now: projections 71%, linear attention (chunk, scan, output,
   conv) 18%, SwiGLU + quantization 3.6%, norms 2.2%, attention 2.1%.
 * **Build per GPU.** The extension is built for the GPU it runs on (`cuda_ext.cuda_arch()`: sm_120 on the RTX 5090,
-  sm_90a on Hopper - the architecture-specific target wgmma and setmaxnreg need; `FLASHJEV_CUDA_ARCH` overrides), and
+  sm_90a on Hopper - the architecture-specific target wgmma and setmaxnreg need; `STARTLUX_PRISM_CUDA_ARCH` overrides), and
   the dispatch tables are per GPU model (`gemm_table_<gpu>.json`, `w4a8_table_<gpu>.json`).
 
 ## Images (2026-10-13)
@@ -283,7 +283,7 @@ two scan waves, output) take 0.67 ms of yesno's 4.1 ms for one 64-token chunk pe
 
 ## Tensor parallelism: one 27B over 2 or 4 H200s (2026-10-14)
 
-`--tp N` (`flash_jev/tp.py`), the int8 path, for latency: the bar was the single GPU's bits for every answer, cache hit,
+`--tp N` (`startlux_prism/tp.py`), the int8 path, for latency: the bar was the single GPU's bits for every answer, cache hit,
 batch and thought (`tests/test_tp.py`), and it holds at 2 and 4 GPUs.  Numbers: [benchmarks](benchmarks.md#tensor-parallelism-the-27b-on-2-and-4-h200s).
 
 * **Shards** (Megatron-style): attention q|gate, k, v by head (a GPU's 12 or 6 query heads read its 2 or 1 kv heads),
@@ -309,9 +309,9 @@ batch and thought (`tests/test_tp.py`), and it holds at 2 and 4 GPUs.  Numbers: 
   reading those rows: the buffer's rows are padded to a multiple of 16.  Both found by comparing per-layer residuals
   against one GPU, then the kernel alone on real inputs.
 * **All-reduces in the kernels where they beat NCCL** (measured on the engine, pass by pass, both ways:
-  `FLASHJEV_TP_FAST_ROWS`, `FLASHJEV_TP_PULL_ROWS`).  A layer has four all-reduces: two row maxima (a float per
+  `STARTLUX_PRISM_TP_FAST_ROWS`, `STARTLUX_PRISM_TP_PULL_ROWS`).  A layer has four all-reduces: two row maxima (a float per
   token) and two int32 sums (a 5,120-wide row per token).  Through NCCL inside the CUDA graphs they took 4.4 ms of a
-  9.5 ms decode step at 4 GPUs (5.1 ms without them, `FLASHJEV_TP_ABLATE`).
+  9.5 ms decode step at 4 GPUs (5.1 ms without them, `STARTLUX_PRISM_TP_ABLATE`).
 * **Maxima as words (kept, passes of up to 16,384 tokens).**  The producer (gated norm, attention output, SwiGLU)
   writes its row's maximum, with the pass number in the upper half of a 64-bit word, into that row's slot on every
   other GPU, and reads theirs from its own buffer until each carries this pass's number: one launch, no flag, no
@@ -351,9 +351,9 @@ batch and thought (`tests/test_tp.py`), and it holds at 2 and 4 GPUs.  Numbers: 
   mapping: every GPU copies them itself, no NCCL broadcast), its header through a shared ring (a follower polls it,
   and naps after 2 s idle).  Image features are encoded on rank 0 first (so nothing fails after the pass is published)
   and broadcast.  Every rank compiles its Triton kernels into a cache of its own: four ranks compiling the same kernel
-  into one cache directory raced (a rank read another's half-written entry).  So does every worker of `flash_jev.dp`
+  into one cache directory raced (a rank read another's half-written entry).  So does every worker of `startlux_prism.dp`
   (`--tp 2` on four GPUs: two rank 0s on one cold cache died the same way at start).  The CUDA extension's source directory
-  is resolved to its real path: a follower that imported flash_jev by another path (its PYTHONPATH) hashed another
+  is resolved to its real path: a follower that imported startlux_prism by another path (its PYTHONPATH) hashed another
   build command and rebuilt the extension, and two ranks rebuilding in turn waited on each other's build lock (a hang
   at start).
 * **Dispatch tables for the shards** (`bench/cuda_gemm_micro.py --tp N`): the column-parallel shapes, and the output
@@ -414,7 +414,7 @@ batch and thought (`tests/test_tp.py`), and it holds at 2 and 4 GPUs.  Numbers: 
   overlap with the decoder's passes.
 * Tensor parallelism: the int8 path only (bf16 and W4A8 run on one GPU). At 4 GPUs the all-reduces still take about
   two fifths of a prefill pass and a fifth to a third of a decode step, mostly NCCL's int32 sums of the output
-  projections. The in-kernel thresholds (`FLASHJEV_TP_FAST_ROWS`, `FLASHJEV_TP_PULL_ROWS`) were measured on H200s on
+  projections. The in-kernel thresholds (`STARTLUX_PRISM_TP_FAST_ROWS`, `STARTLUX_PRISM_TP_PULL_ROWS`) were measured on H200s on
   NVSwitch only.
 * Hopper (H200): W4A8 still runs on mma.sync (Q4_K_M's projections at 200-300 TOPS against W8A8's 1,250 on wgmma:
   90% of the 27B's W4A8 GPU time); the GEMMs at up to 64 rows (2.5-3.4 TB/s of 4.8); the TMA kernel's epilogue

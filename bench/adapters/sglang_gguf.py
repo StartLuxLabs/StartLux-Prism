@@ -4,7 +4,7 @@ lacks is supplied here, at load time, without changing SGLang:
 
   * a GGUF -> Hugging Face tensor-name map for qwen3_5_text (SGLang's loader knows only the architectures whose GGUF
     name equals the transformers model_type);
-  * llama.cpp's conversion undone, as flash_jev/tools/gguf_to_hf.py undoes it: norm weights - 1 (except the gated
+  * llama.cpp's conversion undone, as startlux_prism/tools/gguf_to_hf.py undoes it: norm weights - 1 (except the gated
     norm), A_log = log(-ssm_a), conv1d [C, K] -> [C, 1, K], and the linear-attention value heads from llama.cpp's tiled
     order back to grouped order - on the unquantized tensors, and on the rows of the quantized ones (a k-quant row is
     self-contained, so the quantized data is reordered, never requantized);

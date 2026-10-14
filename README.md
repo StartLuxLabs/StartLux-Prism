@@ -1,21 +1,22 @@
-# flash-jev
+# StartLux-Prism
 
-**A CUDA inference engine for JEV decision models.** It serves StartLux-Decision v1 (4B, 9B, 27B) and v1.1 AutoThink
-(27B) straight from their GGUF files, behind the TypeSafe `/v1/systemone` API, on the RTX 5090 and the H200, on one GPU
-or several.
+**A fast CUDA inference engine for StartLux-Decision models.** It serves StartLux-Decision v1 (4B, 9B, 27B) and v1.1
+AutoThink (27B) straight from their GGUF files, behind the TypeSafe `/v1/systemone` API, on the RTX 5090 and the H200,
+on one GPU or several. Like a prism that splits light into its spectrum, it turns each question into a calibrated
+probability for every option.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/images/v11-hero-dark.svg">
-  <img src="docs/images/v11-hero.svg" width="840" alt="StartLux-Decision v1.1 27B AutoThink on one H200, flash-jev int8 against the official engine in FP8. Mean ms per request, one at a time: one question of about 256 tokens 19.0 against 53.1; about 8,192 tokens 439.8 against 531.2; the README's three questions 17.4 against 92.9; the same with thoughts 785.1 against 1,296.0. JevBench requests per second: read-outs from 1 client 24.2 against 12.1; from 64 clients 30.7 against 26.3; with thoughts from 64 clients 7.6 against 6.5.">
+  <img src="docs/images/v11-hero.svg" width="840" alt="StartLux-Decision v1.1 27B AutoThink on one H200, StartLux-Prism int8 against the official engine in FP8. Mean ms per request, one at a time: one question of about 256 tokens 19.0 against 53.1; about 8,192 tokens 439.8 against 531.2; the README's three questions 17.4 against 92.9; the same with thoughts 785.1 against 1,296.0. JevBench requests per second: read-outs from 1 client 24.2 against 12.1; from 64 clients 30.7 against 26.3; with thoughts from 64 clients 7.6 against 6.5.">
 </picture>
 
-## Why flash-jev
+## Why StartLux-Prism
 
 - **Faster than the official engine.** On one H200, against StartLux-Decision v1.1's own engine on vLLM 0.31 in FP8:
   2.8x faster on a short question, 5.3x on a three-question request, 1.17x the throughput from 64 clients. On eight
   H200s: 238 read-outs per second against 138 for its BF16 release.
 - **The same answers.** Prompts, read-outs, thoughts and decision rules are the model's own; only the forward pass is
-  new. v1.1's evaluation suites score 92.94 on flash-jev int8, 92.97 on the official BF16 server and 92.83 in FP8. An
+  new. v1.1's evaluation suites score 92.94 on StartLux-Prism int8, 92.97 on the official BF16 server and 92.83 in FP8. An
   answer is bit-identical whatever it is batched with, on any number of GPUs, from the cache or not.
 - **All of v1.1.** AutoThink thoughts generated on the GPU (95 tokens/s for one sequence, 3,832 for 64 at once),
   `none_probability` and `allow_none`, up to 8 images per request.
@@ -32,10 +33,10 @@ toolkit. The CUDA extension builds on first use.
 ```bash
 M=~/models/StartLux-Decision-v1.1-27B-AutoThink-GGUF
 G=$M/StartLux-Decision-v1.1-27B-AutoThink-Q8_0.gguf
-python -m flash_jev.server --gguf $G --model-dir $M --port 8092    # ready when it prints "Ready"
+python -m startlux_prism.server --gguf $G --model-dir $M --port 8092    # ready when it prints "Ready"
 ```
 
-The first start measures the int8 activation ranges once and keeps them in `~/.cache/flash-jev/calib`.
+The first start measures the int8 activation ranges once and keeps them in `~/.cache/startlux-prism/calib`.
 
 ```bash
 curl -s localhost:8092/v1/systemone -H 'Content-Type: application/json' -d '{
@@ -58,9 +59,9 @@ curl -s localhost:8092/v1/systemone -H 'Content-Type: application/json' -d '{
 On several GPUs, with the same flags:
 
 ```bash
-python -m flash_jev.dp --gpus 0,1,2,3,4,5,6,7 --gguf $G --model-dir $M --port 8092   # data parallel: most throughput
-python -m flash_jev.server --tp 2 --gpus 0,1 --gguf $G --model-dir $M --port 8092    # tensor parallel: less latency
-python -m flash_jev.dp --gpus 0,1,2,3 --tp 2 --gguf $G --model-dir $M --port 8092    # both
+python -m startlux_prism.dp --gpus 0,1,2,3,4,5,6,7 --gguf $G --model-dir $M --port 8092   # data parallel: most throughput
+python -m startlux_prism.server --tp 2 --gpus 0,1 --gguf $G --model-dir $M --port 8092    # tensor parallel: less latency
+python -m startlux_prism.dp --gpus 0,1,2,3 --tp 2 --gguf $G --model-dir $M --port 8092    # both
 ```
 
 ## Serving
@@ -91,7 +92,7 @@ Every field and flag, the model folders and the GPUs: [docs/serving.md](docs/ser
 
 StartLux-Decision v1.1 27B AutoThink, one H200 per server, the same requests:
 
-| | official, BF16 | official, FP8 | **flash-jev int8** |
+| | official, BF16 | official, FP8 | **StartLux-Prism int8** |
 |---|---|---|---|
 | one short question, ms | 54.2 | 53.1 | **19.0** |
 | three questions, ms (with thoughts) | 93.1 (1,775) | 92.9 (1,296) | **17.4 (785)** |
@@ -101,7 +102,7 @@ StartLux-Decision v1.1 27B AutoThink, one H200 per server, the same requests:
 
 Under load both engines are bound by the tensor cores, which run int8 and FP8 at the same rate, so the lead narrows to
 17%. On several H200s, read-outs per second: one GPU 30.9, four 121.1, eight 237.8 (the official engine on eight:
-137.5). On StartLux-Decision v1, flash-jev has the lowest latency of every engine compared (1.6-2.3x below the next)
+137.5). On StartLux-Decision v1, StartLux-Prism has the lowest latency of every engine compared (1.6-2.3x below the next)
 and 1.6-2.4x their throughput.
 
 Methods, every engine, table and chart: [docs/benchmarks.md](docs/benchmarks.md).
@@ -126,9 +127,12 @@ suite: [docs/benchmarks.md](docs/benchmarks.md#accuracy-startlux-decision-v1s-ev
 More: [design and code map](docs/design.md), [optimization log](docs/optimizations.md),
 [correctness and tests](docs/testing.md).
 
+StartLux-Prism was called flash-jev until 2026-10-14: `python -m flash_jev.server` (and `.dp`), `import flash_jev` and
+`FLASHJEV_*` environment variables still work, and a calibration file already in `~/.cache/flash-jev` is found.
+
 ## License
 
-flash-jev's own code: to be decided by the owner. Vendored from StartLux-Decision (Apache-2.0,
-`LICENSES/StartLux-Decision-Apache-2.0.txt`): `flash_jev/jevfmt.py`, `flash_jev/calibration.py`, and `flash_jev/loops.py`
+StartLux-Prism's own code: to be decided by the owner. Vendored from StartLux-Decision (Apache-2.0,
+`LICENSES/StartLux-Decision-Apache-2.0.txt`): `startlux_prism/jevfmt.py`, `startlux_prism/calibration.py`, and `startlux_prism/loops.py`
 from v1.1's package. Model weights are not part of this repository; StartLux-Decision's weights are CC BY-NC 4.0
 (non-commercial).

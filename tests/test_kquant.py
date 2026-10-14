@@ -12,8 +12,8 @@ import numpy as np
 import torch
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
-from flash_jev import gguf_weights as GW  # noqa: E402
-from flash_jev.gguf import GGML_Q4_K, GGML_Q5_K, GGML_Q6_K, GGUFFile  # noqa: E402
+from startlux_prism import gguf_weights as GW  # noqa: E402
+from startlux_prism.gguf import GGML_Q4_K, GGML_Q5_K, GGML_Q6_K, GGUFFile  # noqa: E402
 
 NAMES = {0: "F32", 1: "F16", 8: "Q8_0", 12: "Q4_K", 13: "Q5_K", 14: "Q6_K", 30: "BF16"}
 

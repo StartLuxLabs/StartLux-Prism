@@ -1,4 +1,4 @@
-"""StartLux-Decision v1.1 compatibility, on the CPU: flash-jev's prompts and decisions against StartLux-Decision v1.1's
+"""StartLux-Decision v1.1 compatibility, on the CPU: StartLux-Prism's prompts and decisions against StartLux-Decision v1.1's
 own package (startlux_decide), and v1 folders unchanged.
 
     STARTLUX_DECIDE=/path/to/Startlux-decide-inference python tests/test_v11.py --v11-dir V11_MODEL_DIR \\
@@ -6,13 +6,13 @@ own package (startlux_decide), and v1 folders unchanged.
 
 1. prompts: random questions (choice with and without the extra "None of the above", bare ids, descriptions equal to
    their ids, ids ending in whitespace, yes/no, score levels as lists and as dicts, text and JSON states, long arrays)
-   rendered by flash-jev (jevfmt.from_systemone + prompt.render_text) and by startlux_decide (from_systemone +
+   rendered by StartLux-Prism (jevfmt.from_systemone + prompt.render_text) and by startlux_decide (from_systemone +
    plain_prompt, the folder's chat template): the same text byte for byte, and the same tokens.
-2. decisions (v1.1 folder): the same questions plus choice lists of 27-300 options, answered by flash-jev's Decider
+2. decisions (v1.1 folder): the same questions plus choice lists of 27-300 options, answered by StartLux-Prism's Decider
    and by startlux_decide's read-out functions in the order its pipeline applies them (think_mode "never"), both
    reading the same pseudo-random letter logits for each prompt: identical answers, every float, with none_check and
    allow_none on and off and with a question's own allow_none; questions both refuse are refused by both.
-3. v1: a v1 folder with no v1.1 controls answers exactly as flash-jev's decide.py did before v1.1 support
+3. v1: a v1 folder with no v1.1 controls answers exactly as StartLux-Prism's decide.py did before v1.1 support
    (tests/data/decide_v1.py), every float.
 """
 import argparse
@@ -24,9 +24,9 @@ import random
 import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
-from flash_jev import decide as D  # noqa: E402
-from flash_jev import jevfmt as J  # noqa: E402
-from flash_jev.prompt import Tokenizer, render_text  # noqa: E402
+from startlux_prism import decide as D  # noqa: E402
+from startlux_prism import jevfmt as J  # noqa: E402
+from startlux_prism.prompt import Tokenizer, render_text  # noqa: E402
 
 WORDS = ("alpha beta gamma delta ticket refund order shipping billing login error crash slow price invoice account "
          "customer Paris Berlin approve reject escalate urgent minor major none other").split()
@@ -260,10 +260,10 @@ def main():
           f"{'every answer identical to startlux_decide' if not bad2 else f'{bad2} DIFFER'}", flush=True)
 
     # 3. v1 folders: as before v1.1 support
-    spec = importlib.util.spec_from_file_location("flash_jev._decide_v1",
+    spec = importlib.util.spec_from_file_location("startlux_prism._decide_v1",
                                                   os.path.join(os.path.dirname(__file__), "data", "decide_v1.py"))
     old = importlib.util.module_from_spec(spec)
-    old.__package__ = "flash_jev"
+    old.__package__ = "startlux_prism"
     spec.loader.exec_module(old)
     tok1 = Tokenizer(a.v1_dir)
     assert tok1.kind == "v1", tok1.kind

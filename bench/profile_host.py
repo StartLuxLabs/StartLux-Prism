@@ -14,10 +14,10 @@ import torch
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 sys.path.insert(0, os.path.dirname(__file__))
-from flash_jev import jevfmt as J  # noqa: E402
-from flash_jev.decide import Decider, softmax_t  # noqa: E402
-from flash_jev.engine.model import Engine, Options  # noqa: E402
-from flash_jev.prompt import render_text, rows_for  # noqa: E402
+from startlux_prism import jevfmt as J  # noqa: E402
+from startlux_prism.decide import Decider, softmax_t  # noqa: E402
+from startlux_prism.engine.model import Engine, Options  # noqa: E402
+from startlux_prism.prompt import render_text, rows_for  # noqa: E402
 import suites  # noqa: E402
 
 

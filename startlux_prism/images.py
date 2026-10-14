@@ -169,7 +169,7 @@ def load_images(values, settings=Settings()):
     with _POOL_LOCK:
         if _POOL is None:
             from concurrent.futures import ThreadPoolExecutor
-            _POOL = ThreadPoolExecutor(MAX_IMAGES, thread_name_prefix="flash-jev-images")
+            _POOL = ThreadPoolExecutor(MAX_IMAGES, thread_name_prefix="startlux-prism-images")
     futures = [_POOL.submit(_load, v, k, settings) for k, v in enumerate(values)]
     return [f.result() for f in futures]
 

@@ -1,8 +1,8 @@
-"""Data parallelism: one flash-jev server per GPU and a router in front of them, on one port.
+"""Data parallelism: one StartLux-Prism server per GPU and a router in front of them, on one port.
 
-    python -m flash_jev.dp --gpus 0,1,2,3 [--tp 2] --port 8092 --gguf X.gguf --model-dir DIR [any flash_jev.server flag]
+    python -m startlux_prism.dp --gpus 0,1,2,3 [--tp 2] --port 8092 --gguf X.gguf --model-dir DIR [any startlux_prism.server flag]
 
-Every worker is a whole server (flash_jev.server: its own engine, scheduler, prefix cache and thoughts) on its GPU, on
+Every worker is a whole server (startlux_prism.server: its own engine, scheduler, prefix cache and thoughts) on its GPU, on
 --worker-port + i of --worker-host; the server flags after the router's own pass through to every worker.  With --tp N
 each worker is a tensor-parallel server over N of the GPUs, in order (--gpus 0,1,2,3 --tp 2: workers on 0,1 and 2,3).
 The router forwards each request whole - every question of a request on one worker, so they share its evidence - to:
@@ -210,7 +210,7 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     ap.add_argument("--gpus", required=True, help="GPUs, one worker each (--tp of them with --tp), e.g. 0,1,2,3")
     ap.add_argument("--tp", type=int, default=1,
-                    help="GPUs per worker: each worker a tensor-parallel server (flash_jev.server --tp; the int8 path)")
+                    help="GPUs per worker: each worker a tensor-parallel server (startlux_prism.server --tp; the int8 path)")
     ap.add_argument("--host", default="127.0.0.1")
     ap.add_argument("--port", type=int, default=8092)
     ap.add_argument("--worker-host", default="127.0.0.1")
@@ -231,7 +231,7 @@ def main():
         sys.exit(str(e))
     os.makedirs(a.log_dir, exist_ok=True)
     workers = [Worker(i, g, a.worker_host, a.worker_port + i) for i, g in enumerate(groups)]
-    # a Triton cache of its own per worker (as flash_jev/tp.py gives each rank): workers compiling the same kernel into
+    # a Triton cache of its own per worker (as startlux_prism/tp.py gives each rank): workers compiling the same kernel into
     # one cache directory at once raced (a worker read another's half-written entry: FileNotFoundError on its metadata)
     cache = os.environ.get("TRITON_CACHE_DIR") or os.path.join(os.path.expanduser("~"), ".triton", "cache")
 
@@ -239,7 +239,7 @@ def main():
         env = dict(os.environ, CUDA_VISIBLE_DEVICES=w.gpu,          # a --tp server runs on its visible GPUs
                    TRITON_CACHE_DIR=os.path.join(cache, f"dp-worker{w.idx}"))
         log = open(os.path.join(a.log_dir, f"worker{w.idx}-gpu{w.gpu.replace(',', '-')}.log"), "w")
-        cmd = [sys.executable, "-m", "flash_jev.server", "--host", w.host, "--port", str(w.port)] + rest
+        cmd = [sys.executable, "-m", "startlux_prism.server", "--host", w.host, "--port", str(w.port)] + rest
         if a.tp > 1:
             cmd += ["--tp", str(a.tp)]
         w.proc = subprocess.Popen(cmd, env=env, stdout=log, stderr=subprocess.STDOUT, preexec_fn=_worker_session)

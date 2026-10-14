@@ -38,7 +38,7 @@
 #include <c10/cuda/CUDAStream.h>
 
 #if defined(__CUDA_ARCH__) && defined(__CUDA_ARCH_FEAT_SM90_ALL)
-#define FLASHJEV_WGMMA_DEVICE 1
+#define STARTLUX_PRISM_WGMMA_DEVICE 1
 #endif
 
 namespace {
@@ -59,7 +59,7 @@ __device__ __forceinline__ void cp_async_commit() { asm volatile("cp.async.commi
 template <int N>
 __device__ __forceinline__ void cp_async_wait() { asm volatile("cp.async.wait_group %0;\n" ::"n"(N)); }
 
-#ifdef FLASHJEV_WGMMA_DEVICE
+#ifdef STARTLUX_PRISM_WGMMA_DEVICE
 // generic-proxy writes (cp.async) to shared memory, made visible to the async proxy that wgmma reads through
 __device__ __forceinline__ void fence_async_shared() { asm volatile("fence.proxy.async.shared::cta;\n" ::: "memory"); }
 __device__ __forceinline__ void wg_fence() { asm volatile("wgmma.fence.sync.aligned;\n" ::: "memory"); }
@@ -122,7 +122,7 @@ __device__ __forceinline__ int swz128(int r, int c) { return r * 128 + ((c ^ (r 
 template <int BN>
 struct Wgmma;
 
-#ifdef FLASHJEV_WGMMA_DEVICE
+#ifdef STARTLUX_PRISM_WGMMA_DEVICE
 // d[64 x BN] += A (64 x 32, desc a) * B (BN x 32, desc b)^T; per thread BN / 2 accumulators, laid out per warp as
 // mma.sync's m16n8 accumulators: warp w of the warpgroup holds rows 16w + lane / 4 (+ 8), columns 8j + 2 (lane % 4)
 // (+ 1) in d[4j .. 4j + 3]
@@ -393,7 +393,7 @@ __global__ void __launch_bounds__(WgTile<BM, BN, STAGES>::THREADS, 1)
     w8a8_wgmma_kernel(const int8_t* __restrict__ A, const float* __restrict__ sa, const int8_t* __restrict__ W,
                       const float* __restrict__ sw, void* __restrict__ out, int ldo, const int* __restrict__ n_rows,
                       int M, int N, int K) {
-#ifdef FLASHJEV_WGMMA_DEVICE
+#ifdef STARTLUX_PRISM_WGMMA_DEVICE
   using T = WgTile<BM, BN, STAGES>;
   constexpr int THREADS = T::THREADS, NACC = T::NACC, CH = WG_BK / 16;
   const int live = min(*n_rows, M);  // written by the batch's table upload, not by the kernel before this one
@@ -478,7 +478,7 @@ __global__ void __launch_bounds__(TmaTile<BM, BN, STAGES>::THREADS, 1)
                           const float* __restrict__ sa, const float* __restrict__ sw, void* __restrict__ out, int ldo,
                           const int* __restrict__ n_rows, int M, int N, int K, int vec, int kt_per_split,
                           int64_t slot_stride) {
-#ifdef FLASHJEV_WGMMA_DEVICE
+#ifdef STARTLUX_PRISM_WGMMA_DEVICE
   using T = TmaTile<BM, BN, STAGES>;
   constexpr int ROWB = BN * (EPI == 0 ? 2 : 4) + 16;   // wg_epilogue_staged's rows, in the stages' memory
   static_assert(STAGES * T::STAGE_BYTES >= T::CWGS * 64 * ROWB, "the staged epilogue does not fit in the stages");
@@ -659,8 +659,8 @@ void launch_wg(const torch::Tensor& a, const torch::Tensor& sa, const torch::Ten
 
 void w8a8_wgmma(torch::Tensor a, torch::Tensor sa, torch::Tensor w, torch::Tensor sw, torch::Tensor out,
                 torch::Tensor n_rows, int64_t epi, int64_t cfg, int64_t stages, int64_t split, int64_t slot_stride) {
-#ifndef FLASHJEV_SM90A
-  TORCH_CHECK(false, "w8a8_wgmma: the extension was built without sm_90a (FLASHJEV_CUDA_ARCH=90a)");
+#ifndef STARTLUX_PRISM_SM90A
+  TORCH_CHECK(false, "w8a8_wgmma: the extension was built without sm_90a (STARTLUX_PRISM_CUDA_ARCH=90a)");
 #endif
   TORCH_CHECK(at::cuda::getCurrentDeviceProperties()->major == 9, "w8a8_wgmma: Hopper (sm_90) only");
   TORCH_CHECK(a.dtype() == torch::kInt8 && w.dtype() == torch::kInt8, "int8 operands");
@@ -706,8 +706,8 @@ void w8a8_wgmma(torch::Tensor a, torch::Tensor sa, torch::Tensor w, torch::Tenso
 #undef W8A8_WG_STAGES
 }
 
-TORCH_LIBRARY_FRAGMENT(flash_jev, m) {
+TORCH_LIBRARY_FRAGMENT(startlux_prism, m) {
   m.def("w8a8_wgmma(Tensor a, Tensor sa, Tensor w, Tensor sw, Tensor(a!) out, Tensor n_rows, int epi, int cfg, "
         "int stages, int split=1, int slot_stride=0) -> ()");
 }
-TORCH_LIBRARY_IMPL(flash_jev, CUDA, m) { m.impl("w8a8_wgmma", &w8a8_wgmma); }
+TORCH_LIBRARY_IMPL(startlux_prism, CUDA, m) { m.impl("w8a8_wgmma", &w8a8_wgmma); }

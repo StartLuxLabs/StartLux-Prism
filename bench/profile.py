@@ -17,9 +17,9 @@ import torch
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 sys.path.insert(0, os.path.dirname(__file__))
-from flash_jev import jevfmt as J  # noqa: E402
-from flash_jev.engine.model import Engine, Options  # noqa: E402
-from flash_jev.prompt import rows_for  # noqa: E402
+from startlux_prism import jevfmt as J  # noqa: E402
+from startlux_prism.engine.model import Engine, Options  # noqa: E402
+from startlux_prism.prompt import rows_for  # noqa: E402
 import suites  # noqa: E402
 from run_http import uniquify  # noqa: E402
 
@@ -99,7 +99,7 @@ def main():
     for name, us in tot.most_common(a.top):
         print(f"  {us / 1000:8.3f} ms {100 * us / all_us:5.1f}%  x{cnt[name]:4d}  {name}")
     if a.gemm_detail:
-        from flash_jev.kernels import w8a8 as KW
+        from startlux_prism.kernels import w8a8 as KW
         inner, calls = KW.gemm, []
 
         def timed_gemm(a_, a_s, w, w_s, out, n_rows, gk, epi=0, outs=None, cfg=None, slots=None):
@@ -111,7 +111,7 @@ def main():
                                                                                    a_.shape[0]))), e0, e1))
             return r
 
-        import flash_jev.engine.model as EM
+        import startlux_prism.engine.model as EM
         EM.KW.gemm = timed_gemm
         for _ in range(3):
             calls.clear()

@@ -1,4 +1,4 @@
-"""Tensor parallelism (flash_jev/tp.py) against one GPU, bit for bit, on the int8 path.
+"""Tensor parallelism (startlux_prism/tp.py) against one GPU, bit for bit, on the int8 path.
 
     python tests/test_tp.py --gguf X.gguf --model-dir DIR --calib C.pt --tp 2 --gpus 2,3 --ref-gpu 1 \\
         --jevbench JEVBENCH/datasets/public [--mmproj F] [--tokens 64]
@@ -38,19 +38,19 @@ sys.path.insert(0, os.path.join(ROOT, "bench"))
 def work(a):
     """One side of the comparison (this process: --tp engine, or one GPU) -> {name: list of tensors / values}."""
     if a.tp > 1:
-        from flash_jev import tp as TP
+        from startlux_prism import tp as TP
         TP.start(a.tp, a.gpus)
     else:
         os.environ["CUDA_VISIBLE_DEVICES"] = a.gpus
     import numpy as np
     import torch
-    from flash_jev import images as I
-    from flash_jev import jevfmt as J
-    from flash_jev.decide import Decider
-    from flash_jev.engine.decode import Decoder, Row, Sampling
-    from flash_jev.engine.model import Engine, Options, group
-    from flash_jev.prompt import rows_for
-    from flash_jev.think import RELEASE_PREFIX, Framing
+    from startlux_prism import images as I
+    from startlux_prism import jevfmt as J
+    from startlux_prism.decide import Decider
+    from startlux_prism.engine.decode import Decoder, Row, Sampling
+    from startlux_prism.engine.model import Engine, Options, group
+    from startlux_prism.prompt import rows_for
+    from startlux_prism.think import RELEASE_PREFIX, Framing
     from run_http import uniquify
     import suites
 
@@ -215,7 +215,7 @@ def server_compare(a):
         env = dict(os.environ, CUDA_VISIBLE_DEVICES=gpus)
         log = open(os.path.join(a.log_dir, f"server-tp{tp}.log"), "w")
         logs.append(log)
-        cmd = [sys.executable, "-m", "flash_jev.server", "--port", str(port)] + common
+        cmd = [sys.executable, "-m", "startlux_prism.server", "--port", str(port)] + common
         if tp > 1:
             cmd += ["--tp", str(tp), "--gpus", gpus]
         procs.append(subprocess.Popen(cmd, cwd=ROOT, env=env, stdout=log, stderr=subprocess.STDOUT))

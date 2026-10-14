@@ -1,4 +1,4 @@
-"""flash_jev/dp.py's router on the CPU, against fake workers (HTTP servers that answer with their own index after a
+"""startlux_prism/dp.py's router on the CPU, against fake workers (HTTP servers that answer with their own index after a
 delay): evidence affinity, routing by load, a failing worker skipped and brought back by /health; the GPU groups
 of --tp workers.
 
@@ -13,8 +13,8 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
-from flash_jev import dp  # noqa: E402
-from flash_jev.httpserve import serve  # noqa: E402
+from startlux_prism import dp  # noqa: E402
+from startlux_prism.httpserve import serve  # noqa: E402
 
 
 def free_port():

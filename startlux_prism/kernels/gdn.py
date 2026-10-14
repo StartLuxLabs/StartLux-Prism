@@ -348,15 +348,15 @@ def conv_prep(proj, convw, hist, conv_arena, gdn_layer, dt_bias, a, q, k, v, g, 
 # Launch parameters of the chunk kernels (value tile width, stages, warps): the RTX 5090's, and per GPU model where
 # others measured faster - the H200 (132 SMs, 227 KB of shared memory): the 27B's scan 31% and output 21% faster on a
 # 32-request batch with value tiles twice as wide (the profiler's kernel times).  A tile only splits independent value
-# columns, so every choice gives the same bits.  FLASHJEV_<NAME> overrides.
+# columns, so every choice gives the same bits.  STARTLUX_PRISM_<NAME> overrides.
 LAUNCH = dict(INTRA_WARPS=4, OUT_BV=64, OUT_WARPS=4, OUT_NS=2, HREC_BV=32, HREC_NS=3, HREC_WARPS=4)
 LAUNCH_BY_GPU = {"h200": dict(OUT_BV=128, OUT_NS=1, HREC_BV=64, HREC_NS=2)}
 
 
 @functools.lru_cache(None)
 def launch(name):
-    if f"FLASHJEV_{name}" in os.environ:
-        return int(os.environ[f"FLASHJEV_{name}"])
+    if f"STARTLUX_PRISM_{name}" in os.environ:
+        return int(os.environ[f"STARTLUX_PRISM_{name}"])
     from .cuda_ext import gpu_tag
     return LAUNCH_BY_GPU.get(gpu_tag(), {}).get(name, LAUNCH[name])
 

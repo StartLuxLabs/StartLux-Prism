@@ -1,5 +1,5 @@
 #!/bin/bash
-# Offline environment for flash-jev on the GPU server (no internet, no root).
+# Offline environment for StartLux-Prism on the GPU server (no internet, no root).
 #
 #   JEV=~/jev scripts/setup_server.sh
 #
@@ -38,7 +38,7 @@ for so in cudart cublas cublasLt nvrtc; do
 done
 
 cat > "$JEV/env.sh" <<EOF
-# source this: flash-jev environment
+# source this: StartLux-Prism environment
 source "$JEV/venv/bin/activate"
 export CUDA_HOME="$CU"
 export CUDA_PATH="$CU"

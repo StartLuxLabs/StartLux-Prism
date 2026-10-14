@@ -4,7 +4,7 @@
     python bench/charts.py
 
 The numbers are those of docs/benchmarks.md's tables (from results/, as bench/report.py prints them), and every chart
-has its table next to it there. One style throughout: flash-jev in the accent blue, every other engine in gray, the
+has its table next to it there. One style throughout: StartLux-Prism in the accent blue, every other engine in gray, the
 value at each bar's tip, hairline grid; the colors are the light and dark tokens below (the accent and the line gray
 checked with the dataviz palette validator against both surfaces).
 """
@@ -223,7 +223,7 @@ def bar_chart(theme, title, subtitle, rows, panels, legend=None, note=None, desc
 
 
 def group_chart(theme, title, subtitle, groups, panels, legend, note=None, desc=""):
-    """Grouped horizontal bars (flash-jev, then another engine), panels stacked; a panel: dict(head, vals: one
+    """Grouped horizontal bars (StartLux-Prism, then another engine), panels stacked; a panel: dict(head, vals: one
     (ours, theirs) pair per group, names: the other engine per group (or None), max, unit, and optionally groups (this
     panel's own group labels), fmt (the values' format, default ",.1f") and extra (a text after our value per group,
     e.g. a speed-up))."""
@@ -333,9 +333,9 @@ MODELS = ("4B · RTX 5090", "9B · RTX 5090", "27B · H200")
 # JevBench's 231 public items per engine: mean ms per item one request at a time, and requests/s from 32 clients, on
 # (MODELS); rows in the order of their summed ranks
 JEVBENCH = [
-    ("flash-jev int8", (15.0, 21.6, 41.0), (85.2, 53.3, 30.6)),
+    ("StartLux-Prism int8", (15.0, 21.6, 41.0), (85.2, 53.3, 30.6)),
     ("decider, compile + FP8", (33.4, 50.3, 66.8), (35.0, 22.6, 15.4)),
-    ("flash-jev bf16", (29.6, 52.1, 68.2), (37.0, 19.9, 16.7)),
+    ("StartLux-Prism bf16", (29.6, 52.1, 68.2), (37.0, 19.9, 16.7)),
     ("SGLang native", (42.0, 59.8, 90.1), (39.5, 21.7, 18.8)),
     ("SGLang via adapter", (40.1, 62.1, 92.0), (37.4, 20.5, 17.7)),
     ("StartLux-Decision server", (47.0, 71.2, 96.0), (22.9, 14.2, 10.4)),
@@ -351,7 +351,7 @@ def all_engines_chart(theme, title, subtitle, which, unit, note):
     """Every engine on the three models: one panel per model, the rows in JEVBENCH's order."""
     k = 1 if which == "lat" else 2
     return bar_chart(
-        theme, title, subtitle, [(r[0], r[0] == "flash-jev int8") for r in JEVBENCH],
+        theme, title, subtitle, [(r[0], r[0] == "StartLux-Prism int8") for r in JEVBENCH],
         [dict(head=MODELS[m], vals=[r[k][m] for r in JEVBENCH], shown=[f"{r[k][m]:,.1f}" for r in JEVBENCH],
               unit=unit, max=LAT_MAX[m] if which == "lat" else None) for m in range(3)],
         note=note)
@@ -365,7 +365,7 @@ def engines_chart(theme, title, m, note):
     return bar_chart(
         theme, title,
         "The 231 public JevBench items; every engine alone on the GPU, through the same HTTP client.",
-        [(r[0], r[0] == "flash-jev int8") for r in rows],
+        [(r[0], r[0] == "StartLux-Prism int8") for r in rows],
         [dict(head="One request at a time: mean ms per item (lower is better)", vals=lat,
               shown=[f"{v:,.1f}" for v in lat], unit="ms", max=LAT_MAX[m]),
          dict(head="From 32 clients: requests per second (higher is better)", vals=[r[2][m] for r in rows],
@@ -425,7 +425,7 @@ def long_chart(theme, title, rows, cut8, cut50, note):
         theme, title,
         "One yes/no question about an application log of 8,000 or 50,000 tokens, one request at a time; every engine "
         "counted every token. " + STAND_IN,
-        [(r[0], r[0] == "flash-jev int8") for r in rows],
+        [(r[0], r[0] == "StartLux-Prism int8") for r in rows],
         [dict(head="8,000 tokens: p50 ms (lower is better)", vals=[r[1] for r in rows],
               shown=[f"{r[1]:,}" if isinstance(r[1], int) else f"{r[1]:,.1f}" for r in rows], unit="ms", max=cut8),
          dict(head="50,000 tokens: p50 ms (lower is better)", vals=[r[2] for r in rows],
@@ -435,7 +435,7 @@ def long_chart(theme, title, rows, cut8, cut50, note):
 
 @chart
 def rtx5090_4b_long(theme):
-    rows = [("flash-jev int8", 162.5, 1960), ("decider, compile + FP8", 328.7, 3708), ("SGLang via adapter", 342.2, 2911),
+    rows = [("StartLux-Prism int8", 162.5, 1960), ("decider, compile + FP8", 328.7, 3708), ("SGLang via adapter", 342.2, 2911),
             ("JevK5", 417.7, 3263), ("StartLux-Decision server", 424.2, "fails above 32,768 tokens"),
             ("vLLM via adapter", 440.5, 3359), ("decider, default", 521.5, 3272), ("llama.cpp (Q8_0)", 730.3, 5326)]
     return long_chart(theme, "Long evidence: StartLux-Decision-v1-4B (Q8_0) on an RTX 5090", rows, None, None,
@@ -445,7 +445,7 @@ def rtx5090_4b_long(theme):
 
 @chart
 def h200_27b_long(theme):
-    rows = [("flash-jev int8", 432, 3693), ("decider, compile + FP8", 698, 7301), ("SGLang via adapter", 704, 4936),
+    rows = [("StartLux-Prism int8", 432, 3693), ("decider, compile + FP8", 698, 7301), ("SGLang via adapter", 704, 4936),
             ("vLLM via adapter", 833, 5743), ("JevK5", 847, 5783), ("StartLux-Decision server", 870, "fails above 32,768 tokens"),
             ("decider, default", 1062, 6779), ("llama.cpp (Q8_0)", 3514, 28623)]
     return long_chart(theme, "Long evidence: StartLux-Decision-v1-27B (Q8_0) on an H200", rows, 1200, 8000,
@@ -464,56 +464,56 @@ def max_context(theme):
          dict(head="StartLux-Decision-v1-27B (Q8_0), H200", xs=[16, 32, 48, 64, 96, 128],
               series=[[0.910, 2.047, 3.460, 5.120, 9.234, 14.205], [1.424, 2.984, 4.697, 6.605, 10.821, 15.705]],
               xmax=132, ymax=16)],
-        legend=[("accent", "flash-jev int8"), ("line2", "SGLang 0.5.21, --chunked-prefill-size -1")],
-        note="Prompt length in thousands of tokens. On the RTX 5090 flash-jev runs with --prefix-cache 0 (its largest "
+        legend=[("accent", "StartLux-Prism int8"), ("line2", "SGLang 0.5.21, --chunked-prefill-size -1")],
+        note="Prompt length in thousands of tokens. On the RTX 5090 StartLux-Prism runs with --prefix-cache 0 (its largest "
              "batch then 98,304 tokens) and SGLang with --mem-fraction-static 0.6 (it does not start otherwise); "
-             "SGLang ran out of memory at 96k there, and between 128k and 192k on the H200. flash-jev refuses a "
+             "SGLang ran out of memory at 96k there, and between 128k and 192k on the H200. StartLux-Prism refuses a "
              "request beyond its largest batch (HTTP 422); it never cuts one.")
 
 
 @chart
 def prefix_cache(theme):
-    rows = [("flash-jev int8, prefix cache", 54.1, 5.4), ("vLLM, automatic prefix caching", 162.0, 42.6),
-            ("flash-jev int8, cache off", 50.7, 48.0), ("SGLang, radix cache", 129.9, 113.3),
+    rows = [("StartLux-Prism int8, prefix cache", 54.1, 5.4), ("vLLM, automatic prefix caching", 162.0, 42.6),
+            ("StartLux-Prism int8, cache off", 50.7, 48.0), ("SGLang, radix cache", 129.9, 113.3),
             ("decider, compile + FP8", 104.6, 157.8), ("StartLux-Decision server", 173.9, 173.6)]
     return bar_chart(
         theme, "Follow-up questions about evidence already sent",
         "StartLux-Decision-v1-4B (Q8_0) on an RTX 5090: the 20 public JevBench items with the longest evidence (2,000-3,700 "
         "tokens), each asked, then two more questions about the same evidence. p50 ms.",
-        [(r[0], r[0] == "flash-jev int8, prefix cache") for r in rows],
+        [(r[0], r[0] == "StartLux-Prism int8, prefix cache") for r in rows],
         [dict(head="First request (new evidence)", vals=[r[1] for r in rows], shown=[f"{r[1]:,.1f}" for r in rows],
               unit="ms", max=200),
          dict(head="Follow-up requests (same evidence)", vals=[r[2] for r in rows], shown=[f"{r[2]:,.1f}" for r in rows],
               unit="ms", max=200)],
-        note="2026-10-10. flash-jev answers a follow-up from the evidence's cached state, bit-identical to "
+        note="2026-10-10. StartLux-Prism answers a follow-up from the evidence's cached state, bit-identical to "
              "recomputing it.")
 
 
 @chart
 def q4km(theme):
     return group_chart(
-        theme, "StartLux-Decision-v1 Q4_K_M files: flash-jev W4A8 against llama.cpp",
-        "Each engine on the same Q4_K_M GGUF file: flash-jev on the file's own 4-bit weights (int8 activations, "
+        theme, "StartLux-Decision-v1 Q4_K_M files: StartLux-Prism W4A8 against llama.cpp",
+        "Each engine on the same Q4_K_M GGUF file: StartLux-Prism on the file's own 4-bit weights (int8 activations, "
         "int8 tensor cores), llama.cpp b10639. JevBench, one request at a time.",
         ["4B · RTX 5090", "9B · RTX 5090", "27B · RTX 5090", "27B · H200"],
         [dict(head="Mean ms per JevBench item (lower is better)",
               vals=[(19.7, 135.8), (32.1, 160.3), (112.7, 439.3), (155.2, 626.7)], unit="ms")],
-        legend=[("accent", "flash-jev W4A8"), ("other", "llama.cpp")],
-        note="Scores on the same files: 201, 200, 207, 207 of 231 for flash-jev; 201, 200, 206, 207 for llama.cpp. "
+        legend=[("accent", "StartLux-Prism W4A8"), ("other", "llama.cpp")],
+        note="Scores on the same files: 201, 200, 207, 207 of 231 for StartLux-Prism; 201, 200, 206, 207 for llama.cpp. "
              "On the H200 the W4A8 GEMMs still run on mma.sync, not on Hopper's warpgroup MMA.")
 
 
-V11_ROWS = [("flash-jev int8", True), ("official engine, FP8", False), ("official engine, BF16", False)]
+V11_ROWS = [("StartLux-Prism int8", True), ("official engine, FP8", False), ("official engine, BF16", False)]
 V11_NOTE = ("Official engine: Startlux-decide-inference (StartLux-Decision v1.1's own package, commit b70404d) with "
             "its release flags on vLLM 0.31.0, from the BF16 release (FP8: vLLM's --quantization fp8); the release has "
-            "no MTP weights, so neither side drafts tokens. flash-jev int8 from the Q8_0 GGUF release. One H200 per "
+            "no MTP weights, so neither side drafts tokens. StartLux-Prism int8 from the Q8_0 GGUF release. One H200 per "
             "server, 2026-10-13/14.")
 
 
 @chart
 def v11_official_latency(theme):
     return bar_chart(
-        theme, "StartLux-Decision v1.1 27B AutoThink: flash-jev against the official engine",
+        theme, "StartLux-Decision v1.1 27B AutoThink: StartLux-Prism against the official engine",
         "One request at a time, new evidence in every request, the official engine's own client (startlux-decide "
         "bench). Mean ms per request (lower is better).",
         V11_ROWS,
@@ -544,7 +544,7 @@ def v11_official_throughput(theme):
 def v11_hero(theme):
     return group_chart(
         theme, "StartLux-Decision v1.1 27B AutoThink on one H200",
-        "flash-jev int8 against the model's official engine (Startlux-decide-inference with its release flags on vLLM "
+        "StartLux-Prism int8 against the model's official engine (Startlux-decide-inference with its release flags on vLLM "
         "0.31) in FP8, its faster setting; the same requests to both.",
         [],
         [dict(head="One request at a time: mean ms per request (lower is better)",
@@ -556,15 +556,15 @@ def v11_hero(theme):
               groups=["Read-outs, 1 client", "Read-outs, 64 clients", "With thoughts, 64 clients"],
               vals=[(24.2, 12.1), (30.7, 26.3), (7.61, 6.52)], unit="requests/s",
               extra=["2.0x", "1.17x", "1.17x"])],
-        legend=[("accent", "flash-jev int8"), ("other", "official engine, FP8")],
-        note="Same accuracy on StartLux-Decision v1's evaluation suites with thoughts: 92.94 (flash-jev) and 92.83 "
+        legend=[("accent", "StartLux-Prism int8"), ("other", "official engine, FP8")],
+        note="Same accuracy on StartLux-Decision v1's evaluation suites with thoughts: 92.94 (StartLux-Prism) and 92.83 "
              "(FP8; 92.97 for the official BF16 server). 2026-10-13/14.")
 
 
 @chart
 def v11_precision(theme):
     return group_chart(
-        theme, "flash-jev int8 against bf16: StartLux-Decision v1.1 27B on one H200",
+        theme, "StartLux-Prism int8 against bf16: StartLux-Decision v1.1 27B on one H200",
         "The same Q8_0 weights: int8 (W8A8) or dequantized to bf16 (cuBLAS); the engine alone, no HTTP.",
         [],
         [dict(head="Prefill: prompt tokens per second (higher is better)",
@@ -576,7 +576,7 @@ def v11_precision(theme):
               groups=["1 sequence", "8 sequences", "64 sequences"],
               vals=[(10.47, 14.89), (11.06, 15.90), (16.70, 21.74)], unit="ms", fmt=",.2f",
               extra=["1.42x", "1.44x", "1.30x"])],
-        legend=[("accent", "flash-jev int8"), ("other", "flash-jev bf16")],
+        legend=[("accent", "StartLux-Prism int8"), ("other", "StartLux-Prism bf16")],
         note="Decode at a 512-token context. Thoughts written by int8 are slightly less accurate on hard items "
              "(docs/benchmarks.md).")
 
@@ -585,7 +585,7 @@ def v11_precision(theme):
 def several_gpus(theme):
     return bar_chart(
         theme, "Several GPUs: StartLux-Decision v1.1 27B on H200s",
-        "flash-jev int8, JevBench. Data parallelism (DP: whole servers behind the router) for throughput, tensor "
+        "StartLux-Prism int8, JevBench. Data parallelism (DP: whole servers behind the router) for throughput, tensor "
         "parallelism (TP: one model split over the GPUs) for the time per request. Every configuration answers as one "
         "GPU does, bit for bit; one GPU in gray, for scale.",
         [("one GPU", False), ("2 GPUs: TP 2", True), ("4 GPUs: TP 4", True), ("4 GPUs: DP 2 x TP 2", True),

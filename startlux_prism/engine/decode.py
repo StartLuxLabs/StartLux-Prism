@@ -21,7 +21,7 @@ candidate) - so a thought does not depend on the sequences it is batched with or
 Positions: a sequence starts at the position after its last prefilled token (taken from the prefill's plan, not
 derived from a token count), +1 per step, equal on all three M-RoPE axes.
 
-Tensor parallel (an Engine with Options.tp, flash_jev/tp.py): every rank builds the decoder (rank 0's constructor
+Tensor parallel (an Engine with Options.tp, startlux_prism/tp.py): every rank builds the decoder (rank 0's constructor
 mirrors it) and runs every step on its shard - the output projections' int32 sums and their inputs' row maxima
 all-reduced, as in the prefill - with the output head and the sampler replicated: every rank draws the same tokens, so
 the next step's input tokens are already on every GPU.  Rank 0 stages a step's tables in shared memory; the followers

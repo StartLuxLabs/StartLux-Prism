@@ -2,11 +2,11 @@
 
 int8 (W8A8) needs every projection input's per-channel maximum, measured by a bf16 forward over StartLux-Decision's
 calibration requests (engine/model.py: Engine.calibrate).  The first int8 start computes them and keeps them in a file
-(--calib, by default under ~/.cache/flash-jev/calib); later starts read it.  A tensor-parallel group loads its shards
+(--calib, by default under ~/.cache/startlux-prism/calib); later starts read it.  A tensor-parallel group loads its shards
 straight from the Q8_0 values, without the bf16 copy that forward needs, so ensure() computes the file first, on one
 GPU, in a process of its own (its bf16 weights are freed when it exits).
 
-    python -m flash_jev.calib MODEL.gguf MODEL_DIR FILE        # what ensure() runs
+    python -m startlux_prism.calib MODEL.gguf MODEL_DIR FILE        # what ensure() runs
 """
 from __future__ import annotations
 
@@ -26,8 +26,14 @@ def auto_precision(gguf):
 
 
 def default_path(gguf):
-    """$FLASHJEV_CACHE (default ~/.cache/flash-jev)/calib/<file name>-<size>-v<VERSION>.pt."""
-    root = os.environ.get("FLASHJEV_CACHE") or os.path.join(os.path.expanduser("~"), ".cache", "flash-jev")
+    """$STARTLUX_PRISM_CACHE (default ~/.cache/startlux-prism, or ~/.cache/flash-jev where only that one exists: the
+    engine's former name)/calib/<file name>-<size>-v<VERSION>.pt."""
+    root = os.environ.get("STARTLUX_PRISM_CACHE")
+    if not root:
+        home = os.path.join(os.path.expanduser("~"), ".cache")
+        root = os.path.join(home, "startlux-prism")
+        if not os.path.isdir(root) and os.path.isdir(os.path.join(home, "flash-jev")):
+            root = os.path.join(home, "flash-jev")
     stem = os.path.basename(gguf).removesuffix(".gguf")
     return os.path.join(root, "calib", f"{stem}-{os.path.getsize(gguf)}-v{VERSION}.pt")
 
@@ -47,7 +53,7 @@ def ensure(gguf, model_dir, path, gpu):
     print(f"int8 activation ranges: computing them once on GPU {gpu} (a bf16 forward of the calibration requests), "
           f"kept in {path}", flush=True)
     env = dict(os.environ, CUDA_VISIBLE_DEVICES=str(gpu))
-    r = subprocess.run([sys.executable, "-m", "flash_jev.calib", gguf, model_dir, path], env=env)
+    r = subprocess.run([sys.executable, "-m", "startlux_prism.calib", gguf, model_dir, path], env=env)
     if r.returncode != 0 or not os.path.exists(path):
         sys.exit(f"computing the int8 activation ranges failed (exit code {r.returncode})")
 

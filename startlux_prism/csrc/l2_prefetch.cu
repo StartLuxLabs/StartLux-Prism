@@ -46,5 +46,5 @@ void l2_prefetch(std::vector<torch::Tensor> tensors, int64_t ctas) {
   C10_CUDA_KERNEL_LAUNCH_CHECK();
 }
 
-TORCH_LIBRARY_FRAGMENT(flash_jev, m) { m.def("l2_prefetch(Tensor[] tensors, int ctas) -> ()"); }
-TORCH_LIBRARY_IMPL(flash_jev, CUDA, m) { m.impl("l2_prefetch", &l2_prefetch); }
+TORCH_LIBRARY_FRAGMENT(startlux_prism, m) { m.def("l2_prefetch(Tensor[] tensors, int ctas) -> ()"); }
+TORCH_LIBRARY_IMPL(startlux_prism, CUDA, m) { m.impl("l2_prefetch", &l2_prefetch); }

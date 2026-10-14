@@ -1,11 +1,11 @@
-"""flash-jev's CUDA C++ kernels (flash_jev/csrc), compiled on first use with the toolkit in CUDA_HOME and registered
+"""StartLux-Prism's CUDA C++ kernels (startlux_prism/csrc), compiled on first use with the toolkit in CUDA_HOME and registered
 as torch ops (graph-capturable: they launch on the current stream)."""
 import functools
 import os
 
 import torch
 
-# the canonical path: the build command holds it, and processes that imported flash_jev by different paths (a script's
+# the canonical path: the build command holds it, and processes that imported startlux_prism by different paths (a script's
 # sys.path entry, a tensor-parallel follower's PYTHONPATH) otherwise rebuilt the extension in turn, each waiting for
 # the other's build lock
 CSRC = os.path.realpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "csrc"))
@@ -35,9 +35,9 @@ def table_path(prefix):
 
 @functools.lru_cache(None)
 def cuda_arch():
-    """The GPU architecture the kernels are built for: FLASHJEV_CUDA_ARCH, else this GPU's - "120" on the RTX 5090, "90a"
+    """The GPU architecture the kernels are built for: STARTLUX_PRISM_CUDA_ARCH, else this GPU's - "120" on the RTX 5090, "90a"
     on Hopper (H100 / H200: the architecture-specific build, which the wgmma kernel of csrc/w8a8_wgmma.cu needs)."""
-    arch = os.environ.get("FLASHJEV_CUDA_ARCH")
+    arch = os.environ.get("STARTLUX_PRISM_CUDA_ARCH")
     if arch:
         return arch
     major, minor = torch.cuda.get_device_capability()
@@ -54,12 +54,12 @@ def load():
     base = arch.rstrip("a")                     # "90a" -> TORCH_CUDA_ARCH_LIST "9.0a", "120" -> "12.0"
     os.environ.setdefault("TORCH_CUDA_ARCH_LIST", f"{base[:-1]}.{base[-1]}{arch[len(base):]}")
     sources = ("w8a8_gemm.cu", "w8a8_wgmma.cu", "w4a8_gemm.cu", "l2_prefetch.cu")
-    _load(name="flash_jev_ext", sources=[os.path.join(CSRC, f) for f in sources],
+    _load(name="startlux_prism_ext", sources=[os.path.join(CSRC, f) for f in sources],
           is_python_module=False,
           extra_cuda_cflags=["-O3", f"-gencode=arch=compute_{arch},code=sm_{arch}", "-lineinfo"]
-          + (["-DFLASHJEV_SM90A"] if arch == "90a" else []),
+          + (["-DSTARTLUX_PRISM_SM90A"] if arch == "90a" else []),
           extra_cflags=["-O3"], verbose=False)
-    return torch.ops.flash_jev
+    return torch.ops.startlux_prism
 
 
 # cfg id -> (BM, BN, TMA pipeline) of csrc/w8a8_wgmma.cu

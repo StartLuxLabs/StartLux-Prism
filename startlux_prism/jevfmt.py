@@ -1,6 +1,6 @@
 # Vendored from StartLux-Decision (startlux_decision/jevfmt.py, commit 0e7a2e81b9c9), Apache-2.0; see
 # LICENSES/StartLux-Decision-Apache-2.0.txt.  The prompt bytes must match the format the checkpoints were trained on,
-# so the v1 rendering is unchanged: flash-jev changes how the forward pass runs, not what it reads.  One addition, from
+# so the v1 rendering is unchanged: StartLux-Prism changes how the forward pass runs, not what it reads.  One addition, from
 # StartLux-Decision v1.1 (startlux_decide/prompt.py, Apache-2.0): the extra last option "None of the above" of a choice
 # question with allow_none / none_check (`from_systemone(..., allow_none=True)`), which v1 requests never get, so every
 # v1 prompt renders as before.

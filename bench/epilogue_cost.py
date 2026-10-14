@@ -1,5 +1,5 @@
 """What the CUDA GEMM's epilogue (scale + store / residual add) costs: the projection GEMMs with the dispatch table's
-kernels, built normally and built with FLASHJEV_EPI_SKIP (the same kernels without their output writes), in two processes.
+kernels, built normally and built with STARTLUX_PRISM_EPI_SKIP (the same kernels without their output writes), in two processes.
 
     python bench/epilogue_cost.py [--m 384,1280,4096]
 """
@@ -14,14 +14,14 @@ import json, os, sys
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(sys.argv[1])), ".."))
 sys.path.insert(0, os.path.dirname(os.path.abspath(sys.argv[1])))
 import torch
-from flash_jev.kernels import cuda_ext as CX, w8a8 as KW
+from startlux_prism.kernels import cuda_ext as CX, w8a8 as KW
 if sys.argv[2] == "skip":
     from torch.utils.cpp_extension import load
-    load(name="flash_jev_ext_epi_skip", sources=[os.path.join(CX.CSRC, f) for f in ("w8a8_gemm.cu", "l2_prefetch.cu")],
-         is_python_module=False, extra_cuda_cflags=["-O3", "-gencode=arch=compute_120,code=sm_120", "-DFLASHJEV_EPI_SKIP"],
+    load(name="startlux_prism_ext_epi_skip", sources=[os.path.join(CX.CSRC, f) for f in ("w8a8_gemm.cu", "l2_prefetch.cu")],
+         is_python_module=False, extra_cuda_cflags=["-O3", "-gencode=arch=compute_120,code=sm_120", "-DSTARTLUX_PRISM_EPI_SKIP"],
          extra_cflags=["-O3"], verbose=False)
     CX.load.cache_clear()
-    CX.load = lambda: torch.ops.flash_jev
+    CX.load = lambda: torch.ops.startlux_prism
 from gemm_micro import SHAPES, timed
 EPI = {"gdn_out": 1, "attn_o": 1, "mlp_down": 1}
 out = {}

@@ -1,4 +1,4 @@
-"""The flash-jev decision engine: one forward pass per batch of requests, recorded as CUDA graphs.
+"""The StartLux-Prism decision engine: one forward pass per batch of requests, recorded as CUDA graphs.
 
 A forward has two graphs:
   body[T]  - embedding, layers 0..n-2 over all T packed tokens (T: the batch's token bucket), and the last layer's
@@ -124,7 +124,7 @@ class Options:
     think_seqs: int = 0             # sequences that can decode at once (engine/decode.py): state slots of their own
     think_kv_rows: int = 0          # KV-arena rows for the decoding sequences (each: its prompt, then its tokens)
     mmproj: str = ""                # the vision tower (llama.cpp mmproj GGUF) for prompts with images; "": text only
-    tp: int = 1                     # tensor parallelism over this many GPUs (int8; flash_jev/tp.py: the group must be
+    tp: int = 1                     # tensor parallelism over this many GPUs (int8; startlux_prism/tp.py: the group must be
                                     # started in this process first)
 
 
@@ -132,7 +132,7 @@ class Engine:
     def __init__(self, gguf_path, model_dir, options=None, device="cuda"):
         self.opt = options or Options()
         self.device = torch.device(device)
-        self.tp = None                               # tensor parallelism (flash_jev/tp.py): this rank's group
+        self.tp = None                               # tensor parallelism (startlux_prism/tp.py): this rank's group
         if self.opt.tp > 1:
             from .. import tp as TP
             self.tp = TP.group()
@@ -273,8 +273,8 @@ class Engine:
         engine's.  self.cfg becomes the shard's config (its heads, its FFN columns; tp.shard_config)."""
         from .. import tp as TP
         if not (self.opt.calib and os.path.exists(self.opt.calib)):
-            raise ValueError("tensor parallelism needs the int8 activation ranges (--calib FILE; flash_jev.server "
-                             "computes them before it starts the group: flash_jev/calib.py)")
+            raise ValueError("tensor parallelism needs the int8 activation ranges (--calib FILE; startlux_prism.server "
+                             "computes them before it starts the group: startlux_prism/calib.py)")
         amax = self._load_or_calibrate(w)
         dev, full = self.device, self.cfg
         n, r = self.tp.world, self.tp.rank
@@ -897,7 +897,7 @@ class Engine:
         self._done[b.slot].record()
         return b
 
-    # ------------------------------------------------------------------ tensor parallel (flash_jev/tp.py)
+    # ------------------------------------------------------------------ tensor parallel (startlux_prism/tp.py)
     def _launch_tp(self, b, n):
         """Rank 0: the images encoded first (so nothing fails once the pass is published), the pass published to the
         followers, then run as every rank runs it (_pass); the logits back."""

@@ -113,10 +113,10 @@ def _quant_rows_kernel(x_ptr, q_ptr, s_ptr, n_rows_ptr, K: tl.constexpr, GK: tl.
 
 
 # Split-K with atomic adds makes the fp32 sums depend on arrival order: the same request could then get (very slightly)
-# different probabilities from one run to the next, and a near-tie can flip.  Off unless FLASHJEV_NONDETERMINISTIC=1: the
+# different probabilities from one run to the next, and a near-tie can flip.  Off unless STARTLUX_PRISM_NONDETERMINISTIC=1: the
 # CUDA kernel splits K serially instead (the splits of a tile add in split order through semaphores) and stream-K
 # reduces int32 partial sums; this Triton kernel does not split K.
-NONDETERMINISTIC = os.environ.get("FLASHJEV_NONDETERMINISTIC") == "1"
+NONDETERMINISTIC = os.environ.get("STARTLUX_PRISM_NONDETERMINISTIC") == "1"
 
 
 def pick(M, N, K, epi=0):
@@ -146,12 +146,12 @@ def _table():
     """(N, K) -> {M: choice}: the fastest of this module's Triton kernel and the CUDA ones (csrc/w8a8_gemm.cu: one CTA
     per tile, or stream-K; on Hopper also csrc/w8a8_wgmma.cu) per projection shape and token count, measured with
     weights streamed from DRAM (bench/cuda_gemm_micro.py --table) on this GPU's model: kernels/gemm_table_<gpu
-    tag>.json (rtx5090, h200; without one, the Triton kernel).  FLASHJEV_GEMM=triton turns it off, FLASHJEV_GEMM_TABLE names
+    tag>.json (rtx5090, h200; without one, the Triton kernel).  STARTLUX_PRISM_GEMM=triton turns it off, STARTLUX_PRISM_GEMM_TABLE names
     another table file."""
     from . import cuda_ext
-    if os.environ.get("FLASHJEV_GEMM") == "triton":
+    if os.environ.get("STARTLUX_PRISM_GEMM") == "triton":
         return {}
-    path = os.environ.get("FLASHJEV_GEMM_TABLE") or cuda_ext.table_path("gemm_table")
+    path = os.environ.get("STARTLUX_PRISM_GEMM_TABLE") or cuda_ext.table_path("gemm_table")
     if not os.path.exists(path):
         return {}
     raw = json.load(open(path))["table"]

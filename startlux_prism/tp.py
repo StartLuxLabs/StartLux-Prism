@@ -1,9 +1,9 @@
 """Tensor parallelism: one model replica over N GPUs of one server (NVLink), for lower latency.
 
-    python -m flash_jev.server --tp 2 --gpus 4,5 --gguf X.gguf --model-dir DIR
+    python -m startlux_prism.server --tp 2 --gpus 4,5 --gguf X.gguf --model-dir DIR
 
 The int8 path.  The shards are cut from the Q8_0 values with the int8 activation ranges, which the server measures on
-one GPU before it starts the group when they are not kept yet (flash_jev/calib.py).
+one GPU before it starts the group when they are not kept yet (startlux_prism/calib.py).
 
 One process per GPU.  Rank 0 is the whole server - HTTP, scheduler, planner, decisions, thoughts, the vision tower -
 and its Engine and Decoder; ranks 1..N-1 are followers that hold their shard of the same model and replay what rank 0
@@ -74,7 +74,7 @@ _GROUP = None
 def group():
     """This process's tensor-parallel group (start() on rank 0, the follower loop on the others)."""
     if _GROUP is None:
-        raise RuntimeError("no tensor-parallel group in this process: start one with flash_jev.tp.start(n, gpus) "
+        raise RuntimeError("no tensor-parallel group in this process: start one with startlux_prism.tp.start(n, gpus) "
                            "before anything uses CUDA")
     return _GROUP
 
@@ -130,14 +130,14 @@ def shard_index(cfg, n, r):
 # passes up to PULL_ROWS rows (per group size) leave the int32 sums in symmetric memory, read from every rank by the
 # kernel that adds them into the residual, longer ones all-reduce them through NCCL (docs/optimizations.md: the
 # measurements behind both)
-FAST_ROWS = int(os.environ.get("FLASHJEV_TP_FAST_ROWS", "16384"))
+FAST_ROWS = int(os.environ.get("STARTLUX_PRISM_TP_FAST_ROWS", "16384"))
 PULL_ROWS = {2: 128, 4: 4}
 SPLIT_ROWS = 512                        # output projections split K (several int32 slots) only up to this many rows
 MAX_SPLIT = 4                           # (bench/cuda_gemm_micro.py's int32 entries: at most 4 splits, up to 512 rows)
 CHANNELS = 1024                         # fused sums per pass (a body pass of the 27B has 126)
 # measurement only (wrong results): every rank computes its shard without the all-reduces (its own row maxima, its own
 # partial sums) - the time of a pass without communication, for the all-reduces' share (docs/benchmarks.md)
-ABLATE = os.environ.get("FLASHJEV_TP_ABLATE") == "1"
+ABLATE = os.environ.get("STARTLUX_PRISM_TP_ABLATE") == "1"
 
 
 def quantize_rows(g, fn, rows, amax, *args):
@@ -230,8 +230,8 @@ def _sweep_stale():
     are named after its process id)."""
     import glob
     import re
-    for path in glob.glob("/dev/shm/flashjev-tp-*"):
-        m = re.match(r"flashjev-tp-(\d+)-", os.path.basename(path))
+    for path in glob.glob("/dev/shm/startlux-prism-tp-*"):
+        m = re.match(r"startlux-prism-tp-(\d+)-", os.path.basename(path))
         if not m:
             continue
         try:
@@ -366,7 +366,7 @@ class Group:
                 raise ValueError("one tensor-parallel group serves one model")
             return
         if pull_rows is None:
-            env = os.environ.get("FLASHJEV_TP_PULL_ROWS")
+            env = os.environ.get("STARTLUX_PRISM_TP_PULL_ROWS")
             pull_rows = int(env) if env else PULL_ROWS.get(self.world, 1)
         self.hidden, self.fast_rows, self.pull_rows = hidden, fast_rows, max(0, min(pull_rows, fast_rows))
         self.word_steps = words
@@ -534,7 +534,7 @@ def start(world, gpus=None):
     if world < 2:
         raise ValueError("a tensor-parallel group needs 2 or more GPUs")
     if torch.cuda.is_initialized():
-        raise RuntimeError("flash_jev.tp.start must run before anything uses CUDA (it sets the visible GPUs)")
+        raise RuntimeError("startlux_prism.tp.start must run before anything uses CUDA (it sets the visible GPUs)")
     if isinstance(gpus, str):
         gpus = gpus.split(",")
     gpus = [str(g).strip() for g in (gpus or os.environ.get("CUDA_VISIBLE_DEVICES", "").split(",")) if str(g).strip()]
@@ -543,7 +543,7 @@ def start(world, gpus=None):
         raise ValueError(f"--tp {world} needs {world} GPUs, got {','.join(gpus)}")
     os.environ["CUDA_VISIBLE_DEVICES"] = ",".join(gpus[:world])
     port = _free_port()
-    prefix = f"flashjev-tp-{os.getpid()}-{port}"
+    prefix = f"startlux-prism-tp-{os.getpid()}-{port}"
     _sweep_stale()
     root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     env = dict(os.environ, PYTHONPATH=os.pathsep.join([root] + [p for p in os.environ.get("PYTHONPATH", "").split(
@@ -552,7 +552,7 @@ def start(world, gpus=None):
     # (a rank read another's half-written entry: FileNotFoundError on its metadata)
     cache = os.environ.get("TRITON_CACHE_DIR") or os.path.join(os.path.expanduser("~"), ".triton", "cache")
     atexit.register(_unlink_created)
-    procs = [subprocess.Popen([sys.executable, "-m", "flash_jev.tp", str(r), str(world), str(port), prefix],
+    procs = [subprocess.Popen([sys.executable, "-m", "startlux_prism.tp", str(r), str(world), str(port), prefix],
                               env=dict(env, TRITON_CACHE_DIR=os.path.join(cache, f"tp-rank{r}")))
              for r in range(1, world)]
     try:
@@ -629,6 +629,6 @@ def main():
 
 
 if __name__ == "__main__":
-    # run as flash_jev.tp itself, not as __main__: the engine imports flash_jev.tp and must find this process's group
-    from flash_jev import tp as _tp
+    # run as startlux_prism.tp itself, not as __main__: the engine imports startlux_prism.tp and must find this process's group
+    from startlux_prism import tp as _tp
     _tp.main()

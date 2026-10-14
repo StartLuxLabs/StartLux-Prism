@@ -15,7 +15,7 @@ import torch.nn.functional as F
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 sys.path.insert(0, os.path.dirname(__file__))
-from flash_jev.kernels import attn as KA  # noqa: E402
+from startlux_prism.kernels import attn as KA  # noqa: E402
 from gemm_micro import timed  # noqa: E402
 
 H, HKV, HD = 16, 4, 256

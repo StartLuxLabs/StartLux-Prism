@@ -11,8 +11,8 @@ import sys
 import torch
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
-from flash_jev.kernels import cuda_ext as CX  # noqa: E402
-from flash_jev.kernels import w8a8 as KW  # noqa: E402
+from startlux_prism.kernels import cuda_ext as CX  # noqa: E402
+from startlux_prism.kernels import w8a8 as KW  # noqa: E402
 
 
 def main():

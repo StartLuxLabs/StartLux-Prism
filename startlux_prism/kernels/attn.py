@@ -32,15 +32,15 @@ from triton.language.extra.cuda import libdevice
 # tiles: 276 TFLOPS at 4,000 tokens and 366 at 12,000 against 126 and 141 with the RTX 5090's tiles (the 27B's 24
 # heads).  The key tile sets the order of a row's softmax accumulation: fixed per GPU model, so a request's numbers are
 # the same whatever its batch.  The head's blocks (one query each) keep the RTX 5090's tiles on every GPU.
-# FLASHJEV_ATTN_<NAME> overrides.
+# STARTLUX_PRISM_ATTN_<NAME> overrides.
 LAUNCH = dict(BM=32, BN=32, WARPS=4, STAGES=3)
 LAUNCH_BY_GPU = {"h200": dict(BM=128, BN=64, WARPS=8, STAGES=2)}
 
 
 @functools.lru_cache(None)
 def launch(name):
-    if f"FLASHJEV_ATTN_{name}" in os.environ:
-        return int(os.environ[f"FLASHJEV_ATTN_{name}"])
+    if f"STARTLUX_PRISM_ATTN_{name}" in os.environ:
+        return int(os.environ[f"STARTLUX_PRISM_ATTN_{name}"])
     from .cuda_ext import gpu_tag
     return LAUNCH_BY_GPU.get(gpu_tag(), {}).get(name, LAUNCH[name])
 

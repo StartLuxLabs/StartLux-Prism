@@ -11,7 +11,7 @@ import torch
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 sys.path.insert(0, os.path.dirname(__file__))
-from flash_jev.kernels import cuda_ext as CX  # noqa: E402
+from startlux_prism.kernels import cuda_ext as CX  # noqa: E402
 from gemm_micro import SHAPES, timed  # noqa: E402
 
 PAIRS = [(0, 8), (3, 9), (6, 10), (7, 11), (2, 12), (0, 13)]

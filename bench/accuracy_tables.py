@@ -11,9 +11,9 @@ import sys
 SUITES = ["jevbench-easy", "jevbench-original", "jevbench-hard", "typed_decisions-test", "toolace-test", "agnews-test",
           "wildjailbreak-test"]
 SHORT = ["Easy", "Original", "Hard", "Typed", "ToolACE", "AG News", "WildJB"]
-NAMES = {"startlux-ref": "StartLux-Decision server (reference)", "flash-jev-int8": "flash-jev int8",
-         "flash-jev-int8-c8": "flash-jev int8, 8 clients at once", "flash-jev-bf16": "flash-jev bf16",
-         "flash-jev-w4a8": "flash-jev W4A8 (Q4_K_M file)"}
+NAMES = {"startlux-ref": "StartLux-Decision server (reference)", "startlux-prism-int8": "StartLux-Prism int8",
+         "startlux-prism-int8-c8": "StartLux-Prism int8, 8 clients at once", "startlux-prism-bf16": "StartLux-Prism bf16",
+         "startlux-prism-w4a8": "StartLux-Prism W4A8 (Q4_K_M file)"}
 # StartLux-Decision-v1's published rows (docs/results.md of StartLuxLabs/StartLux-Decision-v1; original weights)
 PUBLISHED = {"4B": [100.00, 100.00, 75.68, 79.95, 94.19, 90.91, 97.47], "9B": [100.00, 97.22, 74.77, 81.45, 94.84, 91.97, 97.33],
              "27B": [100.00, 100.00, 79.28, 80.20, 94.52, 90.57, 98.19]}

@@ -1,7 +1,7 @@
 #!/bin/bash
 # Every model folder the comparison needs, from one StartLux-Decision GGUF repository (run once per model on the GPU
 # server; the 4B's folders were made the same way):
-#   HF           bf16 safetensors, Q8_0 values dequantized exactly (flash_jev/tools/gguf_to_hf.py): StartLux-Decision's
+#   HF           bf16 safetensors, Q8_0 values dequantized exactly (startlux_prism/tools/gguf_to_hf.py): StartLux-Decision's
 #                own server, and the weights of every folder below
 #   CAUSAL       the same weights as Qwen3_5ForCausalLM (the text config; symlinks): vLLM, the adapter's tokenizer
 #   CAUSAL_FLAT  a copy with keys model.* instead of model.language_model.*: SGLang (its loader leaves the
@@ -30,7 +30,7 @@ REF=$M/StartLux-Decision-4B-bf16-from-Q8_0          # the 4B checkpoint: the sta
 
 if [ ! -f "$HF/model.safetensors.index.json" ]; then
   echo "converting $GGUF -> $HF"
-  python -m flash_jev.tools.gguf_to_hf --gguf "$GGUF" --model-dir "$MODEL" --out "$HF"
+  python -m startlux_prism.tools.gguf_to_hf --gguf "$GGUF" --model-dir "$MODEL" --out "$HF"
 fi
 
 if [ ! -f "$CAUSAL/config.json" ]; then

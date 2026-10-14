@@ -1,4 +1,4 @@
-# How flash-jev works
+# How StartLux-Prism works
 
 The engine's design and a map of the code. The short version is in the [README](../README.md); what was measured, kept and dropped is in [optimizations.md](optimizations.md).
 
@@ -83,7 +83,7 @@ Code:
 
 | files | role |
 |---|---|
-| `flash_jev/engine/model.py`, `engine/batch.py` | the engine and its graphs; the forest planner |
+| `startlux_prism/engine/model.py`, `engine/batch.py` | the engine and its graphs; the forest planner |
 | `kernels/gdn.py` | conv + prep, the WY chunk kernel, the two-wave state scan, the gated norm |
 | `kernels/attn.py` | QK norm + RoPE + KV arena, tree flash attention |
 | `kernels/w8a8.py`, `kernels/quant.py`, `csrc/` | the int8 and W4A8 paths |

@@ -20,12 +20,12 @@ import sys
 import torch
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
-from flash_jev import images as I  # noqa: E402
-from flash_jev import jevfmt as J  # noqa: E402
-from flash_jev.decide import Decider  # noqa: E402
-from flash_jev.engine.model import Engine, Options, group  # noqa: E402
-from flash_jev.prompt import rows_for  # noqa: E402
-from flash_jev.vision import find_mmproj  # noqa: E402
+from startlux_prism import images as I  # noqa: E402
+from startlux_prism import jevfmt as J  # noqa: E402
+from startlux_prism.decide import Decider  # noqa: E402
+from startlux_prism.engine.model import Engine, Options, group  # noqa: E402
+from startlux_prism.prompt import rows_for  # noqa: E402
+from startlux_prism.vision import find_mmproj  # noqa: E402
 
 spec = importlib.util.spec_from_file_location("vision_suite", os.path.join(os.path.dirname(__file__), "..", "bench",
                                                                            "vision_suite.py"))

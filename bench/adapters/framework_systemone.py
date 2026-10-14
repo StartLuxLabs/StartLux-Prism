@@ -1,6 +1,6 @@
 """/v1/systemone in front of a general serving framework, with StartLux-Decision's own prompts and readout, so the
 framework is measured as the engine: same prompt bytes, same letter readout, temperatures, wide-choice rounds and answer
-format as every other engine in the benchmark (flash_jev.decide / flash_jev.prompt).  Only the forward passes go to
+format as every other engine in the benchmark (startlux_prism.decide / startlux_prism.prompt).  Only the forward passes go to
 the framework.
 
     python bench/adapters/framework_systemone.py --backend sglang --upstream http://127.0.0.1:8095 --model-dir DIR --port 8097
@@ -26,9 +26,9 @@ from concurrent.futures import ThreadPoolExecutor
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
-from flash_jev import jevfmt as J  # noqa: E402
-from flash_jev.decide import Decider  # noqa: E402
-from flash_jev.prompt import Tokenizer, common_prefix  # noqa: E402
+from startlux_prism import jevfmt as J  # noqa: E402
+from startlux_prism.decide import Decider  # noqa: E402
+from startlux_prism.prompt import Tokenizer, common_prefix  # noqa: E402
 
 _OPENER = urllib.request.build_opener(urllib.request.ProxyHandler({}))
 

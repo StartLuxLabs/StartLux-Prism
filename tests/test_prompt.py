@@ -10,8 +10,8 @@ import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from flash_jev import jevfmt as J  # noqa: E402
-from flash_jev.prompt import Tokenizer, common_prefix, render_text, rows_for  # noqa: E402
+from startlux_prism import jevfmt as J  # noqa: E402
+from startlux_prism.prompt import Tokenizer, common_prefix, render_text, rows_for  # noqa: E402
 
 EXTRA = [
     ({"ticket": "I was charged twice for order #4411 and the app still shows it as unpaid."},

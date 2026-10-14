@@ -11,10 +11,10 @@ import torch
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 sys.path.insert(0, os.path.dirname(__file__))
-from flash_jev import jevfmt as J  # noqa: E402
-from flash_jev.engine.model import Engine, Options  # noqa: E402
-from flash_jev.kernels import w8a8 as KW  # noqa: E402
-from flash_jev.prompt import rows_for  # noqa: E402
+from startlux_prism import jevfmt as J  # noqa: E402
+from startlux_prism.engine.model import Engine, Options  # noqa: E402
+from startlux_prism.kernels import w8a8 as KW  # noqa: E402
+from startlux_prism.prompt import rows_for  # noqa: E402
 from gemm_micro import timed  # noqa: E402
 import suites  # noqa: E402
 

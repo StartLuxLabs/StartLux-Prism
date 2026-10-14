@@ -4,7 +4,7 @@ clock and board power sampled (NVML), so every rate is compared at the clock the
 
     python bench/gemm_ceiling.py --mma-peak ./mma_peak [--m 4096] [--seconds 4]
 
-Prints TOPS, mean SM clock and power for: the mma.sync peak; per projection shape, flash-jev's dispatch (the kernel
+Prints TOPS, mean SM clock and power for: the mma.sync peak; per projection shape, StartLux-Prism's dispatch (the kernel
 the engine runs for that row count, with its epilogue) and cuBLASLt int8 (torch._int_mm, int32 out, no epilogue).
 Weights rotate over 4 copies (as in a forward pass, where every projection's weights come from DRAM).
 """
@@ -18,7 +18,7 @@ import torch
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 sys.path.insert(0, os.path.dirname(__file__))
-from flash_jev.kernels import w8a8 as KW  # noqa: E402
+from startlux_prism.kernels import w8a8 as KW  # noqa: E402
 from gemm_micro import SHAPES  # noqa: E402
 from run_http import GPUSampler  # noqa: E402
 
@@ -81,7 +81,7 @@ def main():
         ops = 2.0 * M * N * K
         t_o, g_o = sustained(ours, a.seconds, ops, gpu)
         t_l, g_l = sustained(lt, a.seconds, ops, gpu)
-        print(f"{name:12s} M={M} N={N:5d} K={K:4d}: flash-jev {t_o:6.1f} TOPS at {g_o.get('sm_clock_mhz_mean')} MHz "
+        print(f"{name:12s} M={M} N={N:5d} K={K:4d}: StartLux-Prism {t_o:6.1f} TOPS at {g_o.get('sm_clock_mhz_mean')} MHz "
               f"{g_o.get('power_w_mean')} W | cuBLASLt {t_l:6.1f} TOPS at {g_l.get('sm_clock_mhz_mean')} MHz "
               f"{g_l.get('power_w_mean')} W", flush=True)
 

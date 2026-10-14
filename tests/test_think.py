@@ -3,7 +3,7 @@
     STARTLUX_DECIDE=/path/to/Startlux-decide-inference python tests/test_think.py --v11-dir V11_MODEL_DIR \\
         [--n 300] [--texts 5000] [--seed 0]
 
-1. loop detector: flash_jev.loops against startlux_decide.loops (looping and loop_cut) on --texts synthetic texts:
+1. loop detector: startlux_prism.loops against startlux_decide.loops (looping and loop_cut) on --texts synthetic texts:
    periodic units of 1-400 characters with digits that change, digit runs, shuffled lines, word salads, prose, with
    random prefixes, cuts and whitespace.
 2. thinking prompts: think.Framing (the folder's chat template with thinking on, rendered once) against
@@ -11,11 +11,11 @@
    and the same tokens; and the read prompts after a thought tokenized the same.  A third of the states carry 1-3
    images (their places as v1.1 puts them, rendered as the chat template's image placeholder).
 3. orchestration: whole requests (choice, yes/no, score, knock-out lists, none_check / allow_none, think_mode auto and
-   always, gates, mixes, budgets, stream and chunked) through flash-jev's ThinkingDecider and through startlux_decide's
+   always, gates, mixes, budgets, stream and chunked) through StartLux-Prism's ThinkingDecider and through startlux_decide's
    Decider, both on deterministic fake engines that read the same pseudo-random letter logits for the same prompt text
    and write the same thoughts - token ids from a hash of the thinking prompt and the seed: closing the thought,
    ending with the end-of-sequence token, running into the budget or into a loop, a stop string split over tokens,
-   multi-byte characters, stray think tags.  flash-jev's side runs its scheduler path (think.StreamThought /
+   multi-byte characters, stray think tags.  StartLux-Prism's side runs its scheduler path (think.StreamThought /
    ChunkGeneration fed one token at a time, its incremental detokenizer); the package's side gets vLLM 0.31's stream
    events built independently here (the generated ids decoded whole at every step).  Answers (every float), details
    (thought text, tokens, how it ended, both read-outs) and usage must be identical.
@@ -32,12 +32,12 @@ from concurrent.futures import Future
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 sys.path.insert(0, os.path.dirname(__file__))
-from flash_jev import images as I  # noqa: E402
-from flash_jev import jevfmt as J  # noqa: E402
-from flash_jev import loops as FL  # noqa: E402
-from flash_jev import think as TH  # noqa: E402
-from flash_jev.engine.decode import EOS  # noqa: E402
-from flash_jev.prompt import Tokenizer  # noqa: E402
+from startlux_prism import images as I  # noqa: E402
+from startlux_prism import jevfmt as J  # noqa: E402
+from startlux_prism import loops as FL  # noqa: E402
+from startlux_prism import think as TH  # noqa: E402
+from startlux_prism.engine.decode import EOS  # noqa: E402
+from startlux_prism.prompt import Tokenizer  # noqa: E402
 import test_v11 as V  # noqa: E402
 
 STOP = "</think>"
@@ -184,7 +184,7 @@ def fake_thought(ftok, prompt, seed, max_tokens):
 
 
 def vllm_events(htok, ids, max_tokens):
-    """vLLM 0.31's OpenAI stream for these sampled ids, built independently of flash-jev's emulation: the generated
+    """vLLM 0.31's OpenAI stream for these sampled ids, built independently of StartLux-Prism's emulation: the generated
     ids decoded whole at every step (an incomplete character at the end waits), stop string "</think>" cut from the
     text, the end-of-sequence token not decoded, len(stop) - 1 characters held back until the last event.
     -> [(text, tokens, finish or None)] as startlux_decide's VLLMBackend.stream_at yields them (no empty event)."""
@@ -248,7 +248,7 @@ class PkgEngine:
 
 
 class FjBackend:
-    """flash-jev side: letter logits of the same fake engine (the prompt text decoded back from its tokens)."""
+    """StartLux-Prism side: letter logits of the same fake engine (the prompt text decoded back from its tokens)."""
 
     def __init__(self, ftok):
         self.ftok = ftok
@@ -258,7 +258,7 @@ class FjBackend:
 
 
 class FjSched:
-    """flash-jev side: the scheduler's interface, the fake engine's tokens fed through each job's consumer as
+    """StartLux-Prism side: the scheduler's interface, the fake engine's tokens fed through each job's consumer as
     ThinkScheduler feeds sampled tokens."""
 
     def __init__(self, ftok):

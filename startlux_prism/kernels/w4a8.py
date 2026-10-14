@@ -291,9 +291,9 @@ CUDA_CFGS = {  # csrc/w4a8_gemm.cu: cfg id -> (BM, BN, warps)
 @functools.lru_cache(None)
 def _table():
     """{(kind, N, K): [(M, (cfg, stages))] by M} measured by bench/w4a8_table.py for the engine's projection shapes on
-    this GPU's model: kernels/w4a8_table_<gpu tag>.json (rtx5090); FLASHJEV_W4A8_TABLE names another file, or "off"."""
+    this GPU's model: kernels/w4a8_table_<gpu tag>.json (rtx5090); STARTLUX_PRISM_W4A8_TABLE names another file, or "off"."""
     from . import cuda_ext
-    path = os.environ.get("FLASHJEV_W4A8_TABLE") or cuda_ext.table_path("w4a8_table")
+    path = os.environ.get("STARTLUX_PRISM_W4A8_TABLE") or cuda_ext.table_path("w4a8_table")
     if path == "off" or not os.path.exists(path):
         return {}
     out = {}

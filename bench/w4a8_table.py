@@ -5,7 +5,7 @@ read bucket sizes up to 8,192 (larger buckets use the 8,192 entry), weights stre
 bench/w4a8_micro.py); the fastest per shape and count goes into the table.
 
     python bench/w4a8_table.py A-Q4_K_M.gguf [B-Q4_K_M.gguf ...] --out FULL.json [--merge FULL.json] [--m 320,640]
-        [--table flash_jev/kernels/w4a8_table_rtx5090.json]
+        [--table startlux_prism/kernels/w4a8_table_rtx5090.json]
 
 --out writes every config's time as well, --table the choices only (the engine's file).  --merge starts from an
 earlier --out file (when it exists) and times only the (shape, count) pairs it lacks.
@@ -18,9 +18,9 @@ import sys
 import torch
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
-from flash_jev import gguf_weights as GW  # noqa: E402
-from flash_jev.engine.model import READ_BUCKETS, TOKEN_BUCKETS  # noqa: E402
-from flash_jev.kernels import w4a8 as W  # noqa: E402
+from startlux_prism import gguf_weights as GW  # noqa: E402
+from startlux_prism.engine.model import READ_BUCKETS, TOKEN_BUCKETS  # noqa: E402
+from startlux_prism.kernels import w4a8 as W  # noqa: E402
 from w4a8_micro import timed  # noqa: E402
 
 M_GRID = sorted(set(READ_BUCKETS) | {m for m in TOKEN_BUCKETS if m <= 8192})

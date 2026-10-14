@@ -1,11 +1,11 @@
-"""Stress test of a flash-jev server (GPU server), reproducible end to end: long evidence, the capacity limit, many
+"""Stress test of a StartLux-Prism server (GPU server), reproducible end to end: long evidence, the capacity limit, many
 clients at once, and the same answers under load.
 
     python tests/test_stress.py --model-dir ~/jev/models/StartLux-Decision-4B-Q8_0-GGUF \\
-        --jevbench ~/jev/src/jevbench-7ce310c7 --start int8 [--quick] [--out results/stress/flash-jev-int8.json]
+        --jevbench ~/jev/src/jevbench-7ce310c7 --start int8 [--quick] [--out results/stress/startlux-prism-int8.json]
     python tests/test_stress.py --model-dir ... --jevbench ... --url http://127.0.0.1:8092/v1/systemone   # running
 
---start int8|bf16|w4a8 starts the server with scripts/serve.sh (MODEL, FLASHJEV_FLAGS as there) and stops it at the end.
+--start int8|bf16|w4a8 starts the server with scripts/serve.sh (MODEL, STARTLUX_PRISM_FLAGS as there) and stops it at the end.
 Reproducible inputs: the long evidence is a seeded synthetic application log (bench/run_long.py) sized with the model's
 tokenizer in StartLux's prompt format; JevBench passes run in fixed shuffled orders (random.Random(pass)); every request
 carries its own request number (bench/run_http.uniquify), so none reuses another's cached evidence - except in check 5,
@@ -232,9 +232,9 @@ def main():
         res["health"] = health
         cap, precision = int(health.get("max_tokens", 0)), health.get("precision", "?")
         if not cap:
-            sys.exit("/health does not report max_tokens: not a flash-jev server, or an older one")
+            sys.exit("/health does not report max_tokens: not a StartLux-Prism server, or an older one")
         print(f"server: {health}", flush=True)
-        from flash_jev.prompt import Tokenizer
+        from startlux_prism.prompt import Tokenizer
         tok = Tokenizer(os.path.expanduser(a.model_dir))
         res["long"], res["capacity"], res["long_concurrency"], res["jevbench"], res["under_load"] = {}, {}, {}, {}, {}
         states = long_evidence(a, a.url, tok, cap, rep, res["long"])

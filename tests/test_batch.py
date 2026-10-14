@@ -8,8 +8,8 @@ import sys
 import numpy as np
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
-from flash_jev.engine import batch as B  # noqa: E402
-from flash_jev.engine.prefix_cache import PrefixCache  # noqa: E402
+from startlux_prism.engine import batch as B  # noqa: E402
+from startlux_prism.engine.prefix_cache import PrefixCache  # noqa: E402
 
 SYS = list(range(100, 130))          # 30 system tokens
 
