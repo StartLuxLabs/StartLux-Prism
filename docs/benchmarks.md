@@ -7,7 +7,7 @@ pass, and the stress test of a running server. Two machines: an RTX 5090 (the 4B
 and an H200 (the 27B). Every engine runs alone on the GPU, one after another, through the same HTTP client; the v1
 numbers are from 2026-10-10 to 2026-10-12. Then StartLux-Decision v1.1 27B AutoThink on a second H200 server
 (2026-10-13 and 14): thoughts, its official engine, int8 against bf16, images, and several GPUs (data parallelism,
-tensor parallelism, both). Each chart is drawn from the table below it (`python bench/charts.py`).
+tensor parallelism, both; eight GPUs against the official engine). Each chart is drawn from the table below it (`python bench/charts.py`).
 
 - [Summary](#summary)
 - [Setup](#setup) · [Method](#method) · [Reproducing](#reproducing)
@@ -25,6 +25,7 @@ tensor parallelism, both). Each chart is drawn from the table below it (`python 
 - [Several GPUs: data parallelism](#several-gpus-data-parallelism)
 - [Tensor parallelism: the 27B on 2 and 4 H200s](#tensor-parallelism-the-27b-on-2-and-4-h200s)
 - [Four H200s: the most throughput](#four-h200s-the-most-throughput)
+- [Eight H200s: against the official engine](#eight-h200s-against-the-official-engine)
 - [Stress tests](#stress-tests)
 - [Engine configurations](#engine-configurations) · [Crashes on the RTX 5090 server](#crashes-on-the-rtx-5090-server)
 
@@ -1130,6 +1131,52 @@ instead of 64 (`--think-seqs 128`) add 1%.
 So for throughput, one server per GPU; tensor parallelism shortens each request instead (one at a time: 29.0 ms per
 read-out and 768 ms per item with thoughts on one 4-GPU server, 36.0 and 902 on two 2-GPU servers, 41.0 and 1,209 on
 one GPU).
+
+## Eight H200s: against the official engine
+
+All eight GPUs of the second H200 server, 2026-10-14, each engine with its own data parallelism:
+- **flash-jev int8:** `python -m flash_jev.dp --gpus 0,1,2,3,4,5,6,7`, eight one-GPU servers behind the router.
+- **Official engine:** Startlux-decide-inference with its own launcher, `startlux-decide serve --launch-vllm --gpus
+  0,1,2,3,4,5,6,7`: one vLLM 0.31.0 server per GPU behind its front end, the BF16 release with its release flags.
+
+JevBench's 231 items, every request with its own request number; requests/s over the whole run.
+
+**Read-outs** (`think_mode` never; 20 passes, 4,620 requests per level):
+
+| clients | 128 | 256 | 512 | 1,024 |
+|---|---|---|---|---|
+| **flash-jev int8** | **235.9** | **237.8** | **234.1** | **232.0** |
+| official, BF16 | 130.8 | 137.5 | 136.5 | 135.5 |
+| flash-jev's lead | 1.80x | 1.73x | 1.71x | 1.71x |
+| p50 / p95 ms, flash-jev | 516 / 834 | 985 / 1,509 | 2,039 / 2,669 | 3,899 / 5,006 |
+| p50 / p95 ms, official | 749 / 2,503 | 1,805 / 3,189 | 3,373 / 5,473 | 6,415 / 9,657 |
+
+Both level off from 128-256 clients. flash-jev's 237.8 requests/s is 7.7x one GPU's (30.9,
+[above](#tensor-parallelism-the-27b-on-2-and-4-h200s)), 29.7 per GPU; the official engine's 137.5 is 17.2 per GPU
+(one GPU: 18.3 from 64 clients, [above](#startlux-decision-v11-27b-autothink-against-its-official-engine)). Every pass
+scored 211-216 of 231 on both.
+
+**With thoughts** (`think_mode` auto, the release's default; 16 passes, 3,696 requests, the request numbers from one
+seed, so both engines answer the same requests):
+
+| clients | 256 | 512 |
+|---|---|---|
+| **flash-jev int8** | **38.05** | **40.99** |
+| official, BF16 | 27.42 | 29.86 |
+| flash-jev's lead | 1.39x | 1.37x |
+| correct per pass, mean of 16: flash-jev / official | 222.0 / 225.5 | 222.0 / 225.4 |
+| the run / its longest request, s: flash-jev | 97 / 86 | 90 / 85 |
+| the run / its longest request, s: official | 135 / 108 | 124 / 109 |
+
+These runs are bound by their tails: the longest request (a thought of up to 4,096 tokens, decoded among many) takes
+most of the run, so both rates would rise in longer runs. Thoughts written by int8 score about 3 fewer per pass, the
+gap the [cross-read above](#startlux-decision-v11-27b-autothink-against-its-official-engine) traces to int8
+activations in decoding.
+
+The official engine's FP8 setting answers 1.44x its BF16 on one GPU (26.3 against 18.3 requests/s from 64 clients);
+it was not run on eight. The router raises its open-file limit to the hard limit when it starts: at the usual 1,024,
+a first run ran out at 512 clients (every request in flight holds a client's connection and a worker's) and the
+router died.
 
 ## Stress tests
 

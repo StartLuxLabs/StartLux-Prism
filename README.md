@@ -25,6 +25,8 @@ runs data parallel (`python -m flash_jev.dp`: one server per GPU behind a router
 - **Faster than the model's official engine.** Against StartLux-Decision v1.1's own engine on vLLM 0.31 in FP8, one
   H200 each: 2.8x faster on a short question, 5.3x on a three-question request, 1.2x at 8,192 tokens, and 1.17x the
   throughput from 64 clients, with or without thoughts. Its evaluation suites score the same (92.94 against 92.83).
+  On eight H200s, each with its own data parallelism: 1.73x the read-out throughput of its BF16 release (238 against
+  138 requests/s).
 - **Several GPUs, the same answers.** Data parallelism for throughput (`flash_jev.dp`, one server per GPU behind a
   router): four H200s give 3.92x the read-out throughput of one (121 requests/s). Tensor parallelism for latency
   (`--tp 2` or `4`): a JevBench item with thoughts takes 902 ms on two H200s and 768 on four (1,209 on one), an
@@ -211,6 +213,11 @@ Read-outs: the most over 32 to 256 clients (one 4-GPU server: from 64). With tho
 clients, long enough that the longest thought (about 4,000 tokens) is a small part of the run; not run on one 4-GPU
 server.
 
+Eight H200s against the official engine, each with its own data parallelism (flash-jev int8; the official engine's
+BF16 release, one vLLM server per GPU): read-outs 237.8 requests/s against 137.5 (1.73x), with thoughts 41.0 against
+29.9 (1.37x; the same 3,696 requests from 512 clients). On one GPU the official FP8 setting is 1.44x its BF16; it was
+not run on eight.
+
 Tensor parallelism, two and four H200s on NVSwitch:
 
 | | one GPU | two GPUs | four GPUs |
@@ -227,6 +234,7 @@ Short prompts gain little from tensor parallelism: each kernel's fixed cost does
 sums and maxima exchanged between them take a fifth to a third of a pass on two GPUs and two fifths on four. Details:
 [tensor parallelism](docs/benchmarks.md#tensor-parallelism-the-27b-on-2-and-4-h200s),
 [four H200s](docs/benchmarks.md#four-h200s-the-most-throughput),
+[eight H200s against the official engine](docs/benchmarks.md#eight-h200s-against-the-official-engine),
 [data parallelism on three](docs/benchmarks.md#several-gpus-data-parallelism).
 
 ## Accuracy
