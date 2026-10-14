@@ -55,6 +55,8 @@ CALIB_TOKENS = 8192                  # buffers while the bf16 weights are reside
 KV_SCRATCH0 = 64                     # KV arena rows of the system text; one batch's scratch rows follow
 PARTS_ROWS = 8192                    # rows of the split-K partial-sum slots (split K is chosen only for small batches)
 AUTO_RESERVE = 3 << 29               # bytes kept free beyond the buffers when sizing them from free memory (1.5 GiB)
+AUTO_THINK_TOKENS = 8192             # think_seqs -1: thoughts get at most half of what is left after buffers this size
+MAX_AUTO_THINK = 64                  # ... and at most this many
 ALPHA = 0.75
 
 
@@ -121,8 +123,10 @@ class Options:
     pdl: int = 512                  # int8: token / read buckets up to this size launch their CUDA GEMMs to overlap the
                                     # kernel before (0: off; the W4A8 path measured no gain)
     pdl_mode: int = 2               # 1 no weight prefetch, 2 the first k-tiles of each panel, 3 whole panels
-    think_seqs: int = 0             # sequences that can decode at once (engine/decode.py): state slots of their own
+    think_seqs: int = 0             # sequences that can decode at once (engine/decode.py): state slots of their own;
+                                    # -1: as many as fit (Engine._auto_think), then think_kv_rows = that x think_rows_each
     think_kv_rows: int = 0          # KV-arena rows for the decoding sequences (each: its prompt, then its tokens)
+    think_rows_each: int = 0        # think_seqs -1: KV rows per decoding sequence (the server: budget + 1,024)
     mmproj: str = ""                # the vision tower (llama.cpp mmproj GGUF) for prompts with images; "": text only
     tp: int = 1                     # tensor parallelism over this many GPUs (int8; startlux_prism/tp.py: the group must be
                                     # started in this process first)
@@ -162,8 +166,13 @@ class Engine:
             self._w4_weights(w)
         else:
             self._bf16_weights(w)
+            # lean when these buffers go again below (int8: after the calibration; bf16: sized from free memory): no
+            # prefix-cache or decoding slots and rows, which next to the bf16 weights did not fit a 32 GB GPU
+            lean = self.opt.precision == "int8" or not self.opt.max_tokens
+            if not lean and self.opt.think_seqs < 0:     # bf16 at a given size: these are the final buffers
+                self._auto_think()
             self._allocate(min(self.opt.max_tokens or CALIB_TOKENS, CALIB_TOKENS) if self.opt.precision == "int8"
-                           else (self.opt.max_tokens or CALIB_TOKENS))
+                           else (self.opt.max_tokens or CALIB_TOKENS), lean=lean)
         self.body_graphs, self.head_graphs, self._pool = {}, {}, None
         self._rec = None
         self._prefix_pass = False
@@ -178,6 +187,8 @@ class Engine:
         T = self.opt.max_tokens
         if self.int8 or self.w4 or not T:            # the final buffers: this precision's only, at the chosen size
             self._free_buffers()
+            if self.opt.think_seqs < 0:
+                self._auto_think()
             T = T or self._auto_tokens()
             self._allocate(T)
         self._init_prefix()
@@ -360,7 +371,7 @@ class Engine:
             self._rec[key] = m if prev is None else torch.maximum(prev, m)
 
     # ------------------------------------------------------------------ buffers
-    def _make_buffers(self, T, dev):
+    def _make_buffers(self, T, dev, lean=False):
         """Every device buffer of a T-token engine, for this precision's forward (bf16-only buffers for the bf16 path,
         int8 activations for the int8 one): {name: tensor}.  dev "meta" sizes them without memory."""
         cfg, o, R = self.cfg, self.opt, self.opt.max_read
@@ -370,9 +381,10 @@ class Engine:
         n_gdn, n_attn = len(self.gdn_index), len(self.attn_index)
         # persistent state slots: ZERO, ROOT (the system text), the prefix cache's, then the decoding sequences'; KV
         # rows: the system text, one batch (scratch), the prefix cache's, then the decoding sequences'
-        n_cache = o.prefix_cache if o.prefix_cache > 0 else 0
-        rows = KV_SCRATCH0 + T + (o.prefix_cache_tokens if n_cache else 0) + o.think_kv_rows
-        slots = 2 + n_cache + o.think_seqs
+        n_cache = o.prefix_cache if o.prefix_cache > 0 and not lean else 0
+        n_think = max(o.think_seqs, 0) if not lean else 0
+        rows = KV_SCRATCH0 + T + (o.prefix_cache_tokens if n_cache else 0) + (o.think_kv_rows if n_think else 0)
+        slots = 2 + n_cache + n_think
         out = dict(state=z(slots, n_gdn, HV, D, D), conv_state=z(slots, n_gdn, cfg.conv_kernel - 1, cfg.conv_dim),
                    trans=z(o.max_trans, HV, D, D), kv=z(n_attn, 2, cfg.n_kv_head, rows, cfg.head_dim, dtype=bf))
         if o.attn_qk8 and self.int8:                 # int8 keys and one scale per token and kv head
@@ -439,6 +451,33 @@ class Engine:
             return x.numel() * x.element_size()
         return walk(self._make_buffers(T, "meta"))
 
+    def _auto_think(self):
+        """Options.think_seqs -1: the most sequences decoding at once (a power of two, up to MAX_AUTO_THINK) whose slots
+        and KV rows (think_rows_each each) take at most half of what is left of mem_fraction of the GPU after the
+        weights and the buffers of a max_tokens-token engine (AUTO_THINK_TOKENS when max_tokens is 0) - so thoughts
+        never crowd out the batches.  The 27B in int8 on an H200 gets 64, the 9B on an RTX 5090 fewer."""
+        o = self.opt
+        torch.cuda.synchronize()
+        torch.cuda.empty_cache()
+        free, total = torch.cuda.mem_get_info(self.device)
+        budget = total * o.mem_fraction - (total - free) - AUTO_RESERVE
+
+        def size(n):
+            o.think_seqs, o.think_kv_rows = n, n * o.think_rows_each
+            return self._buffer_bytes(o.max_tokens or AUTO_THINK_TOKENS)
+        base = size(0)
+        each = size(1) - base
+        n = int(max(budget - base, 0) / 2 // each) if each > 0 else 0
+        n = 1 << (min(n, MAX_AUTO_THINK).bit_length() - 1) if n >= 1 else 0
+        if self.tp is not None:                      # every rank the same sequences
+            n = self.tp.min_int(n)
+        if n < 1:
+            raise RuntimeError(f"no GPU memory for a decoding sequence ({each / 2**20:.0f} MiB each; "
+                               f"{max(budget - base, 0) / 2**30:.1f} GiB left after "
+                               f"{o.max_tokens or AUTO_THINK_TOKENS}-token buffers): "
+                               f"lower --prefix-cache / --prefix-cache-tokens or the thought budget")
+        o.think_seqs, o.think_kv_rows = n, n * o.think_rows_each
+
     def _auto_tokens(self):
         """The largest token bucket whose buffers fit mem_fraction of the GPU next to what is resident now (weights,
         CUDA context, other processes; no buffers), less a reserve for graphs and workspaces."""
@@ -462,16 +501,16 @@ class Engine:
         self.body_graphs, self.head_graphs, self._pool = {}, {}, None
         torch.cuda.empty_cache()
 
-    def _allocate(self, T):
-        """Buffers for T-token batches (self.max_tokens = T)."""
+    def _allocate(self, T, lean=False):
+        """Buffers for T-token batches (self.max_tokens = T); lean: none for the prefix cache and decoding sequences."""
         o, dev = self.opt, self.device
-        m = self._make_buffers(T, dev)
+        m = self._make_buffers(T, dev, lean)
         self.max_tokens = T
         self.state, self.conv_state, self.trans, self.kv = m["state"], m["conv_state"], m["trans"], m["kv"]
         self.k8 = (m["k8"], m["k8s"]) if "k8" in m else None
         self.kv_scratch0 = KV_SCRATCH0
         cache_kv0 = KV_SCRATCH0 + T
-        n_cache = o.prefix_cache if o.prefix_cache > 0 else 0
+        n_cache = o.prefix_cache if o.prefix_cache > 0 and not lean else 0
         cache_rows = o.prefix_cache_tokens if n_cache else 0
         self.cache = PrefixCache(range(2, 2 + n_cache), cache_kv0, cache_rows, o.prefix_cache_min) if n_cache else None
         self.think_slot0, self.think_kv0 = 2 + n_cache, cache_kv0 + cache_rows     # engine/decode.py's slots and rows
