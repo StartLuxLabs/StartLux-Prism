@@ -6,7 +6,8 @@ once, long evidence, follow-up questions served from a prefix cache, the longest
 pass, and the stress test of a running server. Two machines: an RTX 5090 (the 4B, the 9B and the 27B's Q4_K_M file)
 and an H200 (the 27B). Every engine runs alone on the GPU, one after another, through the same HTTP client; the v1
 numbers are from 2026-10-10 to 2026-10-12. Then StartLux-Decision v1.1 27B AutoThink on a second H200 server
-(2026-10-13 and 14): thoughts, its official engine, int8 against bf16, images, and several GPUs (data parallelism,
+(2026-10-13 and 14): thoughts (its Q8_0 and Q4_K_M files, and the 9B's Q4_K_M), its official engine, int8 against
+bf16, images, and several GPUs (data parallelism,
 tensor parallelism, both; eight GPUs against the official engine). Each chart is drawn from the table below it (`python bench/charts.py`).
 
 - [Summary](#summary)
@@ -771,6 +772,40 @@ training distribution.)
 
 One sequence's step takes 10.4 ms, most of it reading the 27 GB of int8 weights; 64 sequences share that read (16.5 ms
 per step at 512 tokens, 20.1 at 4,096, where attention and the recurrent states' traffic grow).
+
+**The Q4_K_M files** (W4A8, 2026-10-14): `StartLux-Decision-v1.1-27B-AutoThink-Q4_K_M.gguf` (16.55 GB, SHA-256
+`245f89a8fbd95d0fccae02aba1a1a63448bab41c308920ad6de247e3b3752588`) and `StartLux-Decision-v1.1-9B-AutoThink-Q4_K_M.gguf`
+(5.63 GB, `c10277820051d4f29654566e94489e0add4ca3e2c5e49e4171ac53c8cf37adc8`), the releases on Hugging Face, think as
+above on one H200 of the same server, the decode steps on their own 4-bit weights
+([optimizations](optimizations.md#w4a8-thoughts-a-q4_k_m-file-decodes-2026-10-14)). JevBench, one request at a time:
+
+| model, file, think_mode | correct, of 231 | mean / p50 ms per item | questions that thought | thought tokens mean / p50 / max | how thoughts ended |
+|---|---|---|---|---|---|
+| 27B, Q4_K_M, never | 212 | 154.2 / 42.0 | - | - | - |
+| **27B, Q4_K_M, auto** | **227** | 1,785 / 81.8 | 69 (30%), 65 of them right | 417 / 249 / 4,096 | 68 closed, 1 at the budget |
+| 9B, Q4_K_M, never | 200 | 46.4 / 13.1 | - | - | - |
+| 9B, Q4_K_M, auto | 211 | 1,590 / 26.4 | 75 (32%), 57 of them right | 1,286 / 902 / 4,096 | 70 closed, 4 at the budget, 1 loop |
+
+From 64 clients (8 passes over the 231 items, every pass new thoughts: each request has its own request number) the
+27B's Q4_K_M file answers 222-227 per pass, 224.9 on average: the official engine's level (BF16 225.5-226.5, FP8
+224.9-225.2 over its many-client runs) and above the Q8_0 file's int8 thoughts (220.5-222.0). The
+[cross-read experiment](#startlux-decision-v11-27b-autothink-against-its-official-engine) traced int8's gap to its
+activations, quantized per token while decoding; W4A8 quantizes them per 256 inputs. Its rate there, 2.39 requests/s,
+is a third of the Q8_0 file's (7.61): under load the read-outs' prefill sets it, and on the H200 W4A8 prefills at
+about a quarter of int8's speed (below).
+
+Decode on the 27B's Q4_K_M file against its Q8_0 file in int8 (`bench/decode_speed.py`; ms per step / tokens per
+second):
+
+| sequences, context | 1, 512 | 8, 512 | 64, 512 | 1, 4,096 | 8, 4,096 | 64, 4,096 |
+|---|---|---|---|---|---|---|
+| W4A8 | 11.58 / 86.3 | 12.39 / 646 | 31.14 / 2,056 | 11.63 / 86.0 | 12.69 / 631 | 34.61 / 1,849 |
+| int8 | 10.51 / 95.1 | 11.08 / 722 | 16.71 / 3,830 | 10.59 / 94.4 | 11.39 / 703 | 20.31 / 3,152 |
+
+Up to 8 thoughts at once, a step on the 4-bit file takes about as long as on the Q8_0 file, though it reads 17.8 GB
+instead of 27: at a few rows the W4A8 GEMMs stream the 27B's shapes at 1.2-2.7 TB/s, W8A8 at 1.2-3.3. At 64 thoughts
+the W4A8 GEMMs' arithmetic sets the pace (mma.sync on Hopper, [Q4_K_M files](#q4_k_m-files-w4a8)), and the read-outs
+without thoughts take 3.8x the Q8_0 file's time on the H200 (154 against 41 ms), for the same reason.
 
 ## StartLux-Decision v1.1 27B AutoThink against its official engine
 

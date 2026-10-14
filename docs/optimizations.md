@@ -361,6 +361,44 @@ batch and thought (`tests/test_tp.py`), and it holds at 2 and 4 GPUs.  Numbers: 
   them the shards ran the Triton fallback: the 4-GPU JevBench run with thoughts took 80 s from 16 clients against 65 s
   on one GPU; with them and the all-reduces above, 41 s on 4 GPUs and 49 s on 2 (`tests/test_tp.py --server`).
 
+## W4A8 thoughts: a Q4_K_M file decodes (2026-10-14)
+
+* **Decode steps on W4A8** (`engine/decode.py`): a v1.1 AutoThink Q4_K_M file thinks as its Q8_0 file does. The steps
+  run the engine's W4A8 projections on one row per thought and the output head on Q8_0 rows (the file's Q6_K head
+  converted at load, as for the other k-quant heads). `tests/test_decode.py` on the 9B and 27B: a thought alone or
+  joining a running batch at any step gives the same tokens and logits, bit for bit, and seeded sampling draws from
+  the filtered distribution.
+* **The first version decoded at half the int8 path's speed.** On the H200 the 27B's step took 20.2 ms at one thought
+  (int8: 10.5) and 35.1 at 64 (16.7), 17 of the 20 ms in the GEMMs. `bench/w4a8_micro.py` at 1-16 rows: the tile
+  kernel's best tile (16 x 64, two warps) read the weights at 0.5-1.5 TB/s of 4.8. A 5,120-wide projection has 80
+  such tiles, one CTA each, and two warps per SM cannot hide the MMAs' latency (each k32 step's scale multiply-adds
+  wait on its MMA). Deeper pipelines (6 and 8 stages instead of 2-4) gained nothing at 1-64 rows: the loads were not
+  the limit.
+* **K groups** (`w4a8_kgroups_kernel`, configs 13-16 of `csrc/w4a8_gemm.cu`): a CTA computes 16 or 32 rows x 32
+  columns with 4 or 8 warps, and warp w takes the super-blocks w, w + KW, w + 2 KW, ... through a cp.async pipeline of
+  its own. A super-block's integer sums and t = d acc - dmin mins are the tile kernel's; the t of KW consecutive
+  super-blocks go to shared memory, and after one barrier each thread folds its elements' t in increasing order,
+  y = fma(a, t, y), as the tile kernel does. So every output has the tile kernel's bits (`tests/test_w4a8.py`: every
+  config, Q4_K and Q6_K, both epilogues, 1 to 1,000 rows) and the table may pick it for any row count. Four warps beat
+  eight: half the shared memory, so 2-3 CTAs per SM instead of one.
+* **Measured** (`bench/w4a8_micro.py --search`), the 27B's shapes on the H200 at 1-16 rows: Q6_K ffn_down 123 -> 46 us
+  (W8A8 on the same shape 39-54), ssm_out 36.6 -> 15.1 (W8A8 16-17), Q6_K attn_qkv 38.5 -> 21.0 (2.7 TB/s; W8A8 43),
+  ffn_gate 39.4 -> 27.8 (W8A8 27.5); at 32 rows 1.2-2.0x; at 64 rows little (the tile kernels' compute, as above).
+  The RTX 5090's tile kernels were nearer their DRAM rate already: there the table (re-timed with the weights streamed,
+  below) picks K groups for 162 of its 360 entries up to 256 rows on the 4B's, 9B's and 27B's shapes - 2.0x on the
+  1,024-row k and v projections, 1.5-1.8x on the 4B's down projections, 1.1-1.3x on the 9B's. Table entries:
+  `bench/w4a8_table.py`, which times configs 13-16 up to 256 rows.
+* **The W4A8 table's weights really streamed.** `bench/w4a8_table.py` and `bench/w4a8_micro.py` rotated 4 copies of
+  each matrix, and 4 copies of the smaller ones (an 18.7 MB output projection, the 1,024-row k and v projections) sat
+  in the RTX 5090's 96 MB L2 (and the 9B's in the H200's 50 MB): 2.6 TB/s measured against 1.8 from DRAM. They now
+  rotate copies for 3x the L2, as `bench/cuda_gemm_micro.py` does. Re-timed up to 256 rows, 166 of the RTX 5090's 360
+  entries changed (the earlier choice up to 1.3x slower when streamed) and 40 of the H200's 240 (most of the gain where
+  K groups had not been timed: the 27B's 1,024-row k and v projections at 128-256 rows, 1.6-3.1x).
+* **End to end** (the H200, the 27B's Q4_K_M file; the same thoughts, bit for bit, as before the change): a decode
+  step 20.2 -> 11.6 ms at one thought (86 tokens/s; int8 on the Q8_0 file 95), 20.9 -> 12.4 at 8, 35.1 -> 31.1 at 64;
+  the GEMMs 17 -> 8.5 ms of a one-thought step. JevBench with thoughts, one request at a time: 2,862 -> 1,785 ms per
+  item, the items that think 9.3 -> 5.7 s; the 9B's file 3,418 -> 1,590 ms (10.4 -> 4.8 s).
+
 ## Opt-in
 
 * **int8 attention scores** (`--attn-qk8`, `Options.attn_qk8`): keys also kept as int8 (one scale per token and kv
@@ -422,8 +460,9 @@ batch and thought (`tests/test_tp.py`), and it holds at 2 and 4 GPUs.  Numbers: 
   turns would hide it); the linear-attention chunk kernels (18% of a large batch); attention at 366 TFLOPS of the
   H200's 989 (bf16; FlashAttention 3 reaches 600+ with wgmma and TMA).
 * W4A8 (above): Q6_K, still 2.2-2.6x W8A8's time at 1,000+ rows - two scale multiply-adds per output and k32 step,
-  and its 64x64 tiles' int8 weights near L2's bandwidth (larger tiles spill); deterministic split-K for small batches
-  (the K reduction then defined in fixed chunks for every kernel, so still batch-invariant).  (The 27B's 48 value
+  and its 64x64 tiles' int8 weights near L2's bandwidth (larger tiles spill). Decode steps of many thoughts: at 32-64
+  rows the tile kernels' compute sets the pace (the 27B's step 31 ms at 64 thoughts, int8 16.7). Q6_K is stored as
+  int8, 1.08 bytes a weight: 6-bit packing would take about 1 GB (6%) off the 27B's decode step.  (The 27B's 48 value
   heads: the three Triton kernels that took the head count as a power of two now pad and mask it - 2026-10-11.)
 
 * The fp32 residual add of the 2,560-wide output projections at large M: after batching its loads, still 10-15% of

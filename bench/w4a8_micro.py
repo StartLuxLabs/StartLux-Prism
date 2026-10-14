@@ -50,7 +50,7 @@ def main():
     ap.add_argument("gguf")
     ap.add_argument("--m", default="1,16,64,128,256,512,1024,2048,4096")
     ap.add_argument("--search", action="store_true")
-    ap.add_argument("--copies", type=int, default=4)
+    ap.add_argument("--copies", type=int, default=4, help="weight copies rotated through, at least 3x L2's size")
     ap.add_argument("--json")
     a = ap.parse_args()
     f = GGUFFile(a.gguf)
@@ -59,9 +59,12 @@ def main():
         if name not in f.tensors:
             continue
         kq = GW._kq(f, name).to("cuda")
-        ws = [W.repack(kq) for _ in range(a.copies)]
+        w0 = W.repack(kq)
+        copies = max(a.copies, -(-3 * torch.cuda.get_device_properties(0).L2_cache_size // w0.nbytes()))
+        ws = [w0] + [W.repack(kq) for _ in range(copies - 1)]
         N, K = ws[0].n, ws[0].k
-        w8 = [torch.randint(-127, 128, (N, K), dtype=torch.int8, device="cuda") for _ in range(a.copies)]
+        w8 = [torch.randint(-127, 128, (N, K), dtype=torch.int8, device="cuda")
+              for _ in range(max(a.copies, -(-3 * torch.cuda.get_device_properties(0).L2_cache_size // (N * K))))]
         sw = torch.rand(N, 1, device="cuda") * 1e-3
         for M in [int(x) for x in a.m.split(",")]:
             x = torch.randn(M, K, device="cuda")

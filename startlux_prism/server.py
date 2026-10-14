@@ -258,7 +258,7 @@ def main():
         sys.exit("this is a StartLux-Decision v1.1 Instant model (its prompt is read bidirectionally): StartLux-Prism runs "
                  "prompts causally and does not serve it yet")
     sys.setswitchinterval(a.switch_interval)
-    thinks = kind == "auto_think" and a.precision in ("int8", "bf16")       # thoughts: engine/decode.py, think.py
+    thinks = kind == "auto_think" and a.precision in ("int8", "bf16", "w4a8")       # thoughts: engine/decode.py, think.py
     if thinks:
         from . import think as TH
         auto = TH.folder_auto_think(a.model_dir)

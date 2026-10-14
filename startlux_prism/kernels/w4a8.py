@@ -283,9 +283,10 @@ def _q6k_kernel(a_ptr, as_ptr, q_ptr, sc_ptr, d_ptr, out_ptr, n_ptr, M, N, K, ld
     _store(y, out_ptr, rm, rn, mm, mn, ldo, EPI)
 
 
-CUDA_CFGS = {  # csrc/w4a8_gemm.cu: cfg id -> (BM, BN, warps)
+CUDA_CFGS = {  # csrc/w4a8_gemm.cu: cfg id -> (BM, BN, warps); 13-16: K groups (few rows: warps on other super-blocks)
     0: (16, 64, 2), 1: (32, 64, 2), 2: (64, 64, 4), 3: (64, 128, 8), 4: (128, 64, 8), 5: (128, 128, 16), 6: (16, 32, 1),
-    7: (32, 128, 4), 8: (128, 128, 8), 9: (128, 128, 8), 10: (64, 128, 4), 11: (128, 64, 4), 12: (64, 64, 2)}
+    7: (32, 128, 4), 8: (128, 128, 8), 9: (128, 128, 8), 10: (64, 128, 4), 11: (128, 64, 4), 12: (64, 64, 2),
+    13: (16, 32, 8), 14: (16, 32, 4), 15: (32, 32, 8), 16: (32, 32, 4)}
 
 
 @functools.lru_cache(None)

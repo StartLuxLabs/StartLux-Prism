@@ -10,7 +10,7 @@ release does:
 | folder | how it answers | run here |
 |---|---|---|
 | v1 (`"format": "StartLux-Decision-v1"`) | in one pass, exactly as before v1.1 support | 4B, 9B, 27B |
-| v1.1 AutoThink | one pass, then a thought when the first read-out is unsure | 27B: int8 and bf16 (W4A8: one pass) |
+| v1.1 AutoThink | one pass, then a thought when the first read-out is unsure | 27B: int8, bf16 and W4A8; 9B: int8 and W4A8 |
 | v1.1 Instant (prompt read bidirectionally) | not served yet: refused at start-up | |
 
 - **Thoughts.** `think_mode` `auto` (the default) thinks when the first read-out's top probability is below `gate`
@@ -65,9 +65,10 @@ with the pip CUDA 13 toolkit as `CUDA_HOME` and writes `~/jev/env.sh`; then
 | `bf16` | dequantized from the GGUF, cuBLAS | bf16 | the parity reference |
 
 Measured:
-- **RTX 5090:** the 4B and 9B (Q8_0: int8 and bf16; Q4_K_M: W4A8) and the 27B's Q4_K_M (W4A8).
-- **H200:** the v1 27B (Q8_0: int8 and bf16; Q4_K_M: W4A8 and int8), and the v1.1 27B AutoThink (Q8_0: int8 and bf16;
-  int8 on 2 and 4 GPUs).
+- **RTX 5090:** the 4B and 9B (Q8_0: int8 and bf16; Q4_K_M: W4A8) and the 27B's Q4_K_M (W4A8); v1.1 AutoThink with
+  thoughts: the 9B (Q8_0: int8).
+- **H200:** the v1 27B (Q8_0: int8 and bf16; Q4_K_M: W4A8 and int8); v1.1 AutoThink with thoughts: the 27B (Q8_0:
+  int8 and bf16, int8 on 2 and 4 GPUs; Q4_K_M: W4A8) and the 9B (Q4_K_M: W4A8).
 - **Several GPUs:** data parallelism with any precision (`startlux_prism.dp`); tensor parallelism with int8, 2 or 4 GPUs on
   the 27B (`--tp`); both together (`startlux_prism.dp --tp 2`).
 

@@ -1,8 +1,8 @@
 # StartLux-Prism
 
 **A fast CUDA inference engine for StartLux-Decision models.** It serves StartLux-Decision v1 (4B, 9B, 27B) and v1.1
-AutoThink (27B) straight from their GGUF files, behind the TypeSafe `/v1/systemone` API, on the RTX 5090 and the H200,
-on one GPU or several. Like a prism that splits light into its spectrum, it turns each question into a calibrated
+AutoThink (9B, 27B) straight from their GGUF files, behind the TypeSafe `/v1/systemone` API, on the RTX 5090 and the
+H200, on one GPU or several. Like a prism that splits light into its spectrum, it turns each question into a calibrated
 probability for every option.
 
 <picture>
@@ -18,8 +18,8 @@ probability for every option.
 - **The same answers.** Prompts, read-outs, thoughts and decision rules are the model's own; only the forward pass is
   new. v1.1's evaluation suites score 92.94 on StartLux-Prism int8, 92.97 on the official BF16 server and 92.83 in FP8. An
   answer is bit-identical whatever it is batched with, on any number of GPUs, from the cache or not.
-- **All of v1.1.** AutoThink thoughts generated on the GPU (95 tokens/s for one sequence, 3,832 for 64 at once),
-  `none_probability` and `allow_none`, up to 8 images per request.
+- **All of v1.1.** AutoThink thoughts generated on the GPU (95 tokens/s for one sequence, 3,832 for 64 at once), from
+  the Q8_0 and the Q4_K_M files; `none_probability` and `allow_none`, up to 8 images per request.
 - **One GPU or several.** Data parallelism for throughput (four H200s give 3.92x one), tensor parallelism (`--tp 2` or
   `4`) for latency.
 - **The released files as they are.** Q8_0 runs as int8 (W8A8) and Q4_K_M on its own 4-bit weights (W4A8), so the 27B
