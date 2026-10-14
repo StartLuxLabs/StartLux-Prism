@@ -87,7 +87,7 @@ Endpoints: `POST /v1/systemone` (also `/v1/decisions`), `GET /v1/models`, `GET /
 | `--gpus`, `--tp` | | the GPUs; GPUs per model (2 or 4 for the 27B) |
 | `--max-tokens` | from free memory | the largest batch (131,072 tokens for the 27B on an H200); longer requests get 422 |
 | `--prefix-cache-tokens` | 65,536 | KV rows kept for evidence that comes again |
-| `--think-seqs` | 64 | thoughts generated at once |
+| `--think-seqs` | as many as fit | thoughts generated at once (64 for the 27B on an H200, 16 for the 9B in int8 on an RTX 5090) |
 | `--gate`, `--none-check`, `--allow-none` | 0.6, on, on (v1.1) | the defaults of the request fields |
 
 Every field and flag, the model folders and the GPUs: [docs/serving.md](docs/serving.md).

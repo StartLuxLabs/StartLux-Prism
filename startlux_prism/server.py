@@ -208,7 +208,9 @@ def main():
                     help="AutoThink folders: default think_mode of a request (default: the folder's, auto)")
     ap.add_argument("--max-think-budget", type=int, default=0,
                     help="AutoThink folders: the largest think_budget a request may ask for (0: the folder's budget)")
-    ap.add_argument("--think-seqs", type=int, default=64, help="AutoThink folders: thoughts generated at once")
+    ap.add_argument("--think-seqs", type=int, default=0,
+                    help="AutoThink folders: thoughts generated at once (0: as many as fit the GPU, up to 64 - "
+                         "64 for the 27B on an H200; engine/model.py Engine._auto_think)")
     ap.add_argument("--think-kv-rows", type=int, default=0,
                     help="AutoThink folders: KV rows of the thinking sequences (prompt + thought each; 0: think-seqs x "
                          "(budget + 1024))")
@@ -261,15 +263,19 @@ def main():
         from . import think as TH
         auto = TH.folder_auto_think(a.model_dir)
         max_budget = a.max_think_budget or auto.budget
-        a.think_kv_rows = a.think_kv_rows or a.think_seqs * (max_budget + 1024)
+        if a.think_seqs:
+            a.think_kv_rows = a.think_kv_rows or a.think_seqs * (max_budget + 1024)
     engine = Engine(a.gguf, a.model_dir, Options(precision=a.precision, max_tokens=a.max_tokens, graphs=not a.no_graphs,
                                                   graph_max_tokens=a.graph_max_tokens, mem_fraction=a.mem_fraction,
                                                   calib=a.calib, prefix_cache=a.prefix_cache,
                                                   prefix_cache_tokens=a.prefix_cache_tokens,
                                                   prefix_cache_min=a.prefix_cache_min, attn_qk8=a.attn_qk8,
-                                                  think_seqs=a.think_seqs if thinks else 0,
+                                                  think_seqs=(a.think_seqs or -1) if thinks else 0,
                                                   think_kv_rows=a.think_kv_rows if thinks else 0,
+                                                  think_rows_each=max_budget + 1024 if thinks else 0,
                                                   mmproj=mmproj, tp=a.tp))
+    if thinks:                                       # the engine's choice when --think-seqs is 0
+        a.think_seqs, a.think_kv_rows = engine.opt.think_seqs, engine.opt.think_kv_rows
     images = I.Settings(max_images=a.max_images, max_pixels=a.max_pixels, refused=text_only)
     if engine.vision is not None:
         with open(os.path.join(a.model_dir, "config.json")) as f:
