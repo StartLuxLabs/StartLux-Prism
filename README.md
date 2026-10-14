@@ -1,14 +1,16 @@
 # flash-jev
 
 **A CUDA inference engine for JEV decision models: hand-written kernels, one forward pass per batch, bit-exact
-answers, on the RTX 5090 and the H200.**
+answers on one GPU or several, on the RTX 5090 and the H200.**
 
 JEV ("System One") models answer typed questions about a piece of evidence (a choice among options, a yes/no, a
 score) with calibrated probabilities, read from the option letters' logits at the last prompt token. flash-jev serves
 [StartLux-Decision v1](https://github.com/StartLuxLabs/StartLux-Decision-v1) (4B, 9B, 27B) and StartLux-Decision v1.1
 AutoThink (27B), Qwen3.5 dense hybrids of Gated DeltaNet and gated attention, straight from their GGUF files behind the
 TypeSafe `/v1/systemone` API. Prompts, read-outs, thoughts and decision rules are the models' own
-(`flash_jev/jevfmt.py`, `flash_jev/think.py`): only the forward pass differs from the reference.
+(`flash_jev/jevfmt.py`, `flash_jev/think.py`): only the forward pass differs from the reference. On several GPUs it
+runs data parallel (`python -m flash_jev.dp`: one server per GPU behind a router, for throughput), tensor parallel
+(`--tp 2` or `4`: one model split over the GPUs, for latency) or both, with the single GPU's answers.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/images/v11-hero-dark.svg">
@@ -23,6 +25,10 @@ TypeSafe `/v1/systemone` API. Prompts, read-outs, thoughts and decision rules ar
 - **Faster than the model's official engine.** Against StartLux-Decision v1.1's own engine on vLLM 0.31 in FP8, one
   H200 each: 2.8x faster on a short question, 5.3x on a three-question request, 1.2x at 8,192 tokens, and 1.17x the
   throughput from 64 clients, with or without thoughts. Its evaluation suites score the same (92.94 against 92.83).
+- **Several GPUs, the same answers.** Data parallelism for throughput (`flash_jev.dp`, one server per GPU behind a
+  router): four H200s give 3.92x the read-out throughput of one (121 requests/s). Tensor parallelism for latency
+  (`--tp 2` or `4`): a JevBench item with thoughts takes 902 ms on two H200s and 768 on four (1,209 on one), an
+  8,192-token prompt 301 and 242 ms (428). The two combine, and every answer is the single GPU's, bit for bit.
 - **Lowest latency of every engine compared** (StartLux-Decision v1). JevBench one request at a time: 1.6-2.3x below
   the next engine. StartLux's own 3-question request is 3.8-4.8x faster than on the next engine (SGLang): 10.2 ms on the
   4B, 25.0 ms on the 27B.
@@ -38,10 +44,6 @@ TypeSafe `/v1/systemone` API. Prompts, read-outs, thoughts and decision rules ar
   reference's 91.15 (4B) and 90.80 against 91.06 (9B).
 - **4-bit files on their own weights.** Q4_K_M files run as W4A8 on int8 tensor cores, 3.9-6.9x faster than llama.cpp
   on the same file. This way the 27B fits a 32 GB RTX 5090.
-- **Several GPUs, the same answers.** Data parallelism for throughput (`flash_jev.dp`, one server per GPU behind a
-  router): four H200s give 3.92x the read-out throughput of one (121 requests/s). Tensor parallelism for latency
-  (`--tp 2` or `4`): a JevBench item with thoughts takes 902 ms on two H200s and 768 on four (1,209 on one), an
-  8,192-token prompt 301 and 242 ms (428). The two combine, and every answer is the single GPU's, bit for bit.
 - **Kernels per GPU.** Every projection's kernel, tile and K split comes from a table measured on the GPU model. On
   Hopper, the int8 GEMMs run on warpgroup MMA with TMA and warp specialization (1,240-1,420 TOPS).
 
@@ -192,6 +194,11 @@ Two ways to use more GPUs, both giving the single GPU's answers, bit for bit (27
 - **Tensor parallelism** (`--tp 2` or `4`): one model split over the GPUs. Less time per request, mostly for long
   prompts and thoughts.
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/several-gpus-dark.svg">
+  <img src="docs/images/several-gpus.svg" width="840" alt="Several GPUs, StartLux-Decision v1.1 27B on H200s, flash-jev int8, JevBench. Read-outs from many clients, requests per second: one GPU 30.9; 2 GPUs with TP 2, 43.3 (1.40x); 4 GPUs with TP 4, 54.0 (1.75x); 4 GPUs as DP 2 x TP 2, 86.0 (2.78x); 4 GPUs as DP 4, 121.1 (3.92x). One request at a time with thoughts, mean ms per item: one GPU 1,209; TP 2, 902; TP 4, 768; DP 2 x TP 2, 902; DP 4 as one GPU plus about 1 ms for the router.">
+</picture>
+
 They combine (`flash_jev.dp --tp 2`: tensor-parallel servers behind the router). Four H200s each way:
 
 | four H200s as | read-outs, requests/s | with thoughts, requests/s | one at a time, mean ms: read-out / with thoughts |
@@ -263,62 +270,69 @@ Every suite and the agreement per suite: [docs/benchmarks.md](docs/benchmarks.md
 
 ## Quick start
 
-flash-jev needs:
-- Linux with an NVIDIA GPU: an RTX 5090 (sm_120) or a Hopper GPU (sm_90a);
-- Python 3.12 with PyTorch (CUDA 13), Triton and a CUDA toolkit. The CUDA extension is built on first use, for the GPU
-  it runs on.
+flash-jev needs Linux with an NVIDIA GPU (an RTX 5090, sm_120, or a Hopper GPU, sm_90a) and Python 3.12 with PyTorch
+(CUDA 13), Triton and a CUDA toolkit; the CUDA extension is built on first use, for the GPU it runs on. A model is its
+GGUF repository as published: the `.gguf` file with its tokenizer and config beside it.
 
-The benchmark servers have no internet: `scripts/setup_server.sh` installs wheels fetched elsewhere into `~/jev/venv`,
-with the pip CUDA 13 toolkit as `CUDA_HOME`, and writes `~/jev/env.sh`.
+**1. Start a server** (one GPU; StartLux-Decision v1.1 27B AutoThink here, every v1 and v1.1 folder starts the same
+way):
 
 ```bash
-source ~/jev/env.sh
-MODEL=~/jev/models/StartLux-Decision-4B-Q8_0-GGUF scripts/serve.sh start int8    # port 8092; waits for /health
-curl -s localhost:8092/v1/systemone -H 'Content-Type: application/json' -d '{"state": {"ticket": "I was charged twice."},
-  "questions": {"urgent": {"type": "noul", "instructions": "Should this ticket be answered today?"}}}'
-scripts/serve.sh stop
+M=~/models/StartLux-Decision-v1.1-27B-AutoThink-GGUF
+G=$M/StartLux-Decision-v1.1-27B-AutoThink-Q8_0.gguf
+python -m flash_jev.server --gguf $G --model-dir $M --port 8092
+```
+
+It is ready when it prints `Ready`. A Q8_0 file runs int8 (W8A8). The first start also measures the int8 activation
+ranges, once: SmoothQuant needs each projection input's per-channel maximum, which the GGUF's quantized weights do not
+carry, so a bf16 forward of StartLux-Decision's calibration requests measures them. They are kept in
+`~/.cache/flash-jev/calib` (`--calib FILE` to choose), and later starts read them.
+
+**2. Ask** (the TypeSafe `/v1/systemone` format):
+
+```bash
+curl -s localhost:8092/v1/systemone -H 'Content-Type: application/json' -d '{
+  "state": {"ticket": "I was charged twice for order #4411 and the app still shows it as unpaid."},
+  "questions": {
+    "team": {"type": "choice", "instructions": "Which team should handle this ticket?",
+             "criteria": {"billing": "Payments and refunds", "shipping": "Delivery", "technical": "App and login"}},
+    "urgent": {"type": "noul", "instructions": "Should this ticket be answered today?"}}}'
 ```
 
 ```text
-{"answers": {"urgent": {"type": "noul", "noul": 0.5502554493555311}}, "usage": {"input_tokens": 70, "output_tokens": 0},
- "model": "StartLux-Decision-4B (flash-jev)", "latency_ms": 5.257, "timings": {"bucket": 64, "gpu_ms": 4.334, ...}}
+{"answers": {"team": {"type": "choice", "choice": "billing", "confidence": 0.9932831270461311,
+                      "probabilities": {"billing": 0.9955220846974208, "shipping": 0.00019776330950596044,
+                                        "technical": 0.004280151993073352},
+                      "none_probability": 0.0021257799723093953},
+             "urgent": {"type": "noul", "noul": 0.8552000525954111}},
+ "usage": {"input_tokens": 191, "output_tokens": 29}, "model": "StartLux-Decision-v1.1-27B-AutoThink (flash-jev)",
+ "latency_ms": 362.53, "timings": {...}}
 ```
 
-`MODEL` is the GGUF repository: the `.gguf` file, with its tokenizer and config beside it. Weights load straight from
-the GGUF and are requantized on the GPU at start-up. The int8 path's SmoothQuant activation statistics are computed on
-the first start and kept in the `--calib` file.
+`urgent`'s first read-out was below the gate (0.9), so it thought (29 tokens) before answering; `team` did not need to.
+`none_probability` is the chance that no listed option fits. `"return_details": true` adds each answer's first
+read-out, thought and second read-out; `"images": [...]` takes base64 images (the `mmproj-*.gguf` beside the model file
+is loaded automatically). Every request field and server flag: [Serving](#serving).
 
-StartLux-Decision v1.1 AutoThink, with thoughts and images, without the script:
+**3. Precision** (`--precision`): `int8` (W8A8, the fast path: the default for Q8_0 files), `bf16` (the same weights
+dequantized, on cuBLAS: the reference) or `w4a8` (a Q4_K_M file's own 4-bit weights: its default).
+
+**4. Several GPUs** (the same flags; which to pick: [Several GPUs](#several-gpus)):
 
 ```bash
-M=~/jev/models/StartLux-Decision-v1.1-27B-AutoThink-GGUF
-python -m flash_jev.server --gguf $M/StartLux-Decision-v1.1-27B-AutoThink-Q8_0.gguf --model-dir $M --precision int8 \
-  --calib ~/jev/calib/StartLux-Decision-v1.1-27B-AutoThink-Q8_0.pt --port 8092
-curl -s localhost:8092/v1/systemone -H 'Content-Type: application/json' -d '{"state": {"ticket": "I was charged twice
-  for order #4411 and the app still shows it as unpaid."}, "questions": {"team": {"type": "choice", "instructions":
-  "Which team should handle this ticket?", "criteria": {"billing": "Payments and refunds", "shipping": "Delivery",
-  "technical": "App and login"}}}, "return_details": true}'
+python -m flash_jev.server --tp 2 --gpus 0,1 --gguf $G --model-dir $M --port 8092    # tensor parallel: faster requests
+python -m flash_jev.dp --gpus 0,1,2,3 --gguf $G --model-dir $M --port 8092           # data parallel: most throughput
+python -m flash_jev.dp --gpus 0,1,2,3 --tp 2 --gguf $G --model-dir $M --port 8092    # both: two 2-GPU servers
 ```
 
-The answer's `none_probability` is the chance that no listed option fits. `details` shows the first read-out, the
-thought (if any) and the read-out after it. The `mmproj-*.gguf` beside the model file is loaded automatically, so
-`"images": [...]` works too.
+Requests go to port 8092 as before, and every answer is the single GPU's, bit for bit. Tensor parallelism runs int8,
+on 2 or 4 GPUs for the 27B. Its first start measures the activation ranges on its first GPU (that GPU must hold the
+bf16 weights for it: 54 GB for the 27B), then splits the model; nothing has to run on one GPU beforehand.
 
-Several GPUs, one server each behind a router on one port:
-
-```bash
-python -m flash_jev.dp --gpus 0,1,2,3 --port 8092 --gguf $M/StartLux-Decision-v1.1-27B-AutoThink-Q8_0.gguf \
-  --model-dir $M --precision int8 --calib ~/jev/calib/StartLux-Decision-v1.1-27B-AutoThink-Q8_0.pt
-```
-
-One model over two GPUs (tensor parallelism), for lower latency:
-
-```bash
-python -m flash_jev.server --tp 2 --gpus 0,1 --gguf $M/StartLux-Decision-v1.1-27B-AutoThink-Q8_0.gguf \
-  --model-dir $M --precision int8 --calib ~/jev/calib/StartLux-Decision-v1.1-27B-AutoThink-Q8_0.pt --port 8092
-```
-
-Both at once: `python -m flash_jev.dp --gpus 0,1,2,3 --tp 2 ...` runs two servers of two GPUs each behind the router.
+On the benchmark servers (no internet), `scripts/setup_server.sh` installs wheels fetched elsewhere into `~/jev/venv`
+with the pip CUDA 13 toolkit as `CUDA_HOME` and writes `~/jev/env.sh`; then
+`MODEL=~/jev/models/StartLux-Decision-4B-Q8_0-GGUF scripts/serve.sh start int8` starts a server on port 8092 and
+`scripts/serve.sh stop` stops it.
 
 ## Models, GPUs and precisions
 
@@ -332,6 +346,8 @@ Measured:
 - **RTX 5090:** the 4B and 9B (Q8_0: int8 and bf16; Q4_K_M: W4A8) and the 27B's Q4_K_M (W4A8).
 - **H200:** the v1 27B (Q8_0: int8 and bf16; Q4_K_M: W4A8 and int8), and the v1.1 27B AutoThink (Q8_0: int8 and bf16;
   int8 on 2 and 4 GPUs).
+- **Several GPUs:** data parallelism with any precision (`flash_jev.dp`); tensor parallelism with int8, 2 or 4 GPUs on
+  the 27B (`--tp`); both together (`flash_jev.dp --tp 2`).
 
 To add another model of the family, run `scripts/prepare_model.sh` (its folders for every engine), then
 `scripts/new_model.sh` (dispatch-table entries for its projection shapes, int8 calibration, correctness tests).
@@ -360,7 +376,7 @@ Server flags:
 
 | flags | default | |
 |---|---|---|
-| `--precision`, `--calib` | `auto` | the precision (above) and the int8 activation ranges (computed and saved on the first start) |
+| `--precision`, `--calib` | `auto`, `~/.cache/flash-jev/calib/<file>-<size>-v1.pt` | the precision (above) and the int8 activation ranges (measured on the first start, before a `--tp` group splits the model too, and kept in this file; `$FLASHJEV_CACHE` moves the cache) |
 | `--max-tokens`, `--mem-fraction` | 0, 0.9 | the largest batch; 0 sizes it from free GPU memory (65,536 tokens for the 4B on the RTX 5090, 131,072 for the 27B on the H200). Longer requests get HTTP 422 |
 | `--budget` | 8,192 | tokens per batched pass when requests queue; a longer request runs alone |
 | `--prefix-cache`, `--prefix-cache-tokens`, `--prefix-cache-min` | 64, 65,536, 64 | cached evidence states (0: off), their KV rows, the shortest evidence cached |
@@ -381,6 +397,8 @@ Server flags:
 
 **One model over several GPUs, tensor parallelism** (`--tp N --gpus a,b,...`, the int8 path):
 - **Sizes:** N divides the attention heads, kv heads, linear-attention key heads and FFN width: 2 or 4 on the 27B.
+- **First start:** without the activation ranges, the server measures them first on the group's first GPU (a process
+  of its own that loads the bf16 weights: 54 GB for the 27B), then starts the group.
 - **Processes:** the server's process is rank 0 on the first GPU and starts one process per further GPU
   (`python -m flash_jev.tp`, not run by hand), which replays its passes. If one of them dies, the server exits.
 - **Memory:** each GPU holds 1/N of the projections, of the KV rows and of the recurrent states (72 MiB per thought at

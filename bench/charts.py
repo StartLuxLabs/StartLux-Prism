@@ -581,6 +581,25 @@ def v11_precision(theme):
              "(docs/benchmarks.md).")
 
 
+@chart
+def several_gpus(theme):
+    return bar_chart(
+        theme, "Several GPUs: StartLux-Decision v1.1 27B on H200s",
+        "flash-jev int8, JevBench. Data parallelism (DP: whole servers behind the router) for throughput, tensor "
+        "parallelism (TP: one model split over the GPUs) for the time per request. Every configuration answers as one "
+        "GPU does, bit for bit; one GPU in gray, for scale.",
+        [("one GPU", False), ("2 GPUs: TP 2", True), ("4 GPUs: TP 4", True), ("4 GPUs: DP 2 x TP 2", True),
+         ("4 GPUs: DP 4", True)],
+        [dict(head="Read-outs from many clients: requests/s (higher is better)", vals=[30.9, 43.3, 54.0, 86.0, 121.1],
+              shown=["30.9", "43.3 (1.40x)", "54.0 (1.75x)", "86.0 (2.78x)", "121.1 (3.92x)"],
+              unit="requests/s"),
+         dict(head="One request at a time, with thoughts: mean ms per item (lower is better)",
+              vals=[1209, 902, 768, 902, "as one GPU (1,209), plus ~1 ms for the router"],
+              shown=["1,209", "902", "768", "902", ""], unit="ms")],
+        note="Read-outs: the most requests/s over 32 to 256 clients (one GPU and TP: from 64 clients). With thoughts: "
+             "the 231 items one at a time, 67 of them thinking. Second H200 server (NVSwitch), 2026-10-14.")
+
+
 def main():
     os.makedirs(OUT, exist_ok=True)
     for name, fn in CHARTS.items():
