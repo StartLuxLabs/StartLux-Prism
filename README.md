@@ -50,11 +50,15 @@ curl -s localhost:8092/v1/systemone -H 'Content-Type: application/json' -d '{
 ```text
 {"answers": {"team": {"type": "choice", "choice": "billing", "confidence": 0.993, "probabilities": {...},
                       "none_probability": 0.002},
-             "urgent": {"type": "noul", "noul": 0.855}},
- "usage": {"input_tokens": 191, "output_tokens": 29}, ...}
+             "urgent": {"type": "noul", "noul": 0.749}},
+ "usage": {"input_tokens": 191, "output_tokens": 0}, ...}
 ```
 
-`urgent` was unsure on its first read-out (below `gate`, 0.9), so the model thought for 29 tokens before answering.
+Both first read-outs reached the gate (0.6), so the model answered without a thought. With `"gate": 0.9` (the setting
+of the published numbers) `urgent` (0.749) is below it, and the model thinks for 29 tokens before answering 0.855.
+`none_probability` is the chance that no listed option fits. `choice` is null only when "None of the above" is the most
+likely option; we suggest also treating 0.2 or more as "no listed option fits" (it catches about two thirds of the
+questions whose right answer was removed, for about 2% of ordinary ones).
 
 On several GPUs, with the same flags:
 
@@ -73,8 +77,8 @@ Endpoints: `POST /v1/systemone` (also `/v1/decisions`), `GET /v1/models`, `GET /
 | `state`, `questions` | | the evidence (text or JSON) and typed questions: `choice`, `noul` (yes/no), `score` |
 | `images` | | up to 8, base64 or data URIs |
 | `think_mode` | `auto` | `auto` thinks when the first read-out's top probability is below `gate`; `never`; `always` |
-| `gate`, `mix`, `think_budget` | 0.9, 0.75, 4,096 | the threshold to think, the weight of the read-out after the thought, the longest thought |
-| `none_check`, `allow_none` | on (v1.1), off | "None of the above" as an extra option; a null choice when it wins |
+| `gate`, `mix`, `think_budget` | 0.6, 0.75, 4,096 | the threshold to think (the published numbers used 0.9), the weight of the read-out after the thought, the longest thought |
+| `none_check`, `allow_none` | on, on (v1.1) | "None of the above" as an extra option, reported as `none_probability`; a null choice when it is the most likely option |
 | `return_details`, `return_thought` | off | each answer's read-outs and timings; the thought's text |
 
 | server flag | default | |
@@ -84,7 +88,7 @@ Endpoints: `POST /v1/systemone` (also `/v1/decisions`), `GET /v1/models`, `GET /
 | `--max-tokens` | from free memory | the largest batch (131,072 tokens for the 27B on an H200); longer requests get 422 |
 | `--prefix-cache-tokens` | 65,536 | KV rows kept for evidence that comes again |
 | `--think-seqs` | as many as fit | thoughts generated at once (64 for the 27B on an H200, 16 for the 9B in int8 on an RTX 5090) |
-| `--none-check`, `--allow-none` | | the defaults of the request fields |
+| `--gate`, `--none-check`, `--allow-none` | 0.6, on, on (v1.1) | the defaults of the request fields |
 
 Every field and flag, the model folders and the GPUs: [docs/serving.md](docs/serving.md).
 

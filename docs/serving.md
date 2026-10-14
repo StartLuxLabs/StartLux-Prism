@@ -14,7 +14,7 @@ release does:
 | v1.1 Instant (prompt read bidirectionally) | not served yet: refused at start-up | |
 
 - **Thoughts.** `think_mode` `auto` (the default) thinks when the first read-out's top probability is below `gate`
-  (0.9). `never` answers in one pass, and `always` thinks first.
+  (0.6; the published numbers used 0.9). `never` answers in one pass, and `always` thinks first.
   - **Sampling:** as v1.1 samples a thought: temperature 0.6, top-k 20, top-p 0.95, a seed from the prompt, at most
     4,096 tokens, and v1.1's loop detector.
   - **Answer:** a second read-out of the prompt and the thought, mixed 0.25 / 0.75 with the first.
@@ -22,7 +22,9 @@ release does:
     prefill batches.
 - **None of the above.** With `none_check` (on by default for v1.1), every choice question gets the extra option "None
   of the above". Its probability is reported as `none_probability`, and the listed options are renormalised.
-  `allow_none` also lets the choice be null when that option wins.
+  `allow_none` (on by default for v1.1) also lets the choice be null when that option wins. We suggest treating a
+  `none_probability` of 0.2 or more as "no listed option fits": it catches about two thirds of the questions whose
+  right answer was removed, for about 2% of ordinary questions.
 - **Images.** With the folder's `mmproj` vision file, a request can carry up to 8 images, placed, resized and
   positioned as v1.1 does. Thoughts read them too.
 - **The same answers as v1.1's package.** Prompts match byte for byte, decisions from the same letter logits match to
@@ -101,9 +103,9 @@ Request fields (the TypeSafe / StartLux-Decision format; the v1.1 fields as its 
 | `questions` | | `{key: {"type": "choice" \| "noul" \| "score", "instructions", "criteria"}}` |
 | `images` | none | v1.1 with a vision tower: base64 strings or data URIs, at most `--max-images` (8), at the state's `<image>` marks or before it; each resized to at most `--max-pixels` (1,048,576) and read as one token per 32 x 32 pixels |
 | `think_mode` | `auto` on AutoThink folders | `auto`, `never` or `always` |
-| `gate`, `mix`, `think_budget` | 0.9, 0.75, 4,096 | the threshold to think, the weight of the read-out after the thought, the longest thought |
+| `gate`, `mix`, `think_budget` | 0.6, 0.75, 4,096 | the threshold to think (the published numbers used 0.9), the weight of the read-out after the thought, the longest thought |
 | `none_check` | true on v1.1 folders | the extra option "None of the above" and `none_probability` |
-| `allow_none` | false | `choice` is null when "None of the above" is the most likely option (also per question) |
+| `allow_none` | true on v1.1 folders | `choice` is null when "None of the above" is the most likely option (also per question) |
 | `return_details`, `return_thought` | false | per-answer read-outs and `timing_ms`, and the thought's text |
 
 A malformed body gets 422 on v1.1 folders and 400 on v1 folders, as each release's own server answers.
@@ -116,7 +118,8 @@ Server flags:
 | `--max-tokens`, `--mem-fraction` | 0, 0.9 | the largest batch; 0 sizes it from free GPU memory (65,536 tokens for the 4B on the RTX 5090, 131,072 for the 27B on the H200). Longer requests get HTTP 422 |
 | `--budget` | 8,192 | tokens per batched pass when requests queue; a longer request runs alone |
 | `--prefix-cache`, `--prefix-cache-tokens`, `--prefix-cache-min` | 64, 65,536, 64 | cached evidence states (0: off), their KV rows, the shortest evidence cached |
-| `--none-check`, `--allow-none` | `auto` (on for v1.1) | the defaults of the request fields |
+| `--none-check`, `--allow-none` | `auto` (on for v1.1) | the defaults of the request fields (`--allow-none` alone: on) |
+| `--gate` | the folder's (0.6) | the default gate of AutoThink folders (the published numbers used 0.9) |
 | `--think-mode`, `--max-think-budget`, `--think-seqs`, `--think-kv-rows` | the folder's, 4,096, auto, auto | thoughts: the default mode, the largest budget, thoughts generated at once (144 MiB of state each on the 27B; auto: the most, up to 64, whose state and KV rows take at most half of the GPU memory left after the weights and an 8,192-token batch's buffers - 64 for the 27B on an H200, 16 for the 9B in int8 on an RTX 5090) and their KV rows (think-seqs x (budget + 1,024)) |
 | `--mmproj`, `--max-images`, `--max-pixels` | `auto`, 8, 1,048,576 | the vision tower (`auto`: the `mmproj-*.gguf` beside `--gguf`; `none`: text only); images need Pillow |
 | `--graph-max-tokens`, `--no-graphs` | | CUDA graphs for every token bucket (recorded at start-up) or fewer |

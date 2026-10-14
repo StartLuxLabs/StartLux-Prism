@@ -66,10 +66,11 @@ THINK_OPEN = "<think>"
 # ---------------------------------------------------------------------------------------------------- settings
 @dataclasses.dataclass(frozen=True)
 class AutoThink:
-    """The release settings (startlux_decide/modelcfg.py AutoThink); a folder's decision_config.json "auto_think" block
-    overrides any of them."""
+    """The release settings (startlux_decide/modelcfg.py AutoThink), except the gate: the published numbers used 0.9,
+    the default is 0.6 as startlux_decide's, which answers more requests in one pass.  A folder's decision_config.json
+    "auto_think" block overrides any of them."""
     think_mode: str = "auto"
-    gate: float = 0.9
+    gate: float = 0.6
     mix: float = 0.75
     budget: int = 4096
     prefix: str = RELEASE_PREFIX
@@ -153,7 +154,7 @@ def folder_auto_think(model_dir):
 class Controls:
     """The effective controls of one request (startlux_decide/controls.py)."""
     think_mode: str = "auto"
-    gate: float = 0.9
+    gate: float = 0.6
     budget: int = 4096
     mix: float = 0.75
     details: bool = False
