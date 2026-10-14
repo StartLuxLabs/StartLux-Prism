@@ -39,9 +39,9 @@ TypeSafe `/v1/systemone` API. Prompts, read-outs, thoughts and decision rules ar
 - **4-bit files on their own weights.** Q4_K_M files run as W4A8 on int8 tensor cores, 3.9-6.9x faster than llama.cpp
   on the same file. This way the 27B fits a 32 GB RTX 5090.
 - **Several GPUs, the same answers.** Data parallelism for throughput (`flash_jev.dp`, one server per GPU behind a
-  router): three H200s give 2.89x the read-out throughput of one. Tensor parallelism for latency (`--tp 2` or `4`): a
-  JevBench item with thoughts takes 902 ms on two H200s and 768 on four (1,209 on one), an 8,192-token prompt 301 and
-  242 ms (428). The two combine, and every answer is the single GPU's, bit for bit.
+  router): four H200s give 3.92x the read-out throughput of one (121 requests/s). Tensor parallelism for latency
+  (`--tp 2` or `4`): a JevBench item with thoughts takes 902 ms on two H200s and 768 on four (1,209 on one), an
+  8,192-token prompt 301 and 242 ms (428). The two combine, and every answer is the single GPU's, bit for bit.
 - **Kernels per GPU.** Every projection's kernel, tile and K split comes from a table measured on the GPU model. On
   Hopper, the int8 GEMMs run on warpgroup MMA with TMA and warp specialization (1,240-1,420 TOPS).
 
@@ -187,21 +187,22 @@ Both paths run the same Q8_0 weights, dequantized to bf16 or requantized to int8
 ### Several GPUs
 
 Two ways to use more GPUs, both giving the single GPU's answers, bit for bit (27B v1.1 on H200s, int8, JevBench):
-- **Data parallelism** (`python -m flash_jev.dp`): one whole server per GPU behind a router. More throughput; a
+- **Data parallelism** (`python -m flash_jev.dp`): one whole server per GPU behind a router. The most throughput; a
   request takes as long as on one GPU.
 - **Tensor parallelism** (`--tp 2` or `4`): one model split over the GPUs. Less time per request, mostly for long
   prompts and thoughts.
 
-Data parallelism, three H200s:
+They combine (`flash_jev.dp --tp 2`: tensor-parallel servers behind the router). Four H200s each way:
 
-| | one GPU | three GPUs |
-|---|---|---|
-| read-outs from 64 clients, requests/s | 30.7 | **88.7** (2.89x) |
-| with thoughts, requests/s (64 clients on one GPU, 192 on three) | 7.6 | **14.1** |
-| one request at a time, mean ms | 41.1 | 42.2 (the router's hop) |
+| four H200s as | read-outs, requests/s | with thoughts, requests/s | one at a time, mean ms: read-out / with thoughts |
+|---|---|---|---|
+| four one-GPU servers | **121.1** (3.92x one GPU) | **26.1** | one GPU's (41.0 / 1,209), plus the router's ~1 ms |
+| two 2-GPU servers | 86.0 (2.78x) | 19.9 | 36.0 / 902 |
+| one 4-GPU server | 54.0 (1.75x) | - | **29.0 / 768** |
 
-A three-pass run with thoughts cannot end before its longest thought (about 40 s for 4,000 tokens), so that gain shows
-in longer runs.
+Read-outs: the most over 32 to 256 clients (one 4-GPU server: from 64). With thoughts: 3,696 requests from 256
+clients, long enough that the longest thought (about 4,000 tokens) is a small part of the run; not run on one 4-GPU
+server.
 
 Tensor parallelism, two and four H200s on NVSwitch:
 
@@ -213,16 +214,13 @@ Tensor parallelism, two and four H200s on NVSwitch:
 | JevBench one at a time, read-outs, mean ms | 41.0 | 34.4 | **29.0** |
 | JevBench one at a time, with thoughts, mean ms | 1,209 | 902 | **768** |
 | read-outs from 64 clients, requests/s | 30.9 | 43.3 | **54.0** |
-| with thoughts from 64 clients, requests/s | 6.28 | 8.26 | **9.81** |
+| with thoughts from 64 clients (462 requests), requests/s | 6.28 | 8.26 | **9.81** |
 
-Short prompts gain little: each kernel's fixed cost does not divide among the GPUs, and the sums and maxima exchanged
-between them take a fifth to a third of a pass on two GPUs and two fifths on four. For throughput per GPU, data
-parallelism is ahead (88.7 requests/s on three GPUs against 54.0 on four with tensor parallelism).
-
-Both at once, four H200s as two 2-GPU servers behind the router (`python -m flash_jev.dp --tp 2`):
-84.0 requests/s of read-outs from 64 clients and 12.1 with thoughts (one 4-GPU server: 54.0 and 9.8), each request as
-fast as on one 2-GPU server (36.0 ms per read-out on average, 902 with thoughts), the answers again the single GPU's,
-bit for bit. Details: [docs/benchmarks.md](docs/benchmarks.md#tensor-parallelism-the-27b-on-2-and-4-h200s).
+Short prompts gain little from tensor parallelism: each kernel's fixed cost does not divide among the GPUs, and the
+sums and maxima exchanged between them take a fifth to a third of a pass on two GPUs and two fifths on four. Details:
+[tensor parallelism](docs/benchmarks.md#tensor-parallelism-the-27b-on-2-and-4-h200s),
+[four H200s](docs/benchmarks.md#four-h200s-the-most-throughput),
+[data parallelism on three](docs/benchmarks.md#several-gpus-data-parallelism).
 
 ## Accuracy
 

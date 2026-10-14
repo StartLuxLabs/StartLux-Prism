@@ -4,8 +4,10 @@ flash-jev against seven other engines on StartLux-Decision v1 at 4B, 9B and 27B 
 releases, byte-identical to them: [Setup](#setup)): one request at a time, many clients at
 once, long evidence, follow-up questions served from a prefix cache, the longest request each engine computes in one
 pass, and the stress test of a running server. Two machines: an RTX 5090 (the 4B, the 9B and the 27B's Q4_K_M file)
-and an H200 (the 27B). Every engine runs alone on the GPU, one after another, through the same HTTP client; all
-numbers are from 2026-10-10 to 2026-10-12. Each chart is drawn from the table below it (`python bench/charts.py`).
+and an H200 (the 27B). Every engine runs alone on the GPU, one after another, through the same HTTP client; the v1
+numbers are from 2026-10-10 to 2026-10-12. Then StartLux-Decision v1.1 27B AutoThink on a second H200 server
+(2026-10-13 and 14): thoughts, its official engine, int8 against bf16, images, and several GPUs (data parallelism,
+tensor parallelism, both). Each chart is drawn from the table below it (`python bench/charts.py`).
 
 - [Summary](#summary)
 - [Setup](#setup) · [Method](#method) · [Reproducing](#reproducing)
@@ -22,6 +24,7 @@ numbers are from 2026-10-10 to 2026-10-12. Each chart is drawn from the table be
 - [Images](#images)
 - [Several GPUs: data parallelism](#several-gpus-data-parallelism)
 - [Tensor parallelism: the 27B on 2 and 4 H200s](#tensor-parallelism-the-27b-on-2-and-4-h200s)
+- [Four H200s: the most throughput](#four-h200s-the-most-throughput)
 - [Stress tests](#stress-tests)
 - [Engine configurations](#engine-configurations) · [Crashes on the RTX 5090 server](#crashes-on-the-rtx-5090-server)
 
@@ -1003,8 +1006,8 @@ The 231 items one at a time through the three workers gave the single GPU's deci
 thoughts, a three-pass run cannot end before its longest thought: one of about 4,000 tokens takes some 40 s on its
 own, so the gain shows in longer runs.
 
-Workers that are tensor-parallel servers themselves (`--tp 2`): [below](#tensor-parallelism-the-27b-on-2-and-4-h200s),
-"Both at once".
+Four GPUs as four one-GPU servers, two 2-GPU servers or one 4-GPU server:
+[Four H200s: the most throughput](#four-h200s-the-most-throughput).
 
 ## Tensor parallelism: the 27B on 2 and 4 H200s
 
@@ -1085,7 +1088,48 @@ thoughts, 1.29-1.32x and 1.53-1.56x with them.
 the same runs. The 231 items one at a time gave the single GPU's probabilities and thoughts, bit for bit, with and
 without thoughts. On four GPUs, two 2-GPU servers answer 1.56x the read-outs of one 4-GPU server from 64 clients
 (84.0 against 54.0 requests/s) and 1.24x with thoughts (12.13 against 9.81), each request at a 2-GPU server's speed
-plus the router's hop (36.0 against 34.4 ms on average).
+plus the router's hop (36.0 against 34.4 ms on average). The most each configuration answers:
+[Four H200s](#four-h200s-the-most-throughput).
+
+## Four H200s: the most throughput
+
+Four GPUs three ways: four one-GPU servers behind the router (`python -m flash_jev.dp --gpus 1,2,3,4`), two 2-GPU
+servers (the same with `--tp 2`) and one 4-GPU server (`--tp 4`, [above](#tensor-parallelism-the-27b-on-2-and-4-h200s)).
+StartLux-Decision-v1.1-27B-AutoThink in int8 on GPUs 1-4 of the second H200 server, 2026-10-14; JevBench's 231 items,
+every request with its own request number; requests/s over the whole run.
+
+**Read-outs** (think_mode never; five passes, 1,155 requests per level):
+
+| clients | 32 | 64 | 128 | 192 | 256 |
+|---|---|---|---|---|---|
+| four one-GPU servers | | 118.5 | **121.1** | | 118.3 |
+| two 2-GPU servers | 80.0 | 84.1 | **86.0** | 84.3 | 85.9 |
+| one 4-GPU server (three passes) | | **54.0** | | | |
+
+Both router configurations level off from 64 clients. Against one GPU (30.9 requests/s from 64 clients,
+[above](#tensor-parallelism-the-27b-on-2-and-4-h200s)): four one-GPU servers 3.92x, two 2-GPU servers 2.78x, one
+4-GPU server 1.75x - per GPU 30.3, 21.5 and 13.5 requests/s.
+
+**With thoughts** (think_mode auto; the request numbers from the same seed in every configuration, so the same items
+think the same thoughts and every pass scores the same in all of them):
+
+| | 924 requests (four passes) from 64 / 128 / 192 / 256 clients | 3,696 requests (16 passes) from 256 clients | GPU memory in use, per GPU |
+|---|---|---|---|
+| four one-GPU servers | - / 14.18 / - / 14.43 | **26.11** | 113.9 GiB |
+| two 2-GPU servers | 13.93 / 14.55 / 14.73 / 14.95 | 19.85 | 64.0 GiB |
+| two 2-GPU servers, `--think-seqs 128` | - / 14.75 / - / 15.10 | | 79.0 GiB |
+
+A run cannot end before its longest thought, about 4,000 tokens decoded a step at a time (10.5-20 ms per step on one
+GPU, 7.7-14.7 on two, by the number of thoughts decoding with it). Over 924 requests (about a minute) that tail is a
+large part of the run: the one-GPU servers' GPU was busy 51-54% of it (sampled on GPU 1; 99.7% for the 2-GPU servers),
+and they trail. Over 3,696 requests the GPUs were busy 95-98% and the four one-GPU servers answer 1.32x as many
+requests per second. Between the two run lengths (the 2,772 extra requests over the extra time) the rates are 35.8 and
+22.3 requests/s (1.6x), nearer to what a queue that never drains would see. 128 thoughts decoded at once per server
+instead of 64 (`--think-seqs 128`) add 1%.
+
+So for throughput, one server per GPU; tensor parallelism shortens each request instead (one at a time: 29.0 ms per
+read-out and 768 ms per item with thoughts on one 4-GPU server, 36.0 and 902 on two 2-GPU servers, 41.0 and 1,209 on
+one GPU).
 
 ## Stress tests
 
