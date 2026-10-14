@@ -117,7 +117,7 @@ Server flags:
 | `--budget` | 8,192 | tokens per batched pass when requests queue; a longer request runs alone |
 | `--prefix-cache`, `--prefix-cache-tokens`, `--prefix-cache-min` | 64, 65,536, 64 | cached evidence states (0: off), their KV rows, the shortest evidence cached |
 | `--none-check`, `--allow-none` | `auto` (on for v1.1) | the defaults of the request fields |
-| `--think-mode`, `--max-think-budget`, `--think-seqs`, `--think-kv-rows` | the folder's, 4,096, 64, auto | thoughts: the default mode, the largest budget, thoughts generated at once (144 MiB of state each on the 27B) and their KV rows (think-seqs x (budget + 1,024)) |
+| `--think-mode`, `--max-think-budget`, `--think-seqs`, `--think-kv-rows` | the folder's, 4,096, auto, auto | thoughts: the default mode, the largest budget, thoughts generated at once (144 MiB of state each on the 27B; auto: the most, up to 64, whose state and KV rows take at most half of the GPU memory left after the weights and an 8,192-token batch's buffers - 64 for the 27B on an H200, 16 for the 9B in int8 on an RTX 5090) and their KV rows (think-seqs x (budget + 1,024)) |
 | `--mmproj`, `--max-images`, `--max-pixels` | `auto`, 8, 1,048,576 | the vision tower (`auto`: the `mmproj-*.gguf` beside `--gguf`; `none`: text only); images need Pillow |
 | `--graph-max-tokens`, `--no-graphs` | | CUDA graphs for every token bucket (recorded at start-up) or fewer |
 | `--attn-qk8` | off | opt-in: q k^T on int8 tensor cores, 15% off at 50,000 tokens at a small probability error |
