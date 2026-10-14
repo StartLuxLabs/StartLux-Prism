@@ -197,9 +197,11 @@ def main():
     ap.add_argument("--none-check", choices=("auto", "on", "off"), default="auto",
                     help="choice questions get the extra option \"None of the above\" and report none_probability "
                          "(StartLux-Decision v1.1); auto: on for v1.1 folders, as startlux-decide serve, off for v1 ones")
-    ap.add_argument("--allow-none", action="store_true",
+    ap.add_argument("--allow-none", nargs="?", const="on", choices=("auto", "on", "off"), default="auto",
                     help="default for the request field allow_none: a choice is null when \"None of the above\" is "
-                         "the most likely option")
+                         "the most likely option; auto: on for v1.1 folders, off for v1 ones; --allow-none alone: on")
+    ap.add_argument("--gate", type=float,
+                    help="AutoThink folders: default gate (default: the folder's, 0.6; the published numbers used 0.9)")
     ap.add_argument("--switch-interval", type=float, default=0.0005,
                     help="Python GIL switch interval (s): how long a thread may hold the GIL while another waits")
     ap.add_argument("--think-mode", choices=("auto", "never", "always"),
@@ -279,13 +281,17 @@ def main():
         engine.warm_up()
     budget = min(a.budget or engine.max_tokens, engine.max_tokens)      # a smaller GPU / larger model: fewer tokens
     none_check = {"auto": kind != "v1", "on": True, "off": False}[a.none_check]
+    allow_none = {"auto": kind != "v1", "on": True, "off": False}[a.allow_none]
+    if a.gate is not None and not 0 <= a.gate <= 1:
+        sys.exit("--gate is a number from 0 to 1")
     if thinks:
         from .engine.decode import Decoder
         decoder = Decoder(engine, a.gguf, a.think_seqs, auto.sampling, graphs=not a.no_graphs)
         decoder.warm_up()
         sched = TH.ThinkScheduler(engine, decoder, budget, a.overlap_tokens, direct=not a.no_direct)
         framing = TH.Framing(a.model_dir)
-        defaults = TH.default_controls(auto, think_mode=a.think_mode, none_check=none_check, allow_none=a.allow_none)
+        defaults = TH.default_controls(auto, think_mode=a.think_mode, gate=a.gate, none_check=none_check,
+                                       allow_none=allow_none)
         context = min(a.context_length or engine.max_tokens, engine.max_tokens, a.think_kv_rows)
     else:
         sched = Scheduler(engine, budget, a.overlap_tokens, direct=not a.no_direct)
@@ -300,10 +306,10 @@ def main():
     health = json.dumps({"status": "ok", "model": a.name, "precision": a.precision, "tp": a.tp,
                          "max_tokens": engine.max_tokens,
                          "batch_tokens": budget, "kind": kind, "think_mode": defaults.think_mode if thinks else "never",
-                         "none_check": none_check, "allow_none": a.allow_none, "images": engine.vision is not None,
+                         "none_check": none_check, "allow_none": allow_none, "images": engine.vision is not None,
                          "max_images": a.max_images if engine.vision is not None else 0}
                         | ({"max_think_budget": max_budget, "context_length": context, "think_seqs": a.think_seqs,
-                            "think_kv_rows": a.think_kv_rows} if thinks else {})).encode()
+                            "think_kv_rows": a.think_kv_rows, "gate": defaults.gate} if thinks else {})).encode()
 
     def handle(method, path, body):
         path = path.split("?", 1)[0].rstrip("/")
@@ -325,12 +331,12 @@ def main():
             if thinks:
                 ctl = TH.parse_controls(req, defaults, max_budget)
                 answers, usage, timing = TH.ThinkingDecider(tok, backend, sched, framing, auto, context, none_check,
-                                                            a.allow_none, images).decide(
+                                                            allow_none, images).decide(
                     req.get("state"), req["questions"], marks, ctl.allow_none, ctl.none_check, ctl=ctl,
                     images=req.get("images"))
             else:
                 ctl = request_controls(req)
-                answers, usage = Decider(tok, backend, none_check, a.allow_none, images).decide(
+                answers, usage = Decider(tok, backend, none_check, allow_none, images).decide(
                     req.get("state"), req["questions"], marks, ctl["allow_none"], ctl["none_check"], req.get("images"))
             timings = dict(backend.last or {})
             timings["stages_ms"] = {b[0]: round((b[1] - a_[1]) * 1000, 3) for a_, b in zip(marks, marks[1:])}
