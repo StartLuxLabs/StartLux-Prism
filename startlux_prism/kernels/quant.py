@@ -11,7 +11,7 @@ norm_q8 (and fold) also finish a residual add that a split-K output projection d
 int32 partial sums are added exactly, scaled and added into h with the same roundings as an unsplit projection's
 epilogue, so the residual has the same bits whichever way the projection ran.
 
-Tensor parallelism (flash_jev/tp.py): the inputs of the row-parallel projections (gated norm, attention output,
+Tensor parallelism (startlux_prism/tp.py): the inputs of the row-parallel projections (gated norm, attention output,
 SwiGLU) hold this rank's heads or columns only, while the per-token scale is the maximum over the whole row.  On a
 short pass the ranks exchange their row maxima inside the producer's one launch (mode 3, _ll_amax: per row, a 64-bit
 word that carries the pass number above the float's bits, no flag and no barrier); on a long one the producer runs
@@ -44,7 +44,7 @@ from triton.language.extra.cuda import libdevice
 
 
 class Sync(NamedTuple):
-    """One fused all-reduce step of a tensor-parallel group (flash_jev/tp.py; module docstring): `epoch` int64 [1], the
+    """One fused all-reduce step of a tensor-parallel group (startlux_prism/tp.py; module docstring): `epoch` int64 [1], the
     pass's number (the same on every rank); `flags`, every rank's flag array (int64 [channels, ranks]) as mapped
     here, in rank order; `chan`, this step's flags (its index in the pass); `others`, the other ranks' data buffers
     (as mapped here); this process's rank and the group's size."""

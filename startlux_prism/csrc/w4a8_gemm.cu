@@ -451,10 +451,10 @@ void w4a8_gemm(torch::Tensor a, torch::Tensor as, torch::Tensor xs, torch::Tenso
 #undef W4A8_STAGES
 }
 
-TORCH_LIBRARY_FRAGMENT(flash_jev, m) {
+TORCH_LIBRARY_FRAGMENT(startlux_prism, m) {
   m.def("w4a8_gemm(Tensor a, Tensor a_s, Tensor xs, Tensor wq, Tensor wsc, Tensor? wmn, Tensor wd, Tensor? wdm, "
         "Tensor(a!) out, Tensor n_rows, int kind, int epi, int cfg, int stages, int pdl=0) -> ()");
 }
-TORCH_LIBRARY_IMPL(flash_jev, CUDA, m) {
+TORCH_LIBRARY_IMPL(startlux_prism, CUDA, m) {
   m.impl("w4a8_gemm", &w4a8_gemm);
 }

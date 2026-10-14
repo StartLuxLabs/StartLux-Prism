@@ -16,8 +16,8 @@ import numpy as np
 import torch
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
-from flash_jev.engine.decode import Decoder, Row, Sampling  # noqa: E402
-from flash_jev.engine.model import Engine, Options  # noqa: E402
+from startlux_prism.engine.decode import Decoder, Row, Sampling  # noqa: E402
+from startlux_prism.engine.model import Engine, Options  # noqa: E402
 
 
 def main():
@@ -31,11 +31,11 @@ def main():
     ap.add_argument("--steps", type=int, default=64)
     ap.add_argument("--profile", action="store_true")
     ap.add_argument("--attn", default="split", help="decode attention kernels to time: split, tree or both (split,tree)")
-    ap.add_argument("--tp", type=int, default=1, help="tensor parallelism over --gpus (int8; flash_jev/tp.py)")
+    ap.add_argument("--tp", type=int, default=1, help="tensor parallelism over --gpus (int8; startlux_prism/tp.py)")
     ap.add_argument("--gpus", default="", help="with --tp: the GPUs (default: the visible ones)")
     a = ap.parse_args()
     if a.tp > 1:
-        from flash_jev import tp as TP
+        from startlux_prism import tp as TP
         TP.start(a.tp, a.gpus or None)
     batches = [int(x) for x in a.batches.split(",")]
     contexts = [int(x) for x in a.contexts.split(",")]

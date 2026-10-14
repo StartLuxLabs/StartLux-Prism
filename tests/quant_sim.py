@@ -32,10 +32,10 @@ import torch
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "bench"))
-from flash_jev import gguf_weights, jevfmt as J, reference as REF  # noqa: E402
-from flash_jev.calibration import CALIBRATION  # noqa: E402
-from flash_jev.decide import softmax_t  # noqa: E402
-from flash_jev.prompt import Tokenizer, rows_for  # noqa: E402
+from startlux_prism import gguf_weights, jevfmt as J, reference as REF  # noqa: E402
+from startlux_prism.calibration import CALIBRATION  # noqa: E402
+from startlux_prism.decide import softmax_t  # noqa: E402
+from startlux_prism.prompt import Tokenizer, rows_for  # noqa: E402
 
 E2M1 = torch.tensor([0.0, 0.5, 1.0, 1.5, 2.0, 3.0, 4.0, 6.0])
 

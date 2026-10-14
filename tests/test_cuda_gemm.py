@@ -17,9 +17,9 @@ import sys
 import torch
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
-from flash_jev.kernels import cuda_ext as CX  # noqa: E402
-from flash_jev.kernels import quant as KQ  # noqa: E402
-from flash_jev.kernels import w8a8 as KW  # noqa: E402
+from startlux_prism.kernels import cuda_ext as CX  # noqa: E402
+from startlux_prism.kernels import quant as KQ  # noqa: E402
+from startlux_prism.kernels import w8a8 as KW  # noqa: E402
 
 SHAPES = [(64, 12352, 2560, 64), (100, 2560, 9216, 77), (384, 18432, 2560, 361), (1, 8192, 2560, 1),
           (256, 2560, 4096, 256), (8, 128, 256, 3), (2048, 18432, 2560, 1999),
@@ -171,7 +171,7 @@ def main():
 
 
 def tp_shards(dev, quick):
-    """Tensor parallelism's output projections (flash_jev/tp.py): K split over 2 or 4 ranks, each rank's int32 sums
+    """Tensor parallelism's output projections (startlux_prism/tp.py): K split over 2 or 4 ranks, each rank's int32 sums
     from every int32-capable kernel (w8a8.gemm_i32's choices: the mma.sync tile kernel and the wgmma TMA pipeline with
     1, 2 or 4 K splits, the Triton kernel), added over the ranks and folded into the residual, must give the
     single-GPU residual add's bits (the Triton kernel's over the whole K)."""

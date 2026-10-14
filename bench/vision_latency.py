@@ -72,8 +72,8 @@ def http(a):
 def encoder(a):
     import numpy as np
     import torch
-    from flash_jev import images as I
-    from flash_jev.vision import VisionTower
+    from startlux_prism import images as I
+    from startlux_prism.vision import VisionTower
     tower = VisionTower(a.mmproj)
     rng = np.random.default_rng(a.seed)
     print(f"vision tower: {tower.bytes / 2**20:.0f} MiB of weights")

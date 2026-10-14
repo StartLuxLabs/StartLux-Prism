@@ -10,36 +10,36 @@
 #   3  8k-token requests from 8, 16 and 32 clients, 30 s per level                    -> results/long_conc/
 #   4  the longest request each engine answers without chunked prefill               -> results/maxctx/
 #      (scripts/max_context.sh)
-#   5  tests/test_stress.py on flash-jev (STRESS_PREC, int8): the checks behind the   -> results/stress/
+#   5  tests/test_stress.py on StartLux-Prism (STRESS_PREC, int8): the checks behind the   -> results/stress/
 #      numbers
 # Steps 2 and 3 run with llama.cpp -c 262144 --parallel 4 (65,536 tokens per slot), vLLM --max-model-len 65536, SGLang
 # --context-length 65536 and decider DECIDER_MAX_STATE_TOKENS=65536 (every engine counts all 50k tokens: the result
-# files record the input tokens each one reports); flash-jev sizes its largest batch from free GPU memory.
+# files record the input tokens each one reports); StartLux-Prism sizes its largest batch from free GPU memory.
 #
 #   setsid bash scripts/stress.sh > ~/jev/logs/stress.out 2>&1 < /dev/null &
 #   python bench/report.py --stress                # the tables (after copying results/ back)
 #
 # STEPS (default 0,1,2,3,5) picks steps; ENGINES (steps 0, 1) and LONG_ENGINES (2, 3) override the engine lists; the
 # decider compile + FP8 entries run unless NO_DECIDER_FP8=1.  Labels: <engine>-cmp2 for steps 0 and 1, <engine>-long
-# for 2 and 3, as in docs/benchmarks.md (TAG1 / TAG2 override).  FLASHJEV_LONG_FLAGS: flash-jev server flags for steps 2
+# for 2 and 3, as in docs/benchmarks.md (TAG1 / TAG2 override).  STARTLUX_PRISM_LONG_FLAGS: StartLux-Prism server flags for steps 2
 # and 3 (the 9B: --prefix-cache 0, whose memory then goes to a larger batch).
 #
 # DECIDER_EXTRA: settings added to every decider run (the 9B: DECIDER_GRAPH_TOKEN_BUDGET=16384).
 #
 # Another model: scripts/prepare_model.sh prints its environment (MODEL, HF, CAUSAL, ...); then for the 9B
 #   MODEL=... HF=... (as printed) SGLANG_MAMBA=96 DECIDER_EXTRA=DECIDER_GRAPH_TOKEN_BUDGET=16384 \
-#   ENGINES="flash-jev-int8 flash-jev-bf16 startlux sglang sglang-native vllm llamacpp decider jevk5" TAG1=-9b TAG2=-9b-long \
-#   FLASHJEV_LONG_FLAGS="--prefix-cache 0" bash scripts/stress.sh
+#   ENGINES="startlux-prism-int8 startlux-prism-bf16 startlux sglang sglang-native vllm llamacpp decider jevk5" TAG1=-9b TAG2=-9b-long \
+#   STARTLUX_PRISM_LONG_FLAGS="--prefix-cache 0" bash scripts/stress.sh
 # (decider-real and jevk5-real are their own 4B checkpoints.  Next to 17.9 GB of bf16 weights: SGLang's 160 recurrent-
 # state slots do not fit, 96 (19 running requests) do; decider's default CUDA-graph budget of 32,768 tokens runs out of
-# memory in its warm-up, 16,384 fits.  flash-jev's largest batch is 49,152 tokens with its prefix cache, 65,536
+# memory in its warm-up, 16,384 fits.  StartLux-Prism's largest batch is 49,152 tokens with its prefix cache, 65,536
 # without: the long steps run without it.)
 set -uo pipefail
 JEV=${JEV:-$HOME/jev}
 cd "$(dirname "$0")/.."
 STEPS=${STEPS:-0,1,2,3,5}
-ENGINES=${ENGINES:-flash-jev-int8 flash-jev-bf16 startlux sglang sglang-native vllm llamacpp decider decider-real jevk5 jevk5-real}
-LONG_ENGINES=${LONG_ENGINES:-flash-jev-int8 startlux sglang vllm llamacpp jevk5 decider}
+ENGINES=${ENGINES:-startlux-prism-int8 startlux-prism-bf16 startlux sglang sglang-native vllm llamacpp decider decider-real jevk5 jevk5-real}
+LONG_ENGINES=${LONG_ENGINES:-startlux-prism-int8 startlux sglang vllm llamacpp jevk5 decider}
 TAG1=${TAG1:--cmp2}; TAG2=${TAG2:--long}
 LONG_ENV="LLAMA_CTX=262144 LLAMA_PARALLEL=4 VLLM_MAXLEN=65536 SGLANG_CTX=65536"
 FP8="DECIDER_COMPILE=1 DECIDER_FP8=1"
@@ -49,7 +49,7 @@ mkdir -p results/jevbench_conc results/long results/long_conc results/stress
 
 label() {   # engine [decider tag] -> the label scripts/compare.sh gives it (without TAG)
   case "$1" in
-    flash-jev-int8|flash-jev-bf16|flash-jev-w4a8) echo "flash-jev-${1#flash-jev-}" ;;
+    startlux-prism-int8|startlux-prism-bf16|startlux-prism-w4a8) echo "startlux-prism-${1#startlux-prism-}" ;;
     startlux) echo startlux-torch-bf16 ;;
     sglang) echo sglang-0.5.21 ;;
     sglang-gguf) echo sglang-0.5.21-gguf ;;
@@ -141,8 +141,8 @@ for step in 2 3; do
         "DECIDER_ENV=DECIDER_MAX_STATE_TOKENS=65536 $DX"
       [ "${NO_DECIDER_FP8:-0}" = 1 ] || run "$bench" "$dir/$(label decider -compile-fp8)$TAG2.json" decider \
         TAG="$TAG2" $LONG_ENV "DECIDER_ENV=DECIDER_MAX_STATE_TOKENS=65536 $FP8 $DX" DECIDER_TAG=-compile-fp8
-    elif [ "${e#flash-jev-}" != "$e" ]; then
-      run "$bench" "$dir/$(label "$e")$TAG2.json" "$e" TAG="$TAG2" $LONG_ENV "FLASHJEV_FLAGS=${FLASHJEV_LONG_FLAGS:-}"
+    elif [ "${e#startlux-prism-}" != "$e" ]; then
+      run "$bench" "$dir/$(label "$e")$TAG2.json" "$e" TAG="$TAG2" $LONG_ENV "STARTLUX_PRISM_FLAGS=${STARTLUX_PRISM_LONG_FLAGS:-}"
     else
       run "$bench" "$dir/$(label "$e")$TAG2.json" "$e" TAG="$TAG2" $LONG_ENV
     fi
@@ -157,7 +157,7 @@ if [[ ",$STEPS," == *,5,* ]]; then
   prec=${STRESS_PREC:-int8}
   (source "$JEV/env.sh"
    python tests/test_stress.py --model-dir "${MODEL:-$JEV/models/StartLux-Decision-4B-Q8_0-GGUF}" \
-     --jevbench "$JEV/src/jevbench-7ce310c7" --start "$prec" --out "results/stress/flash-jev-$prec$TAG1.json" 2>&1 \
+     --jevbench "$JEV/src/jevbench-7ce310c7" --start "$prec" --out "results/stress/startlux-prism-$prec$TAG1.json" 2>&1 \
      | grep -v Warning)
 fi
 echo "stress comparison done ($(date +%H:%M:%S))"

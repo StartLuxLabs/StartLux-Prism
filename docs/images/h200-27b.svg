@@ -14,11 +14,11 @@
 <line x1="446.7" y1="114.0" x2="446.7" y2="378.0" stroke="#e1e0d9" stroke-width="1" shape-rendering="crispEdges"/>
 <text x="446.7" y="393.0" font-size="11" fill="#898781" text-anchor="middle" font-weight="400" style="font-variant-numeric: tabular-nums">150</text>
 <line x1="188.5" y1="114.0" x2="188.5" y2="378.0" stroke="#c3c2b7" stroke-width="1" shape-rendering="crispEdges"/>
-<path d="M188.5,124.0 H255.1 A4.0,4.0 0 0 1 259.1,128.0 V134.0 A4.0,4.0 0 0 1 255.1,138.0 H188.5 Z" fill="#2a78d6"><title>flash-jev int8: 41.0 ms</title></path>
+<path d="M188.5,124.0 H255.1 A4.0,4.0 0 0 1 259.1,128.0 V134.0 A4.0,4.0 0 0 1 255.1,138.0 H188.5 Z" fill="#2a78d6"><title>StartLux-Prism int8: 41.0 ms</title></path>
 <text x="265.1" y="135.3" font-size="12" fill="#0b0b0b" text-anchor="start" font-weight="600" style="font-variant-numeric: tabular-nums" stroke="#fcfcfb" stroke-width="3" stroke-linejoin="round" paint-order="stroke">41.0</text>
 <path d="M188.5,150.0 H299.5 A4.0,4.0 0 0 1 303.5,154.0 V160.0 A4.0,4.0 0 0 1 299.5,164.0 H188.5 Z" fill="#b4b2aa"><title>decider, compile + FP8: 66.8 ms</title></path>
 <text x="309.5" y="161.3" font-size="12" fill="#52514e" text-anchor="start" font-weight="400" style="font-variant-numeric: tabular-nums" stroke="#fcfcfb" stroke-width="3" stroke-linejoin="round" paint-order="stroke">66.8</text>
-<path d="M188.5,176.0 H301.9 A4.0,4.0 0 0 1 305.9,180.0 V186.0 A4.0,4.0 0 0 1 301.9,190.0 H188.5 Z" fill="#b4b2aa"><title>flash-jev bf16: 68.2 ms</title></path>
+<path d="M188.5,176.0 H301.9 A4.0,4.0 0 0 1 305.9,180.0 V186.0 A4.0,4.0 0 0 1 301.9,190.0 H188.5 Z" fill="#b4b2aa"><title>StartLux-Prism bf16: 68.2 ms</title></path>
 <text x="311.9" y="187.3" font-size="12" fill="#52514e" text-anchor="start" font-weight="400" style="font-variant-numeric: tabular-nums" stroke="#fcfcfb" stroke-width="3" stroke-linejoin="round" paint-order="stroke">68.2</text>
 <path d="M188.5,202.0 H339.6 A4.0,4.0 0 0 1 343.6,206.0 V212.0 A4.0,4.0 0 0 1 339.6,216.0 H188.5 Z" fill="#b4b2aa"><title>SGLang native: 90.1 ms</title></path>
 <text x="349.6" y="213.3" font-size="12" fill="#52514e" text-anchor="start" font-weight="400" style="font-variant-numeric: tabular-nums" stroke="#fcfcfb" stroke-width="3" stroke-linejoin="round" paint-order="stroke">90.1</text>
@@ -48,11 +48,11 @@
 <line x1="784.0" y1="114.0" x2="784.0" y2="378.0" stroke="#e1e0d9" stroke-width="1" shape-rendering="crispEdges"/>
 <text x="784.0" y="393.0" font-size="11" fill="#898781" text-anchor="middle" font-weight="400" style="font-variant-numeric: tabular-nums">40</text>
 <line x1="518.3" y1="114.0" x2="518.3" y2="378.0" stroke="#c3c2b7" stroke-width="1" shape-rendering="crispEdges"/>
-<path d="M518.3,124.0 H717.5 A4.0,4.0 0 0 1 721.5,128.0 V134.0 A4.0,4.0 0 0 1 717.5,138.0 H518.3 Z" fill="#2a78d6"><title>flash-jev int8: 30.6 requests/s</title></path>
+<path d="M518.3,124.0 H717.5 A4.0,4.0 0 0 1 721.5,128.0 V134.0 A4.0,4.0 0 0 1 717.5,138.0 H518.3 Z" fill="#2a78d6"><title>StartLux-Prism int8: 30.6 requests/s</title></path>
 <text x="727.5" y="135.3" font-size="12" fill="#0b0b0b" text-anchor="start" font-weight="600" style="font-variant-numeric: tabular-nums" stroke="#fcfcfb" stroke-width="3" stroke-linejoin="round" paint-order="stroke">30.6</text>
 <path d="M518.3,150.0 H616.5 A4.0,4.0 0 0 1 620.5,154.0 V160.0 A4.0,4.0 0 0 1 616.5,164.0 H518.3 Z" fill="#b4b2aa"><title>decider, compile + FP8: 15.4 requests/s</title></path>
 <text x="626.5" y="161.3" font-size="12" fill="#52514e" text-anchor="start" font-weight="400" style="font-variant-numeric: tabular-nums" stroke="#fcfcfb" stroke-width="3" stroke-linejoin="round" paint-order="stroke">15.4</text>
-<path d="M518.3,176.0 H625.2 A4.0,4.0 0 0 1 629.2,180.0 V186.0 A4.0,4.0 0 0 1 625.2,190.0 H518.3 Z" fill="#b4b2aa"><title>flash-jev bf16: 16.7 requests/s</title></path>
+<path d="M518.3,176.0 H625.2 A4.0,4.0 0 0 1 629.2,180.0 V186.0 A4.0,4.0 0 0 1 625.2,190.0 H518.3 Z" fill="#b4b2aa"><title>StartLux-Prism bf16: 16.7 requests/s</title></path>
 <text x="635.2" y="187.3" font-size="12" fill="#52514e" text-anchor="start" font-weight="400" style="font-variant-numeric: tabular-nums" stroke="#fcfcfb" stroke-width="3" stroke-linejoin="round" paint-order="stroke">16.7</text>
 <path d="M518.3,202.0 H639.1 A4.0,4.0 0 0 1 643.1,206.0 V212.0 A4.0,4.0 0 0 1 639.1,216.0 H518.3 Z" fill="#b4b2aa"><title>SGLang native: 18.8 requests/s</title></path>
 <text x="649.1" y="213.3" font-size="12" fill="#52514e" text-anchor="start" font-weight="400" style="font-variant-numeric: tabular-nums" stroke="#fcfcfb" stroke-width="3" stroke-linejoin="round" paint-order="stroke">18.8</text>
@@ -68,9 +68,9 @@
 <text x="626.5" y="343.3" font-size="12" fill="#52514e" text-anchor="start" font-weight="400" style="font-variant-numeric: tabular-nums" stroke="#fcfcfb" stroke-width="3" stroke-linejoin="round" paint-order="stroke">15.4</text>
 <path d="M518.3,358.0 H523.6 A4.0,4.0 0 0 1 527.6,362.0 V368.0 A4.0,4.0 0 0 1 523.6,372.0 H518.3 Z" fill="#b4b2aa"><title>llama.cpp (Q8_0): 1.4 requests/s</title></path>
 <text x="533.6" y="369.3" font-size="12" fill="#52514e" text-anchor="start" font-weight="400" style="font-variant-numeric: tabular-nums" stroke="#fcfcfb" stroke-width="3" stroke-linejoin="round" paint-order="stroke">1.4</text>
-<text x="176.5" y="135.3" font-size="12.5" fill="#0b0b0b" text-anchor="end" font-weight="600">flash-jev int8</text>
+<text x="176.5" y="135.3" font-size="12.5" fill="#0b0b0b" text-anchor="end" font-weight="600">StartLux-Prism int8</text>
 <text x="176.5" y="161.3" font-size="12.5" fill="#52514e" text-anchor="end" font-weight="400">decider, compile + FP8</text>
-<text x="176.5" y="187.3" font-size="12.5" fill="#52514e" text-anchor="end" font-weight="400">flash-jev bf16</text>
+<text x="176.5" y="187.3" font-size="12.5" fill="#52514e" text-anchor="end" font-weight="400">StartLux-Prism bf16</text>
 <text x="176.5" y="213.3" font-size="12.5" fill="#52514e" text-anchor="end" font-weight="400">SGLang native</text>
 <text x="176.5" y="239.3" font-size="12.5" fill="#52514e" text-anchor="end" font-weight="400">SGLang via adapter</text>
 <text x="176.5" y="265.3" font-size="12.5" fill="#52514e" text-anchor="end" font-weight="400">StartLux-Decision server</text>

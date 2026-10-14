@@ -1,9 +1,9 @@
 """Benchmark any /v1/systemone server: latency at concurrency 1 per request suite, a closed-loop concurrency sweep for
 throughput, and GPU telemetry sampled from NVML during every phase.
 
-    python bench/run_http.py --url http://127.0.0.1:8090/v1/systemone --label flash-jev-int8 \\
+    python bench/run_http.py --url http://127.0.0.1:8090/v1/systemone --label startlux-prism-int8 \\
         --suites startlux3,startlux1,readme3,yesno,longpage2,wide33,review1 --n 200 \\
-        --sweep 1,2,4,8,16,32,64 --sweep-seconds 20 --out results/flash-jev-int8.json
+        --sweep 1,2,4,8,16,32,64 --sweep-seconds 20 --out results/startlux-prism-int8.json
 
 Latency: each suite gets --warmup untimed requests, then --n timed ones, one at a time on a persistent connection.
 Throughput: for each concurrency c, c clients send the sweep mix (--sweep-mix) back to back for --sweep-seconds.

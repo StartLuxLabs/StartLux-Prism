@@ -1,8 +1,8 @@
 """JevBench public (231 items) against any /v1/systemone server: accuracy with JevBench's own scorer, per-item latency,
 and the label probabilities of every item (for decision agreement between engines).
 
-    python bench/run_jevbench.py --url http://127.0.0.1:8090/v1/systemone --label flash-jev-bf16 \\
-        --jevbench ~/jev/src/jevbench-7ce310c7 --out results/jevbench/flash-jev-bf16.json
+    python bench/run_jevbench.py --url http://127.0.0.1:8090/v1/systemone --label startlux-prism-bf16 \\
+        --jevbench ~/jev/src/jevbench-7ce310c7 --out results/jevbench/startlux-prism-bf16.json
     python bench/run_jevbench.py --compare results/jevbench/a.json results/jevbench/b.json
     python bench/run_jevbench.py --url ... --label ... --conc 8,16,32 [--passes 3] --out results/jevbench_conc/x.json
 

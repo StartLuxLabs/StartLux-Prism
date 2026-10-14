@@ -34,7 +34,7 @@ def gguf_dims(path):
     import os
     import sys
     sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
-    from flash_jev.gguf import GGUFFile
+    from startlux_prism.gguf import GGUFFile
     m = GGUFFile(path).meta
     g = lambda k: int(m[f"qwen35.{k}"])                     # noqa: E731
     return dict(hidden=g("embedding_length"), ffn=g("feed_forward_length"), k_heads=g("ssm.group_count"),

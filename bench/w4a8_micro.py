@@ -14,10 +14,10 @@ import sys
 import torch
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
-from flash_jev import gguf_weights as GW  # noqa: E402
-from flash_jev.gguf import GGUFFile  # noqa: E402
-from flash_jev.kernels import w4a8 as W  # noqa: E402
-from flash_jev.kernels import w8a8 as KW  # noqa: E402
+from startlux_prism import gguf_weights as GW  # noqa: E402
+from startlux_prism.gguf import GGUFFile  # noqa: E402
+from startlux_prism.kernels import w4a8 as W  # noqa: E402
+from startlux_prism.kernels import w8a8 as KW  # noqa: E402
 
 TENSORS = ("blk.0.ffn_gate.weight", "blk.0.ffn_down.weight", "blk.4.ffn_down.weight", "blk.0.ssm_out.weight",
            "blk.0.attn_qkv.weight", "blk.4.attn_qkv.weight")

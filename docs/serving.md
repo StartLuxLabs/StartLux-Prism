@@ -1,10 +1,10 @@
-# Serving flash-jev
+# Serving StartLux-Prism
 
-Every request field, server flag and model folder flash-jev serves. The short version is in the [README](../README.md).
+Every request field, server flag and model folder StartLux-Prism serves. The short version is in the [README](../README.md).
 
 ## StartLux-Decision v1.1 folders
 
-The server reads a model folder's kind as v1.1's own package does (`flash_jev/modelcfg.py`) and answers as that
+The server reads a model folder's kind as v1.1's own package does (`startlux_prism/modelcfg.py`) and answers as that
 release does:
 
 | folder | how it answers | run here |
@@ -40,9 +40,9 @@ dequantized, on cuBLAS: the reference) or `w4a8` (a Q4_K_M file's own 4-bit weig
 **Several GPUs** (the same flags):
 
 ```bash
-python -m flash_jev.server --tp 2 --gpus 0,1 --gguf $G --model-dir $M --port 8092    # tensor parallel: faster requests
-python -m flash_jev.dp --gpus 0,1,2,3 --gguf $G --model-dir $M --port 8092           # data parallel: most throughput
-python -m flash_jev.dp --gpus 0,1,2,3 --tp 2 --gguf $G --model-dir $M --port 8092    # both: two 2-GPU servers
+python -m startlux_prism.server --tp 2 --gpus 0,1 --gguf $G --model-dir $M --port 8092    # tensor parallel: faster requests
+python -m startlux_prism.dp --gpus 0,1,2,3 --gguf $G --model-dir $M --port 8092           # data parallel: most throughput
+python -m startlux_prism.dp --gpus 0,1,2,3 --tp 2 --gguf $G --model-dir $M --port 8092    # both: two 2-GPU servers
 ```
 
 Requests go to port 8092 as before, and every answer is the single GPU's, bit for bit. Tensor parallelism runs int8,
@@ -66,8 +66,8 @@ Measured:
 - **RTX 5090:** the 4B and 9B (Q8_0: int8 and bf16; Q4_K_M: W4A8) and the 27B's Q4_K_M (W4A8).
 - **H200:** the v1 27B (Q8_0: int8 and bf16; Q4_K_M: W4A8 and int8), and the v1.1 27B AutoThink (Q8_0: int8 and bf16;
   int8 on 2 and 4 GPUs).
-- **Several GPUs:** data parallelism with any precision (`flash_jev.dp`); tensor parallelism with int8, 2 or 4 GPUs on
-  the 27B (`--tp`); both together (`flash_jev.dp --tp 2`).
+- **Several GPUs:** data parallelism with any precision (`startlux_prism.dp`); tensor parallelism with int8, 2 or 4 GPUs on
+  the 27B (`--tp`); both together (`startlux_prism.dp --tp 2`).
 
 To add another model of the family, run `scripts/prepare_model.sh` (its folders for every engine), then
 `scripts/new_model.sh` (dispatch-table entries for its projection shapes, int8 calibration, correctness tests).
@@ -78,7 +78,7 @@ Both paths run the same Q8_0 weights, dequantized to bf16 or requantized to int8
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="images/v11-precision-dark.svg">
-  <img src="images/v11-precision.svg" width="840" alt="flash-jev int8 against bf16 on StartLux-Decision v1.1 27B, one H200. Prefill tokens per second: one prompt of 1,024 tokens 18,865 against 11,571; 8,192 tokens 19,219 against 11,424; 32,768 tokens 15,810 against 10,155; passes of 8,192 tokens of short prompts 20,855 against 11,958. Decode ms per step: 1 sequence 10.47 against 14.89; 8 sequences 11.06 against 15.90; 64 sequences 16.70 against 21.74.">
+  <img src="images/v11-precision.svg" width="840" alt="StartLux-Prism int8 against bf16 on StartLux-Decision v1.1 27B, one H200. Prefill tokens per second: one prompt of 1,024 tokens 18,865 against 11,571; 8,192 tokens 19,219 against 11,424; 32,768 tokens 15,810 against 10,155; passes of 8,192 tokens of short prompts 20,855 against 11,958. Decode ms per step: 1 sequence 10.47 against 14.89; 8 sequences 11.06 against 15.90; 64 sequences 16.70 against 21.74.">
 </picture>
 
 - **Speed:** int8 is 1.6-1.75x faster in prefill and 1.3-1.44x in decode.
@@ -112,7 +112,7 @@ Server flags:
 
 | flags | default | |
 |---|---|---|
-| `--precision`, `--calib` | `auto`, `~/.cache/flash-jev/calib/<file>-<size>-v1.pt` | the precision (above) and the int8 activation ranges (measured on the first start, before a `--tp` group splits the model too, and kept in this file; `$FLASHJEV_CACHE` moves the cache) |
+| `--precision`, `--calib` | `auto`, `~/.cache/startlux-prism/calib/<file>-<size>-v1.pt` | the precision (above) and the int8 activation ranges (measured on the first start, before a `--tp` group splits the model too, and kept in this file; `$STARTLUX_PRISM_CACHE` moves the cache) |
 | `--max-tokens`, `--mem-fraction` | 0, 0.9 | the largest batch; 0 sizes it from free GPU memory (65,536 tokens for the 4B on the RTX 5090, 131,072 for the 27B on the H200). Longer requests get HTTP 422 |
 | `--budget` | 8,192 | tokens per batched pass when requests queue; a longer request runs alone |
 | `--prefix-cache`, `--prefix-cache-tokens`, `--prefix-cache-min` | 64, 65,536, 64 | cached evidence states (0: off), their KV rows, the shortest evidence cached |
@@ -123,7 +123,7 @@ Server flags:
 | `--attn-qk8` | off | opt-in: q k^T on int8 tensor cores, 15% off at 50,000 tokens at a small probability error |
 | `--tp`, `--gpus` | 1, the visible GPUs | tensor parallelism: one model over this many GPUs (int8; 2 or 4 on the 27B) |
 
-**Several GPUs, data parallelism** (`python -m flash_jev.dp --gpus ...`, the server's flags pass through):
+**Several GPUs, data parallelism** (`python -m startlux_prism.dp --gpus ...`, the server's flags pass through):
 - **Workers:** one whole server per GPU, each with its own prefix cache and thoughts; with `--tp N`, one
   tensor-parallel server per N GPUs.
 - **Routing:** the router forwards every request whole to the worker that last answered the same evidence, unless
@@ -136,26 +136,26 @@ Server flags:
 - **First start:** without the activation ranges, the server measures them first on the group's first GPU (a process
   of its own that loads the bf16 weights: 54 GB for the 27B), then starts the group.
 - **Processes:** the server's process is rank 0 on the first GPU and starts one process per further GPU
-  (`python -m flash_jev.tp`, not run by hand), which replays its passes. If one of them dies, the server exits.
+  (`python -m startlux_prism.tp`, not run by hand), which replays its passes. If one of them dies, the server exits.
 - **Memory:** each GPU holds 1/N of the projections, of the KV rows and of the recurrent states (72 MiB per thought at
   2 GPUs), so the buffers above are sized per GPU (the smallest GPU's choice; rank 0 also holds the vision tower).
-- **Tuning:** `FLASHJEV_TP_FAST_ROWS` (16,384) and `FLASHJEV_TP_PULL_ROWS` (128 on 2 GPUs, 4 on 4) set the longest
+- **Tuning:** `STARTLUX_PRISM_TP_FAST_ROWS` (16,384) and `STARTLUX_PRISM_TP_PULL_ROWS` (128 on 2 GPUs, 4 on 4) set the longest
   passes whose maxima and sums stay inside the kernels.
 
 ## Several GPUs: which to pick
 
 Two ways to use more GPUs, both giving the single GPU's answers, bit for bit (27B v1.1 on H200s, int8, JevBench):
-- **Data parallelism** (`python -m flash_jev.dp`): one whole server per GPU behind a router. The most throughput; a
+- **Data parallelism** (`python -m startlux_prism.dp`): one whole server per GPU behind a router. The most throughput; a
   request takes as long as on one GPU.
 - **Tensor parallelism** (`--tp 2` or `4`): one model split over the GPUs. Less time per request, mostly for long
   prompts and thoughts.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="images/several-gpus-dark.svg">
-  <img src="images/several-gpus.svg" width="840" alt="Several GPUs, StartLux-Decision v1.1 27B on H200s, flash-jev int8, JevBench. Read-outs from many clients, requests per second: one GPU 30.9; 2 GPUs with TP 2, 43.3 (1.40x); 4 GPUs with TP 4, 54.0 (1.75x); 4 GPUs as DP 2 x TP 2, 86.0 (2.78x); 4 GPUs as DP 4, 121.1 (3.92x). One request at a time with thoughts, mean ms per item: one GPU 1,209; TP 2, 902; TP 4, 768; DP 2 x TP 2, 902; DP 4 as one GPU plus about 1 ms for the router.">
+  <img src="images/several-gpus.svg" width="840" alt="Several GPUs, StartLux-Decision v1.1 27B on H200s, StartLux-Prism int8, JevBench. Read-outs from many clients, requests per second: one GPU 30.9; 2 GPUs with TP 2, 43.3 (1.40x); 4 GPUs with TP 4, 54.0 (1.75x); 4 GPUs as DP 2 x TP 2, 86.0 (2.78x); 4 GPUs as DP 4, 121.1 (3.92x). One request at a time with thoughts, mean ms per item: one GPU 1,209; TP 2, 902; TP 4, 768; DP 2 x TP 2, 902; DP 4 as one GPU plus about 1 ms for the router.">
 </picture>
 
-They combine (`flash_jev.dp --tp 2`: tensor-parallel servers behind the router). Four H200s each way:
+They combine (`startlux_prism.dp --tp 2`: tensor-parallel servers behind the router). Four H200s each way:
 
 | four H200s as | read-outs, requests/s | with thoughts, requests/s | one at a time, mean ms: read-out / with thoughts |
 |---|---|---|---|
@@ -167,7 +167,7 @@ Read-outs: the most over 32 to 256 clients (one 4-GPU server: from 64). With tho
 clients, long enough that the longest thought (about 4,000 tokens) is a small part of the run; not run on one 4-GPU
 server.
 
-Eight H200s against the official engine, each with its own data parallelism (flash-jev int8; the official engine's
+Eight H200s against the official engine, each with its own data parallelism (StartLux-Prism int8; the official engine's
 BF16 release, one vLLM server per GPU): read-outs 237.8 requests/s against 137.5 (1.73x), with thoughts 41.0 against
 29.9 (1.37x; the same 3,696 requests from 512 clients). On one GPU the official FP8 setting is 1.44x its BF16; it was
 not run on eight.

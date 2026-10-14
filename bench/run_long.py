@@ -2,7 +2,7 @@
 log), sized in StartLux's prompt format to about --lengths tokens (8k and 50k by default).  Latency at one request at
 a time, and throughput with --conc clients for the lengths listed in --conc-lengths.
 
-    python bench/run_long.py --url http://127.0.0.1:8092/v1/systemone --label flash-jev-int8 \\
+    python bench/run_long.py --url http://127.0.0.1:8092/v1/systemone --label startlux-prism-int8 \\
         --model-dir ~/jev/models/StartLux-Decision-4B-Q8_0-GGUF [--lengths 8000,50000] [--out results/long/x.json]
 
 Throughput at several concurrency levels, without the latency runs (--n 0: a short warmup instead):
@@ -55,8 +55,8 @@ def log_lines(n, seed=7):
 
 def sized_state(tok, target):
     """{'log': ...} whose prompt (StartLux's format, with the question) is about `target` tokens."""
-    from flash_jev import jevfmt as J
-    from flash_jev.prompt import render_text
+    from startlux_prism import jevfmt as J
+    from startlux_prism.prompt import render_text
 
     def tokens(n):
         st = {"service": "shop backend", "log": "\n".join(log_lines(n))}
@@ -130,7 +130,7 @@ def main():
     ap.add_argument("--no-gpu", action="store_true")
     ap.add_argument("--out")
     a = ap.parse_args()
-    from flash_jev.prompt import Tokenizer
+    from startlux_prism.prompt import Tokenizer
     tok = Tokenizer(os.path.expanduser(a.model_dir))
     gpu = None if a.no_gpu else GPUSampler()
     res = {"label": a.label, "url": a.url, "time": time.strftime("%Y-%m-%dT%H:%M:%S%z"), "host": platform.node(),

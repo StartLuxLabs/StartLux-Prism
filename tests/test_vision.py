@@ -25,11 +25,11 @@ import sys
 import numpy as np
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
-from flash_jev import decide as D  # noqa: E402
-from flash_jev import images as I  # noqa: E402
-from flash_jev import jevfmt as J  # noqa: E402
-from flash_jev.engine import batch as B  # noqa: E402
-from flash_jev.engine.prefix_cache import PrefixCache  # noqa: E402
+from startlux_prism import decide as D  # noqa: E402
+from startlux_prism import images as I  # noqa: E402
+from startlux_prism import jevfmt as J  # noqa: E402
+from startlux_prism.engine import batch as B  # noqa: E402
+from startlux_prism.engine.prefix_cache import PrefixCache  # noqa: E402
 
 QUESTIONS = {
     "urgent": {"type": "noul", "instructions": "Does this delivery need a follow-up today?"},
@@ -114,7 +114,7 @@ def check_requests():
 
 def check_pixels(model_dir):
     import torch
-    from flash_jev.vision import Config, VisionTower
+    from startlux_prism.vision import Config, VisionTower
     try:
         from transformers.models.qwen2_vl.image_processing_pil_qwen2_vl import Qwen2VLImageProcessorPil
     except ImportError:
@@ -164,7 +164,7 @@ def walk_positions(ids, pad, images):
 
 
 def check_prompts(model_dir, startlux):
-    from flash_jev.prompt import Tokenizer
+    from startlux_prism.prompt import Tokenizer
     tok = Tokenizer(model_dir)
     settings = I.Settings()
     pad = settings.pad_id
@@ -309,7 +309,7 @@ class FakeBackend:
 
 
 def check_decider(model_dir):
-    from flash_jev.prompt import Tokenizer
+    from startlux_prism.prompt import Tokenizer
     tok = Tokenizer(model_dir)
     settings = I.Settings(max_images=2)
     be = FakeBackend()

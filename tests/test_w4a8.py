@@ -17,10 +17,10 @@ import sys
 import torch
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
-from flash_jev import gguf_weights as GW  # noqa: E402
-from flash_jev.gguf import GGML_Q4_K, GGML_Q6_K, GGUFFile  # noqa: E402
-from flash_jev.kernels import quant as KQ  # noqa: E402
-from flash_jev.kernels import w4a8 as W  # noqa: E402
+from startlux_prism import gguf_weights as GW  # noqa: E402
+from startlux_prism.gguf import GGML_Q4_K, GGML_Q6_K, GGUFFile  # noqa: E402
+from startlux_prism.kernels import quant as KQ  # noqa: E402
+from startlux_prism.kernels import w4a8 as W  # noqa: E402
 
 
 def activations(m, k, seed):

@@ -1,6 +1,6 @@
 # Vendored from StartLux-Decision v1.1's package (startlux_decide/loops.py, StartLuxLabs/Startlux-decide-inference
 # commit 78e39fc), Apache-2.0; see LICENSES/StartLux-Decision-Apache-2.0.txt.  Unchanged: where a thought is cut is part
-# of what the read-out after it sees, so flash-jev must cut exactly where the reference does (tests/test_think.py
+# of what the read-out after it sees, so StartLux-Prism must cut exactly where the reference does (tests/test_think.py
 # checks both on many synthetic texts).
 """Loop detector for thoughts (the release uses this rule set, "version 3").
 

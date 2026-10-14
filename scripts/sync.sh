@@ -5,4 +5,4 @@ set -euo pipefail
 HOST=${HOST:?set HOST=user@gpu-server}
 cd "$(dirname "$0")/.."
 rsync -a --delete --exclude .git --exclude __pycache__ --exclude 'results/' --exclude '*.so' --exclude build \
-  ./ "$HOST:jev/flash-jev/"
+  ./ "$HOST:jev/startlux-prism/"

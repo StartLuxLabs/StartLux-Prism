@@ -1,18 +1,18 @@
-"""flash-jev with images against transformers' Qwen3.5 forward on the same weights: the reference engine of
+"""StartLux-Prism with images against transformers' Qwen3.5 forward on the same weights: the reference engine of
 StartLux-Decision v1.1's transformers backend (startlux_decide/backends/transformers.py), which reads a prompt with
 images through the model's image processor, its vision tower and get_rope_index's positions.
 
-    # the vision tower alone: flash-jev's (vision.py) against transformers' Qwen3_5VisionModel, the mmproj's weights
+    # the vision tower alone: StartLux-Prism's (vision.py) against transformers' Qwen3_5VisionModel, the mmproj's weights
     python tests/vision_reference.py encoder --model-dir V11_DIR --mmproj MMPROJ.gguf
     # the reference: a bf16 checkpoint of the GGUF and the mmproj (tools/gguf_to_hf.py --mmproj), one row per forward
     python tests/vision_reference.py transformers --hf HF_DIR --model-dir V11_DIR --out ref.pt
-    # flash-jev (the vision tower: --mmproj, default the mmproj-*.gguf beside the GGUF)
-    python tests/vision_reference.py flash-jev --gguf X.gguf --model-dir V11_DIR --precision int8 --calib C --out f.pt
+    # StartLux-Prism (the vision tower: --mmproj, default the mmproj-*.gguf beside the GGUF)
+    python tests/vision_reference.py prism --gguf X.gguf --model-dir V11_DIR --precision int8 --calib C --out f.pt
     python tests/vision_reference.py compare ref.pt f.pt [g.pt ...]
 
 encoder: images of several sizes and aspect ratios, each through both towers (transformers' input from its own image
 processor, the Pillow backend): the features must be the same bits.
-transformers / flash-jev: both sides answer the same requests through flash-jev's Decider (decide.py, checked against
+transformers / StartLux-Prism: both sides answer the same requests through StartLux-Prism's Decider (decide.py, checked against
 startlux_decide's read-out by tests/test_v11.py): bench/vision_suite.py's image requests (1 to 8 images, marks and none,
 32 x 32 to 2,400 x 1,600 pixels) and, as the yardstick for how close two implementations of the model get, the text-only
 requests of bench/suites.py.  A run records every answer and the letter logits of every prompt row.  compare reports,
@@ -30,9 +30,9 @@ import time
 import torch
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
-from flash_jev import images as I  # noqa: E402
-from flash_jev.decide import Decider  # noqa: E402
-from flash_jev.prompt import Tokenizer  # noqa: E402
+from startlux_prism import images as I  # noqa: E402
+from startlux_prism.decide import Decider  # noqa: E402
+from startlux_prism.prompt import Tokenizer  # noqa: E402
 
 
 def _bench(name):
@@ -111,8 +111,8 @@ def run(a):
     if a.engine == "transformers":
         backend = Transformers(a.hf, a.model_dir, tok.letters)
     else:
-        from flash_jev.engine.model import Engine, Options
-        from flash_jev.vision import find_mmproj
+        from startlux_prism.engine.model import Engine, Options
+        from startlux_prism.vision import find_mmproj
         mmproj, why = find_mmproj(a.mmproj, a.gguf, a.model_dir)
         if not mmproj:
             sys.exit(why)
@@ -192,7 +192,7 @@ def encoder(a):
     from transformers.models.qwen2_vl.image_processing_pil_qwen2_vl import Qwen2VLImageProcessorPil
     from transformers.models.qwen3_5.modeling_qwen3_5 import Qwen3_5VisionModel
 
-    from flash_jev.vision import VisionTower, find_mmproj, load
+    from startlux_prism.vision import VisionTower, find_mmproj, load
     mmproj = find_mmproj(a.mmproj, a.gguf or os.path.join(a.model_dir, "x.gguf"), a.model_dir)[0]
     dev = torch.device("cuda")
     tower = VisionTower(mmproj, dev)
@@ -208,7 +208,7 @@ def encoder(a):
     sizes =((256, 256), (640, 480), (333, 777), (1024, 1024), (1500, 900), (2048, 64), (64, 2048), (40, 30),
              (2400, 1600))
     from torch.nn.attention import sdpa_kernel
-    from flash_jev.vision import ATTENTION
+    from startlux_prism.vision import ATTENTION
     bad = 0
     for w, h in sizes:
         value = vision_suite.shapes("red", "blue", w, h)
@@ -219,7 +219,7 @@ def encoder(a):
         with torch.no_grad():
             r_default = ref(pv, grid_thw=grid).pooler_output                    # transformers as it runs (cuDNN's)
             with sdpa_kernel(ATTENTION):
-                r = ref(pv, grid_thw=grid).pooler_output                        # with flash-jev's attention kernel
+                r = ref(pv, grid_thw=grid).pooler_output                        # with StartLux-Prism's attention kernel
             mine = [tower.encode(image) for _ in range(3)]          # eager, then (small sizes) recorded and replayed
         same = all(torch.equal(m, r) for m in mine)
         bad += not same
@@ -234,7 +234,7 @@ def encoder(a):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("engine", choices=("encoder", "transformers", "flash-jev", "compare"))
+    ap.add_argument("engine", choices=("encoder", "transformers", "prism", "compare"))
     ap.add_argument("runs", nargs="*", help="compare: the reference run first")
     ap.add_argument("--hf", help="transformers: the bf16 checkpoint (tools/gguf_to_hf.py --mmproj)")
     ap.add_argument("--gguf")
@@ -244,7 +244,7 @@ def main():
     ap.add_argument("--calib", default="")
     ap.add_argument("--max-tokens", type=int, default=16384)
     ap.add_argument("--prefix-cache", type=int, default=64)
-    ap.add_argument("--warm", action="store_true", help="flash-jev: record every graph first (steady-state times)")
+    ap.add_argument("--warm", action="store_true", help="StartLux-Prism: record every graph first (steady-state times)")
     ap.add_argument("--out")
     a = ap.parse_args()
     if a.engine == "compare":

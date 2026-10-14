@@ -16,7 +16,7 @@
 <line x1="446.7" y1="115.0" x2="446.7" y2="327.0" stroke="#e1e0d9" stroke-width="1" shape-rendering="crispEdges"/>
 <text x="446.7" y="342.0" font-size="11" fill="#898781" text-anchor="middle" font-weight="400" style="font-variant-numeric: tabular-nums">800</text>
 <line x1="188.5" y1="115.0" x2="188.5" y2="327.0" stroke="#c3c2b7" stroke-width="1" shape-rendering="crispEdges"/>
-<path d="M188.5,125.0 H237.0 A4.0,4.0 0 0 1 241.0,129.0 V135.0 A4.0,4.0 0 0 1 237.0,139.0 H188.5 Z" fill="#2a78d6"><title>flash-jev int8: 162.5 ms</title></path>
+<path d="M188.5,125.0 H237.0 A4.0,4.0 0 0 1 241.0,129.0 V135.0 A4.0,4.0 0 0 1 237.0,139.0 H188.5 Z" fill="#2a78d6"><title>StartLux-Prism int8: 162.5 ms</title></path>
 <text x="247.0" y="136.3" font-size="12" fill="#0b0b0b" text-anchor="start" font-weight="600" style="font-variant-numeric: tabular-nums" stroke="#fcfcfb" stroke-width="3" stroke-linejoin="round" paint-order="stroke">162.5</text>
 <path d="M188.5,151.0 H290.6 A4.0,4.0 0 0 1 294.6,155.0 V161.0 A4.0,4.0 0 0 1 290.6,165.0 H188.5 Z" fill="#b4b2aa"><title>decider, compile + FP8: 328.7 ms</title></path>
 <text x="300.6" y="162.3" font-size="12" fill="#52514e" text-anchor="start" font-weight="400" style="font-variant-numeric: tabular-nums" stroke="#fcfcfb" stroke-width="3" stroke-linejoin="round" paint-order="stroke">328.7</text>
@@ -41,7 +41,7 @@
 <line x1="776.4" y1="115.0" x2="776.4" y2="327.0" stroke="#e1e0d9" stroke-width="1" shape-rendering="crispEdges"/>
 <text x="776.4" y="342.0" font-size="11" fill="#898781" text-anchor="middle" font-weight="400" style="font-variant-numeric: tabular-nums">6,000</text>
 <line x1="518.3" y1="115.0" x2="518.3" y2="327.0" stroke="#c3c2b7" stroke-width="1" shape-rendering="crispEdges"/>
-<path d="M518.3,125.0 H598.6 A4.0,4.0 0 0 1 602.6,129.0 V135.0 A4.0,4.0 0 0 1 598.6,139.0 H518.3 Z" fill="#2a78d6"><title>flash-jev int8: 1,960 ms</title></path>
+<path d="M518.3,125.0 H598.6 A4.0,4.0 0 0 1 602.6,129.0 V135.0 A4.0,4.0 0 0 1 598.6,139.0 H518.3 Z" fill="#2a78d6"><title>StartLux-Prism int8: 1,960 ms</title></path>
 <text x="608.6" y="136.3" font-size="12" fill="#0b0b0b" text-anchor="start" font-weight="600" style="font-variant-numeric: tabular-nums" stroke="#fcfcfb" stroke-width="3" stroke-linejoin="round" paint-order="stroke">1,960</text>
 <path d="M518.3,151.0 H673.8 A4.0,4.0 0 0 1 677.8,155.0 V161.0 A4.0,4.0 0 0 1 673.8,165.0 H518.3 Z" fill="#b4b2aa"><title>decider, compile + FP8: 3,708 ms</title></path>
 <text x="683.8" y="162.3" font-size="12" fill="#52514e" text-anchor="start" font-weight="400" style="font-variant-numeric: tabular-nums" stroke="#fcfcfb" stroke-width="3" stroke-linejoin="round" paint-order="stroke">3,708</text>
@@ -56,7 +56,7 @@
 <text x="665.0" y="292.3" font-size="12" fill="#52514e" text-anchor="start" font-weight="400" style="font-variant-numeric: tabular-nums" stroke="#fcfcfb" stroke-width="3" stroke-linejoin="round" paint-order="stroke">3,272</text>
 <path d="M518.3,307.0 H743.4 A4.0,4.0 0 0 1 747.4,311.0 V317.0 A4.0,4.0 0 0 1 743.4,321.0 H518.3 Z" fill="#b4b2aa"><title>llama.cpp (Q8_0): 5,326 ms</title></path>
 <text x="753.4" y="318.3" font-size="12" fill="#52514e" text-anchor="start" font-weight="400" style="font-variant-numeric: tabular-nums" stroke="#fcfcfb" stroke-width="3" stroke-linejoin="round" paint-order="stroke">5,326</text>
-<text x="176.5" y="136.3" font-size="12.5" fill="#0b0b0b" text-anchor="end" font-weight="600">flash-jev int8</text>
+<text x="176.5" y="136.3" font-size="12.5" fill="#0b0b0b" text-anchor="end" font-weight="600">StartLux-Prism int8</text>
 <text x="176.5" y="162.3" font-size="12.5" fill="#52514e" text-anchor="end" font-weight="400">decider, compile + FP8</text>
 <text x="176.5" y="188.3" font-size="12.5" fill="#52514e" text-anchor="end" font-weight="400">SGLang via adapter</text>
 <text x="176.5" y="214.3" font-size="12.5" fill="#52514e" text-anchor="end" font-weight="400">JevK5</text>

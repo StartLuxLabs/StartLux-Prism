@@ -25,10 +25,10 @@ import torch
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "bench"))
-from flash_jev import jevfmt as J  # noqa: E402
-from flash_jev.engine.decode import Decoder, Row, Sampling  # noqa: E402
-from flash_jev.engine.model import READ_BUCKETS, Batch, Engine, Options  # noqa: E402
-from flash_jev.think import Framing, RELEASE_PREFIX  # noqa: E402
+from startlux_prism import jevfmt as J  # noqa: E402
+from startlux_prism.engine.decode import Decoder, Row, Sampling  # noqa: E402
+from startlux_prism.engine.model import READ_BUCKETS, Batch, Engine, Options  # noqa: E402
+from startlux_prism.think import Framing, RELEASE_PREFIX  # noqa: E402
 import suites  # noqa: E402
 
 TIE = 0.1                   # bf16: a greedy split where the prefill's top two logits are closer than this is a near-tie
@@ -121,8 +121,8 @@ def prefill_logits(eng, dec, ids, positions):
 def reference(eng, dec, seqs, gguf):
     """The decode steps' and the prefill's logits against the fp32 reference forward (reference.py, exact Q8_0
     weights, the output head in fp32) at the generated positions: which path is closer to the definition."""
-    from flash_jev import gguf_weights
-    from flash_jev.reference import Reference
+    from startlux_prism import gguf_weights
+    from startlux_prism.reference import Reference
     ref = Reference(gguf_weights.load(gguf), chunked=True)
     head = ref.w.output
     for s in seqs:

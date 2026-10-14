@@ -22,9 +22,9 @@ import torch
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 sys.path.insert(0, os.path.dirname(__file__))
-from flash_jev import jevfmt as J  # noqa: E402
-from flash_jev.engine.model import Engine, Options, group  # noqa: E402
-from flash_jev.prompt import rows_for  # noqa: E402
+from startlux_prism import jevfmt as J  # noqa: E402
+from startlux_prism.engine.model import Engine, Options, group  # noqa: E402
+from startlux_prism.prompt import rows_for  # noqa: E402
 from run_http import uniquify  # noqa: E402
 import suites  # noqa: E402
 
@@ -55,12 +55,12 @@ def main():
     a = ap.parse_args()
     base = dict(precision="int8", max_tokens=8192, calib=a.calib)
     engines = {}
-    from flash_jev.kernels import w8a8 as KW
+    from startlux_prism.kernels import w8a8 as KW
     for name, spec, table in (("A", a.a, a.table_a), ("B", a.b, a.table_b)):
         if table:
-            os.environ["FLASHJEV_GEMM_TABLE"] = os.path.abspath(table)
+            os.environ["STARTLUX_PRISM_GEMM_TABLE"] = os.path.abspath(table)
         else:
-            os.environ.pop("FLASHJEV_GEMM_TABLE", None)
+            os.environ.pop("STARTLUX_PRISM_GEMM_TABLE", None)
         KW._table.cache_clear()
         e = Engine(a.gguf, a.model_dir, options(spec, base))
         e.warm_up()                                  # graphs record the kernels this table chooses

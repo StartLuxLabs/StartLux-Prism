@@ -6,8 +6,8 @@ Every session has its own evidence (bench/run_http.uniquify), so nothing is reus
 computes the evidence; each later request asks other questions about the same evidence, and an engine with a prefix
 cache can start from it.  Reported per scenario: latency of first requests and of follow-ups, and the ratio.
 
-    python bench/run_prefix.py --url http://127.0.0.1:8092/v1/systemone --label flash-jev-int8 \\
-        --jevbench ~/jev/src/jevbench-7ce310c7/datasets/public --sessions 40 --out results/prefix/flash-jev-int8.json
+    python bench/run_prefix.py --url http://127.0.0.1:8092/v1/systemone --label startlux-prism-int8 \\
+        --jevbench ~/jev/src/jevbench-7ce310c7/datasets/public --sessions 40 --out results/prefix/startlux-prism-int8.json
 
 Scenarios:
   ticket       StartLux's latency.py ticket (startlux3), its three questions as three requests in turn
@@ -68,7 +68,7 @@ def server_stats(url):
     try:
         with urllib.request.urlopen(stats_url(url), timeout=5) as r:
             return json.loads(r.read()).get("prefix_cache")
-    except Exception:  # noqa: BLE001 - only flash-jev has /stats
+    except Exception:  # noqa: BLE001 - only StartLux-Prism has /stats
         return None
 
 

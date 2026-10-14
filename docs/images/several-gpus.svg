@@ -1,10 +1,10 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="840" height="350" viewBox="0 0 840 350" role="img" aria-labelledby="title desc" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif">
 <title id="title">Several GPUs: StartLux-Decision v1.1 27B on H200s</title>
-<desc id="desc">flash-jev int8, JevBench. Data parallelism (DP: whole servers behind the router) for throughput, tensor parallelism (TP: one model split over the GPUs) for the time per request. Every configuration answers as one GPU does, bit for bit; one GPU in gray, for scale.</desc>
+<desc id="desc">StartLux-Prism int8, JevBench. Data parallelism (DP: whole servers behind the router) for throughput, tensor parallelism (TP: one model split over the GPUs) for the time per request. Every configuration answers as one GPU does, bit for bit; one GPU in gray, for scale.</desc>
 <rect x="0.5" y="0.5" width="839" height="349" rx="8" fill="#fcfcfb" stroke="#e9e8e2"/>
 <text x="22.0" y="38.0" font-size="16" fill="#0b0b0b" text-anchor="start" font-weight="600">Several GPUs: StartLux-Decision v1.1 27B on H200s</text>
-<text x="22.0" y="62.0" font-size="12.5" fill="#52514e" text-anchor="start" font-weight="400">flash-jev int8, JevBench. Data parallelism (DP: whole servers behind the router) for throughput, tensor parallelism (TP: one model split</text>
-<text x="22.0" y="80.0" font-size="12.5" fill="#52514e" text-anchor="start" font-weight="400">over the GPUs) for the time per request. Every configuration answers as one GPU does, bit for bit; one GPU in gray, for scale.</text>
+<text x="22.0" y="62.0" font-size="12.5" fill="#52514e" text-anchor="start" font-weight="400">StartLux-Prism int8, JevBench. Data parallelism (DP: whole servers behind the router) for throughput, tensor parallelism (TP: one model</text>
+<text x="22.0" y="80.0" font-size="12.5" fill="#52514e" text-anchor="start" font-weight="400">split over the GPUs) for the time per request. Every configuration answers as one GPU does, bit for bit; one GPU in gray, for scale.</text>
 <text x="167.8" y="107.0" font-size="12.5" fill="#0b0b0b" text-anchor="start" font-weight="600">Read-outs from many clients: requests/s (higher is</text>
 <text x="167.8" y="124.0" font-size="12.5" fill="#0b0b0b" text-anchor="start" font-weight="600">better)</text>
 <text x="167.8" y="281.0" font-size="11" fill="#898781" text-anchor="middle" font-weight="400" style="font-variant-numeric: tabular-nums">0</text>

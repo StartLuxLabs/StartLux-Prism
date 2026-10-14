@@ -5,7 +5,7 @@ searched over tile configs x stages x (split-K | stream-K with 1 or 2 CTAs per S
 
     python bench/cuda_gemm_micro.py [--m 64,128,256,384,1024,2048] [--copies 4] [--json out.json] [--live-frac 0.8]
     python bench/cuda_gemm_micro.py --m 8,32,64,128,192,256,384,512,768,1024,2048,4096,8192 \
-        --table flash_jev/kernels/gemm_table_rtx5090.json
+        --table startlux_prism/kernels/gemm_table_rtx5090.json
 
 --table writes the dispatch table kernels/w8a8.py reads: per (N x K, M) the fastest of the Triton kernel
 (["triton"]), the tile-per-CTA CUDA kernel (["cuda", cfg, stages, split]) and stream-K (["sk", cfg, stages, per_sm, sk_waves]).
@@ -15,7 +15,7 @@ searched over tile configs x stages x (split-K | stream-K with 1 or 2 CTAs per S
 (keys N x K differ):
 
     python bench/cuda_gemm_micro.py --gguf ~/jev/models/StartLux-Decision-9B-Q8_0-GGUF/StartLux-Decision-9B-Q8_0.gguf \
-        --buckets --max-m 8192 --merge-into flash_jev/kernels/gemm_table_rtx5090.json
+        --buckets --max-m 8192 --merge-into startlux_prism/kernels/gemm_table_rtx5090.json
 
 (--max-m 8192: the buckets the 4B's entries were measured at; a larger bucket takes the 8192 entry, kernels/w8a8.py).
 """
@@ -29,8 +29,8 @@ import torch
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 sys.path.insert(0, os.path.dirname(__file__))
-from flash_jev.kernels import cuda_ext as CX  # noqa: E402
-from flash_jev.kernels import w8a8 as KW  # noqa: E402
+from startlux_prism.kernels import cuda_ext as CX  # noqa: E402
+from startlux_prism.kernels import w8a8 as KW  # noqa: E402
 from gemm_micro import gguf_dims, model_shapes, timed  # noqa: E402
 
 EPI = {"gdn_out": 1, "attn_o": 1, "mlp_down": 1}
@@ -41,14 +41,14 @@ def fold_us(rows, n, slots):
     partial sums to fold minus the same kernel without."""
     key = (rows, n, slots)
     if key not in _FOLD:
-        from flash_jev.kernels import quant as KQ
+        from startlux_prism.kernels import quant as KQ
         h = torch.randn(rows, n, device="cuda")
         parts = torch.zeros(slots, rows, n, dtype=torch.int32, device="cuda")
         w = torch.ones(n, device="cuda")
         q = torch.empty(rows, n, dtype=torch.int8, device="cuda")
         sc = torch.empty(rows, device="cuda")
         cnt = torch.tensor([rows], dtype=torch.int32, device="cuda")
-        from flash_jev.kernels.w8a8 import Deferred
+        from startlux_prism.kernels.w8a8 import Deferred
         pend = Deferred(slots, torch.rand(rows, device="cuda"), torch.rand(n, device="cuda"))
         with_fold = timed(lambda: KQ.norm_q8(h, w, q, sc, cnt, rows, 1e-6, parts=parts, pending=pend), 10)
         without = timed(lambda: KQ.norm_q8(h, w, q, sc, cnt, rows, 1e-6), 10)
@@ -78,7 +78,7 @@ def main():
     ap.add_argument("--mma-max-m", type=int, default=0, help="time the mma.sync kernels (tile, stream-K) only up to "
                     "this many rows (0: always; Hopper: the wgmma kernel wins above a few rows)")
     ap.add_argument("--gguf", help="the model whose projection shapes to time (default StartLux-Decision-4B)")
-    ap.add_argument("--tp", type=int, default=1, help="a tensor-parallel shard's shapes (flash_jev/tp.py): the "
+    ap.add_argument("--tp", type=int, default=1, help="a tensor-parallel shard's shapes (startlux_prism/tp.py): the "
                     "column-parallel projections' rows and the output projections' inputs divided by this; the output "
                     "projections with int32 sums out (w8a8.gemm_i32, table keys NxKi)")
     ap.add_argument("--buckets", action="store_true", help="M = the engine's token and read buckets, each timed with "
@@ -87,7 +87,7 @@ def main():
     a = ap.parse_args()
     live_of = {}
     if a.buckets:
-        from flash_jev.engine.model import READ_BUCKETS, TOKEN_BUCKETS
+        from startlux_prism.engine.model import READ_BUCKETS, TOKEN_BUCKETS
         for bs in (TOKEN_BUCKETS, READ_BUCKETS):
             prev = 0
             for m in bs:

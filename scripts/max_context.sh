@@ -1,7 +1,7 @@
 #!/bin/bash
 # The longest single request each engine answers in ONE forward pass over the whole prompt (no chunked prefill), on
 # this GPU: steps the evidence length up (bench/run_long.py: one warm-up and one timed request per length) until a
-# request fails or the engine does not start.  flash-jev never chunks (default, and without its prefix cache); SGLang
+# request fails or the engine does not start.  StartLux-Prism never chunks (default, and without its prefix cache); SGLang
 # with --chunked-prefill-size -1 (its default memory split, and one that leaves activations more room); vLLM with
 # --no-enable-chunked-prefill and --max-num-batched-tokens = --max-model-len (it profiles one pass of that many tokens
 # at start-up and refuses to start when the KV cache cannot hold one such request).  Last, SGLang and vLLM at their
@@ -10,15 +10,15 @@
 #   setsid bash scripts/max_context.sh > ~/jev/logs/maxctx.out 2>&1 < /dev/null &
 #
 # Results: results/maxctx/<config>-<length>.json; the log shows each engine's memory split.  LENGTHS overrides the steps,
-# MODEL the GGUF repository (4B Q8_0), FLASHJEV_PREC flash-jev's precision (int8), MAXCTX_ENGINES the engines ("flash-jev sglang
-# vllm"; a Q4_K_M file: "flash-jev" with FLASHJEV_PREC=w4a8), CONFIG_TAG a suffix for every config name (another model or GPU).
+# MODEL the GGUF repository (4B Q8_0), STARTLUX_PRISM_PREC StartLux-Prism's precision (int8), MAXCTX_ENGINES the engines ("prism sglang
+# vllm"; a Q4_K_M file: "prism" with STARTLUX_PRISM_PREC=w4a8), CONFIG_TAG a suffix for every config name (another model or GPU).
 set -uo pipefail
 JEV=${JEV:-$HOME/jev}
 cd "$(dirname "$0")/.."
 LENGTHS=${LENGTHS:-16000 32000 48000 64000 96000 128000 192000 256000}
 MODEL=${MODEL:-$JEV/models/StartLux-Decision-4B-Q8_0-GGUF}
-PREC=${FLASHJEV_PREC:-int8}
-ENGINES=" ${MAXCTX_ENGINES:-flash-jev sglang vllm} "
+PREC=${STARTLUX_PRISM_PREC:-int8}
+ENGINES=" ${MAXCTX_ENGINES:-prism sglang vllm} "
 LOG=$JEV/logs
 mkdir -p results/maxctx
 
@@ -44,11 +44,11 @@ memory() {  # what each engine says about its memory split at start-up
   grep -h -i "tokens per batch\|available_gpu_mem\|mem_fraction_static=\|KV cache memory\|GPU KV cache size\|Maximum concurrency\|out of memory\|OutOfMemory\|Segfault" "$@" 2>/dev/null | cut -c1-300 | tail -6
 }
 
-flashjev() {    # config [server flags]
+prism() {    # config [server flags]
   stop_all
   echo "=== $1 ($(date +%H:%M:%S))"
-  FLASHJEV_FLAGS="${2:-}" bash scripts/serve.sh start "$PREC" > /dev/null || { echo "--- $1: did not start"; return; }
-  memory "$LOG/flash-jev-$PREC.log"
+  STARTLUX_PRISM_FLAGS="${2:-}" bash scripts/serve.sh start "$PREC" > /dev/null || { echo "--- $1: did not start"; return; }
+  memory "$LOG/startlux-prism-$PREC.log"
   steps "$1" http://127.0.0.1:8092/v1/systemone
 }
 
@@ -70,9 +70,9 @@ vllm_at() { # config max_model_len length [flags]: start vLLM for that context, 
   probe "$1" http://127.0.0.1:8097/v1/systemone "$3" || { echo "--- $1: failed at $3"; return 1; }
 }
 
-if [[ $ENGINES == *" flash-jev "* ]]; then
-  flashjev "flash-jev-$PREC${CONFIG_TAG:-}"
-  flashjev "flash-jev-$PREC-nocache${CONFIG_TAG:-}" "--prefix-cache 0"
+if [[ $ENGINES == *" prism "* ]]; then
+  prism "startlux-prism-$PREC${CONFIG_TAG:-}"
+  prism "startlux-prism-$PREC-nocache${CONFIG_TAG:-}" "--prefix-cache 0"
 fi
 if [[ $ENGINES == *" sglang "* ]]; then
   SGLANG_CTX=262144 SGLANG_FLAGS="--chunked-prefill-size -1" sglang "sglang-nochunk${CONFIG_TAG:-}"

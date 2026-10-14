@@ -1,6 +1,6 @@
 # Benchmarks and stress tests
 
-flash-jev against seven other engines on StartLux-Decision v1 at 4B, 9B and 27B (StartLux's Q8_0 and Q4_K_M GGUF
+StartLux-Prism against seven other engines on StartLux-Decision v1 at 4B, 9B and 27B (StartLux's Q8_0 and Q4_K_M GGUF
 releases, byte-identical to them: [Setup](#setup)): one request at a time, many clients at
 once, long evidence, follow-up questions served from a prefix cache, the longest request each engine computes in one
 pass, and the stress test of a running server. Two machines: an RTX 5090 (the 4B, the 9B and the 27B's Q4_K_M file)
@@ -38,20 +38,20 @@ their scores, in parentheses, come from prompts these weights were not trained w
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="images/jevbench-latency-dark.svg">
-  <img src="images/jevbench-latency.svg" width="840" alt="JevBench mean ms per item, one request at a time, for every engine on StartLux-Decision-4B and -9B (RTX 5090) and -27B (H200): flash-jev int8 15.0, 21.6 and 41.0; decider with torch.compile and FP8 33.4, 50.3, 66.8; flash-jev bf16 29.6, 52.1, 68.2; SGLang native 42.0, 59.8, 90.1; SGLang via adapter 40.1, 62.1, 92.0; StartLux-Decision server 47.0, 71.2, 96.0; decider default 48.5, 76.1, 99.9; JevK5 49.8, 74.4, 101.1; vLLM 55.3, 84.9, 119.1; llama.cpp 134.7, 162.7, 589.2.">
+  <img src="images/jevbench-latency.svg" width="840" alt="JevBench mean ms per item, one request at a time, for every engine on StartLux-Decision-4B and -9B (RTX 5090) and -27B (H200): StartLux-Prism int8 15.0, 21.6 and 41.0; decider with torch.compile and FP8 33.4, 50.3, 66.8; StartLux-Prism bf16 29.6, 52.1, 68.2; SGLang native 42.0, 59.8, 90.1; SGLang via adapter 40.1, 62.1, 92.0; StartLux-Decision server 47.0, 71.2, 96.0; decider default 48.5, 76.1, 99.9; JevK5 49.8, 74.4, 101.1; vLLM 55.3, 84.9, 119.1; llama.cpp 134.7, 162.7, 589.2.">
 </picture>
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="images/jevbench-throughput-dark.svg">
-  <img src="images/jevbench-throughput.svg" width="840" alt="JevBench requests per second from 32 clients for every engine on the 4B, 9B (RTX 5090) and 27B (H200): flash-jev int8 85.2, 53.3, 30.6; decider with torch.compile and FP8 35.0, 22.6, 15.4; flash-jev bf16 37.0, 19.9, 16.7; SGLang native 39.5, 21.7, 18.8; SGLang via adapter 37.4, 20.5, 17.7; StartLux-Decision server 22.9, 14.2, 10.4; decider default 20.7, 12.6, 9.6; JevK5 21.8, 13.6, 9.9; vLLM 33.6, 18.9, 15.4; llama.cpp 6.5, 5.7, 1.4.">
+  <img src="images/jevbench-throughput.svg" width="840" alt="JevBench requests per second from 32 clients for every engine on the 4B, 9B (RTX 5090) and 27B (H200): StartLux-Prism int8 85.2, 53.3, 30.6; decider with torch.compile and FP8 35.0, 22.6, 15.4; StartLux-Prism bf16 37.0, 19.9, 16.7; SGLang native 39.5, 21.7, 18.8; SGLang via adapter 37.4, 20.5, 17.7; StartLux-Decision server 22.9, 14.2, 10.4; decider default 20.7, 12.6, 9.6; JevK5 21.8, 13.6, 9.9; vLLM 33.6, 18.9, 15.4; llama.cpp 6.5, 5.7, 1.4.">
 </picture>
 
 **JevBench** (the 231 public items):
 
 | engine | mean / p50 / p95 ms per item, one at a time: 4B · 9B · 27B | requests/s from 32 clients (4B / 9B / 27B) | score, of 231 (4B / 9B / 27B) |
 |---|---|---|---|
-| **flash-jev int8** | **15.0 / 5.5 / 53 · 21.6 / 8.0 / 76 · 41.0 / 14.2 / 146** | **85.2 / 53.3 / 30.6** | 205 / 200 / 207 |
-| flash-jev bf16 | 29.6 / 8.5 / 116 · 52.1 / 12.8 / 210 · 68.2 / 19.4 / 267 | 37.0 / 19.9 / 16.7 | 205 / 201 / 209 |
+| **StartLux-Prism int8** | **15.0 / 5.5 / 53 · 21.6 / 8.0 / 76 · 41.0 / 14.2 / 146** | **85.2 / 53.3 / 30.6** | 205 / 200 / 207 |
+| StartLux-Prism bf16 | 29.6 / 8.5 / 116 · 52.1 / 12.8 / 210 · 68.2 / 19.4 / 267 | 37.0 / 19.9 / 16.7 | 205 / 201 / 209 |
 | decider 1.9.0, torch.compile + FP8 | 33.4 / 13.7 / 110 · 50.3 / 23.8 / 164 · 66.8 / 26.2 / 222 | 35.0 / 22.6 / 15.4 | (199 / 202 / 206) |
 | SGLang 0.5.21, native `/v1/systemone` | 42.0 / 20.6 / 135 · 59.8 / 22.3 / 214 · 90.1 / 57.7 / 244 | 39.5 / 21.7 / 18.8 | 196 / 199 / 211 |
 | SGLang 0.5.21, via adapter | 40.1 / 19.1 / 128 · 62.1 / 26.4 / 212 · 92.0 / 58.8 / 247 | 37.4 / 20.5 / 17.7 | 205 / 201 / 209 |
@@ -68,8 +68,8 @@ JevK5 202. SGLang's native endpoint renders its own prompts too.
 
 | engine | StartLux's 3-question request (4B / 9B / 27B) | 8,000 tokens of evidence (4B / 9B / 27B) | 50,000 tokens of evidence (4B / 9B / 27B) |
 |---|---|---|---|
-| **flash-jev int8** | **10.20 / 15.50 / 25.01** | **162.5 / 244 / 432** | **1,960 / 2,582 / 3,693** |
-| flash-jev bf16 | 19.06 / 29.84 / 38.60 | - | - |
+| **StartLux-Prism int8** | **10.20 / 15.50 / 25.01** | **162.5 / 244 / 432** | **1,960 / 2,582 / 3,693** |
+| StartLux-Prism bf16 | 19.06 / 29.84 / 38.60 | - | - |
 | decider, torch.compile + FP8 | 75.18 / 111.56 / 158.57 | 328.7 / 458 / 698 | 3,708 / 4,925 / 7,301 |
 | SGLang, native | 47.55 / 73.98 / 97.93 | - | - |
 | SGLang, via adapter | 49.29 / 81.50 / 95.48 | 342.2 / 603 / 704 | 2,911 / 4,515 / 4,936 |
@@ -83,8 +83,8 @@ JevK5 202. SGLang's native endpoint renders its own prompts too.
 
 | engine | mixed suites, best over 1-64 clients (4B / 9B / 27B) | 8k-token requests from 32 clients (4B / 9B / 27B) |
 |---|---|---|
-| **flash-jev int8** | **294 / 182 / 100** | **6.05 / 4.01 / 2.33** |
-| flash-jev bf16 | 124 / 68 / 56 | - |
+| **StartLux-Prism int8** | **294 / 182 / 100** | **6.05 / 4.01 / 2.33** |
+| StartLux-Prism bf16 | 124 / 68 / 56 | - |
 | decider, torch.compile + FP8 | 43 / 25 / 17 | 3.07 / 2.23 / 1.43 |
 | SGLang, native | 82 / 45 / 38 | - |
 | SGLang, via adapter | 70 / 39 / 32 | 2.95 / 1.67 / 1.47 |
@@ -94,11 +94,11 @@ JevK5 202. SGLang's native endpoint renders its own prompts too.
 | vLLM, via adapter | 64 / 36 / 27 | 2.60 / 1.52 / 1.26 |
 | llama.cpp | 7 / 6 / 2 | 1.36 / 1.08 / 0.28 |
 
-"-": not run (the long-evidence runs take one configuration per engine; flash-jev's 9B ran them with `--prefix-cache 0`, its largest batch then 65,536 tokens). flash-jev's `tests/test_stress.py` passed all
+"-": not run (the long-evidence runs take one configuration per engine; StartLux-Prism's 9B ran them with `--prefix-cache 0`, its largest batch then 65,536 tokens). StartLux-Prism's `tests/test_stress.py` passed all
 11 checks in every run: int8 and W4A8, on the RTX 5090 and the H200 ([Stress tests](#stress-tests)).
 
 **Accuracy** on StartLux-Decision-v1's own evaluation (the seven Intern-Decision suites, 12,351 decisions), against
-StartLux-Decision's own server on the same weights: flash-jev int8 averages 91.14 against 91.15 (4B) and 90.80 against
+StartLux-Decision's own server on the same weights: StartLux-Prism int8 averages 91.14 against 91.15 (4B) and 90.80 against
 91.06 (9B), bf16 91.26 and 91.05; [Accuracy](#accuracy-startlux-decision-v1s-evaluation).
 
 ## Setup
@@ -114,7 +114,7 @@ file records the GPU's processes, clocks, power and temperature. The 4B tables a
 Platinum 8558 (192 threads), Ubuntu 22.04, 2026-10-12. The machine is shared: other users' vLLM servers ran on 4-6 of
 its 8 GPUs the whole day. Every engine ran alone on one GPU (GPU 5; `compare.sh` checked before each engine that no
 other process computed on it, and the result files record its processes), one after another: the baselines
-10:34-15:13, flash-jev 16:36-17:42. The same package versions as the RTX 5090 server's, llama.cpp the same build
+10:34-15:13, StartLux-Prism 16:36-17:42. The same package versions as the RTX 5090 server's, llama.cpp the same build
 (b10639, for sm_90), the same scripts and flags.
 
 **Models.** StartLux-Decision v1, StartLux's GGUF releases on Hugging Face (published 2026-09-29), unchanged. Every
@@ -131,12 +131,12 @@ downloaded them (2026-10-08 to 2026-10-11) and now carry a `v1`; the old names r
 | StartLux-Decision-v1-27B | [`StartLux-Decision-27B-Q8_0.gguf`](https://huggingface.co/startlux-models/StartLux-Decision-v1-27B-Q8_0-GGUF) | 28.60 GB | `5868a8a2df103c63353adfbda6f57fec5b6393c9b8a1d97392855a0335001088` | H200 |
 |  | [`StartLux-Decision-27B-Q4_K_M.gguf`](https://huggingface.co/startlux-models/StartLux-Decision-v1-27B-Q4_K_M-GGUF) | 16.55 GB | `7c23c38501989d30bdde77a0a6d434aa8de08f675ff6b511835d0c6fe03f146a` | RTX 5090, H200 |
 
-**Weights.** Each model from its Q8_0 GGUF; every engine runs the weights of that one file. flash-jev and llama.cpp
-read the GGUF: llama.cpp computes with its Q8_0 blocks; flash-jev bf16 dequantizes them, and flash-jev int8 requantizes
+**Weights.** Each model from its Q8_0 GGUF; every engine runs the weights of that one file. StartLux-Prism and llama.cpp
+read the GGUF: llama.cpp computes with its Q8_0 blocks; StartLux-Prism bf16 dequantizes them, and StartLux-Prism int8 requantizes
 them at start-up to W8A8 (SmoothQuant, one scale per output row; activations quantized per token; a few seconds on the
 GPU, no separate conversion step). The transformers-based engines (StartLux-Decision's own server, SGLang, vLLM,
-decider, JevK5) run the same weights converted once to bf16 safetensors by `flash_jev/tools/gguf_to_hf.py` (Q8_0 values
-dequantized exactly, then rounded to bf16; validated with StartLux-Decision's code). Precision per engine: flash-jev
+decider, JevK5) run the same weights converted once to bf16 safetensors by `startlux_prism/tools/gguf_to_hf.py` (Q8_0 values
+dequantized exactly, then rounded to bf16; validated with StartLux-Decision's code). Precision per engine: StartLux-Prism
 int8 W8A8; llama.cpp the Q8_0 weights as stored; decider with `DECIDER_FP8=1` FP8 linear layers; everything else bf16.
 The Q4_K_M files: [their own section](#q4_k_m-files-w4a8).
 
@@ -190,7 +190,7 @@ prefill (`scripts/max_context.sh`), 5 `tests/test_stress.py`. Then `python bench
 `scripts/baselines.sh`. Another model: `scripts/prepare_model.sh` (its folders for every engine) and
 `scripts/new_model.sh` (dispatch table entries, int8 calibration, correctness tests), then `scripts/stress.sh` with the
 environment prepare_model.sh prints. The Q4_K_M rows: `MODEL=<the Q4_K_M repository> TAG=-q4km-4B scripts/compare.sh
-flash-jev-w4a8 llamacpp sglang-gguf` (sglang-gguf with that model's CAUSAL_FLAT); the W4A8 GEMM's table:
+startlux-prism-w4a8 llamacpp sglang-gguf` (sglang-gguf with that model's CAUSAL_FLAT); the W4A8 GEMM's table:
 `bench/w4a8_table.py` over the Q4_K_M files.
 
 ## StartLux-Decision-v1-4B on an RTX 5090
@@ -202,7 +202,7 @@ The model: StartLux-Decision-v1-4B, `StartLux-Decision-4B-Q8_0.gguf` (4.48 GB, S
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="images/rtx5090-4b-dark.svg">
-  <img src="images/rtx5090-4b.svg" width="760" alt="StartLux-Decision-4B on an RTX 5090. JevBench mean ms per item one request at a time, and requests per second from 32 clients: flash-jev int8 15.0 and 85.2; flash-jev bf16 29.6 and 37.0; decider compile + FP8 33.4 and 35.0; SGLang via adapter 40.1 and 37.4; SGLang native 42.0 and 39.5; StartLux-Decision server 47.0 and 22.9; decider default 48.5 and 20.7; JevK5 49.8 and 21.8; vLLM 55.3 and 33.6; llama.cpp 134.7 and 6.5.">
+  <img src="images/rtx5090-4b.svg" width="760" alt="StartLux-Decision-4B on an RTX 5090. JevBench mean ms per item one request at a time, and requests per second from 32 clients: StartLux-Prism int8 15.0 and 85.2; StartLux-Prism bf16 29.6 and 37.0; decider compile + FP8 33.4 and 35.0; SGLang via adapter 40.1 and 37.4; SGLang native 42.0 and 39.5; StartLux-Decision server 47.0 and 22.9; decider default 48.5 and 20.7; JevK5 49.8 and 21.8; vLLM 55.3 and 33.6; llama.cpp 134.7 and 6.5.">
 </picture>
 
 p50 latency (ms) at concurrency 1, best throughput of the sweep (requests/s, at concurrency c), JevBench score and
@@ -210,8 +210,8 @@ per-item latency (mean / p50 / p95 ms):
 
 | engine | startlux3 | startlux1 | readme3 | yesno | longpage2 | wide33 | review1 | max req/s (c) | JevBench | JevBench mean / p50 / p95 |
 |---|---|---|---|---|---|---|---|---|---|---|
-| **flash-jev int8** (W8A8) | **10.20** | **9.40** | **6.63** | **5.08** | **24.65** | **11.98** | **5.30** | **294 (64)** | **205/231** | **15.0 / 5.5 / 53** |
-| flash-jev bf16 | 19.06 | 16.29 | 11.63 | 9.06 | 50.85 | 20.43 | 9.02 | 124 (64) | 205/231 | 29.6 / 8.5 / 116 |
+| **StartLux-Prism int8** (W8A8) | **10.20** | **9.40** | **6.63** | **5.08** | **24.65** | **11.98** | **5.30** | **294 (64)** | **205/231** | **15.0 / 5.5 / 53** |
+| StartLux-Prism bf16 | 19.06 | 16.29 | 11.63 | 9.06 | 50.85 | 20.43 | 9.02 | 124 (64) | 205/231 | 29.6 / 8.5 / 116 |
 | decider 1.9.0, compile + FP8, stand-in weights | 75.18 | 16.15 | 30.30 | 10.01 | 93.58 | 17.00 | 34.54 | 43 (16) | (199) | 33.4 / 13.7 / 110 |
 | decider 1.9.0, compile + FP8, own checkpoint | 65.20 | 15.96 | 30.24 | 9.97 | 93.40 | 15.79 | 30.31 | 40 (64) | 194/231 | 33.7 / 15.2 / 112 |
 | decider 1.9.0, default (bf16), stand-in weights | 115.77 | 26.45 | 56.31 | 15.38 | 99.48 | 27.08 | 56.14 | 22 (4) | (199) | 48.5 / 20.2 / 172 |
@@ -224,17 +224,17 @@ per-item latency (mean / p50 / p95 ms):
 | vLLM 0.31 (bf16, via adapter) | 74.19 | 33.38 | 43.34 | 25.72 | 124.21 | 64.93 | 24.78 | 64 (64) | 205/231 | 55.3 / 26.8 / 166 |
 | llama.cpp b10639 (Q8_0) + StartLux GGUF server | 313.35 | 90.50 | 266.42 | 81.60 | 374.39 | 256.12 | 85.19 | 7 (4) | 205/231 | 134.7 / 90.0 / 314 |
 
-flash-jev int8 against the best other engine on each measurement: startlux3 4.7x (47.6 ms, SGLang native), startlux1
+StartLux-Prism int8 against the best other engine on each measurement: startlux3 4.7x (47.6 ms, SGLang native), startlux1
 1.7x (16.0, decider compile+FP8), readme3 3.9x (25.6, SGLang native), yesno 2.0x (10.0, decider compile+FP8),
 longpage2 3.8x (93.4, decider compile+FP8), wide33 1.3x (15.8, decider compile+FP8), review1 2.3x (12.1, StartLux),
 throughput 3.6x (82, SGLang native), JevBench mean 2.2x (33.4, decider compile+FP8), p50 2.5x (13.7, same), p95 2.1x
-(110, same). flash-jev bf16, at the other engines' precision: startlux3 2.5x, readme3 2.2x, longpage2 2.0x, throughput
+(110, same). StartLux-Prism bf16, at the other engines' precision: startlux3 2.5x, readme3 2.2x, longpage2 2.0x, throughput
 1.5x, JevBench mean 1.4x against the best bf16 engine on each.
 
 **Accuracy and agreement.** StartLux-Decision publishes 204/231 for this checkpoint. On the 231 JevBench items, the
-engines running StartLux's weights make the same decision as StartLux's own server on: flash-jev bf16 231 (largest
-probability difference 0.027), llama.cpp 230, vLLM 229, flash-jev int8 228 (three near-ties flip; largest difference
-0.13; its score is 205). flash-jev int8 is deterministic and batch-invariant: a request gets bit-identical
+engines running StartLux's weights make the same decision as StartLux's own server on: StartLux-Prism bf16 231 (largest
+probability difference 0.027), llama.cpp 230, vLLM 229, StartLux-Prism int8 228 (three near-ties flip; largest difference
+0.13; its score is 205). StartLux-Prism int8 is deterministic and batch-invariant: a request gets bit-identical
 probabilities on every run, whatever other requests share its batch and whether its evidence came from the prefix
 cache (`tests/test_engine.py --repeat`, `tests/test_prefix_cache.py --exact`; how: `docs/optimizations.md`). The bf16
 path is deterministic run to run but not batch-invariant (cuBLAS picks its kernels by batch size). SGLang's native
@@ -242,7 +242,7 @@ endpoint renders its own prompt, not the one the checkpoint was trained on, henc
 
 JevBench latency by prompt length (mean ms per item; length in StartLux's prompt format):
 
-| prompt tokens | items | flash-jev int8 | decider compile+FP8 (stand-in) | decider (own) | JevK5 (own) | StartLux | SGLang | SGLang native | vLLM | llama.cpp |
+| prompt tokens | items | StartLux-Prism int8 | decider compile+FP8 (stand-in) | decider (own) | JevK5 (own) | StartLux | SGLang | SGLang native | vLLM | llama.cpp |
 |---|---|---|---|---|---|---|---|---|---|---|
 | < 200 | 121 | **5.4** | 10.7 | 14.1 | 16.7 | 13.7 | 20.4 | 16.1 | 25.1 | 91.7 |
 | 200-500 | 43 | **9.0** | 15.1 | 21.7 | 26.5 | 24.0 | 25.8 | 27.7 | 35.7 | 103.2 |
@@ -261,9 +261,9 @@ scores within 3 of the engine's sequential score.
 
 | engine | 8 clients | 16 clients | 32 clients | score per pass (32 clients) |
 |---|---|---|---|---|
-| **flash-jev int8** | **85.1 (86)** | **85.5 (176)** | **85.2 (356)** | 206 / 204 / 203 |
+| **StartLux-Prism int8** | **85.1 (86)** | **85.5 (176)** | **85.2 (356)** | 206 / 204 / 203 |
 | SGLang 0.5.21 native `/v1/systemone` | 36.8 (206) | 38.7 (397) | 39.5 (816) | 195 / 196 / 195 |
-| flash-jev bf16 | 36.3 (211) | 36.5 (428) | 37.0 (853) | 204 / 203 / 203 |
+| StartLux-Prism bf16 | 36.3 (211) | 36.5 (428) | 37.0 (853) | 204 / 203 / 203 |
 | SGLang 0.5.21 (via adapter) | 35.2 (210) | 36.9 (424) | 37.4 (821) | 204 / 203 / 204 |
 | decider 1.9.0, compile + FP8, own checkpoint | 35.7 (204) | 36.7 (413) | 35.2 (891) | 192 / 192 / 190 |
 | decider 1.9.0, compile + FP8, stand-in weights | 35.1 (209) | 36.0 (422) | 35.0 (872) | (201 / 199 / 198) |
@@ -280,7 +280,7 @@ long-evidence settings below), 30 s per level; no engine failed a request:
 
 | engine | 8 clients | 16 clients | 32 clients |
 |---|---|---|---|
-| **flash-jev int8** | **6.14 (1,302)** | **6.07 (2,635)** | **6.05 (5,292)** |
+| **StartLux-Prism int8** | **6.14 (1,302)** | **6.07 (2,635)** | **6.05 (5,292)** |
 | decider 1.9.0, compile + FP8, stand-in weights | 2.90 (2,846) | 3.03 (5,386) | 3.07 (10,179) |
 | SGLang 0.5.21 (via adapter) | 2.98 (2,713) | 2.96 (5,341) | 2.95 (10,832) |
 | vLLM 0.31 (via adapter) | 2.63 (3,037) | 2.61 (6,120) | 2.60 (12,299) |
@@ -290,15 +290,15 @@ long-evidence settings below), 30 s per level; no engine failed a request:
 | llama.cpp b10639 + StartLux GGUF server | 1.38 (4,320) | 1.37 (10,160) | 1.36 (21,477) |
 
 Every engine has the GPU busy (95-100% SM activity; llama.cpp 71-76%) from 8 clients on, so more clients only queue:
-flash-jev int8 serves 2.2x the JevBench requests and 2.0x the 8k-token requests of the next engine. On JevBench the
-bf16 engines (flash-jev bf16 among them) and decider's FP8 land within 15% of each other: flash-jev's lead under load
+StartLux-Prism int8 serves 2.2x the JevBench requests and 2.0x the 8k-token requests of the next engine. On JevBench the
+bf16 engines (StartLux-Prism bf16 among them) and decider's FP8 land within 15% of each other: StartLux-Prism's lead under load
 is the int8 tensor cores' rate, its lead one request at a time (the first table) also its smaller fixed costs.
 
 ### Long evidence: 8k and 50k tokens
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="images/rtx5090-4b-long-dark.svg">
-  <img src="images/rtx5090-4b-long.svg" width="760" alt="Long evidence, StartLux-Decision-4B on an RTX 5090, p50 ms at 8,000 and 50,000 tokens: flash-jev int8 162.5 and 1,960; decider compile + FP8 328.7 and 3,708; SGLang 342.2 and 2,911; JevK5 417.7 and 3,263; StartLux-Decision server 424.2, fails at 50,000; vLLM 440.5 and 3,359; decider default 521.5 and 3,272; llama.cpp 730.3 and 5,326.">
+  <img src="images/rtx5090-4b-long.svg" width="760" alt="Long evidence, StartLux-Decision-4B on an RTX 5090, p50 ms at 8,000 and 50,000 tokens: StartLux-Prism int8 162.5 and 1,960; decider compile + FP8 328.7 and 3,708; SGLang 342.2 and 2,911; JevK5 417.7 and 3,263; StartLux-Decision server 424.2, fails at 50,000; vLLM 440.5 and 3,359; decider default 521.5 and 3,272; llama.cpp 730.3 and 5,326.">
 </picture>
 
 `bench/run_long.py` (`scripts/compare.sh` with `BENCH=long`): one yes/no question ("Does the log show a payment that
@@ -307,14 +307,14 @@ shipping, search and cart events) sized to about 8,000 and 50,000 tokens in Star
 with its own request number. One request at a time (2 warm-up requests, then 20 at 8k and 8 at 50k), and 4 clients for
 40 s at 8k. The context limits were raised so that no engine shortens the evidence: llama.cpp `-c 262144 --parallel 4`
 (65,536 tokens per slot), vLLM `--max-model-len 65536`, SGLang `--context-length 65536`, decider
-`DECIDER_MAX_STATE_TOKENS=65536` (its default, 32,768, cuts the evidence); flash-jev as always (its largest batch,
+`DECIDER_MAX_STATE_TOKENS=65536` (its default, 32,768, cuts the evidence); StartLux-Prism as always (its largest batch,
 65,536 tokens, is sized from free GPU memory). The input tokens each engine reports are in the result files: every
 engine counted all of them (JevK5 and decider render their own prompts, a few dozen tokens more or fewer).
 
 | engine | 8k: p50 ms | 8k: 4 clients, req/s | 50k: p50 ms | input tokens counted (8k / 50k) |
 |---|---|---|---|---|
-| **flash-jev int8** | **162.5** | **6.17** | **1,960** | 8,052 / 50,017 |
-| flash-jev int8, `--attn-qk8` (opt-in) | 154.6 | 6.47 | 1,658 | 8,052 / 50,017 |
+| **StartLux-Prism int8** | **162.5** | **6.17** | **1,960** | 8,052 / 50,017 |
+| StartLux-Prism int8, `--attn-qk8` (opt-in) | 154.6 | 6.47 | 1,658 | 8,052 / 50,017 |
 | SGLang 0.5.21 (via adapter) | 342.2 | 2.98 | 2,911 | 8,052 / 50,017 |
 | JevK5 0.3.3, stand-in weights | 417.7 | 2.39 | 3,263 | 8,093 / 50,058 |
 | decider 1.9.0, default, stand-in weights | 521.5 | 1.56 | 3,272 | 8,020 / 49,985 |
@@ -323,8 +323,8 @@ engine counted all of them (JevK5 and decider render their own prompts, a few do
 | StartLux-Decision server | 424.2 | 2.36 | fails (below) | 8,052 / - |
 | llama.cpp b10639 + StartLux GGUF server | 730.3 | 1.36 | 5,326 | 8,052 / 50,017 |
 
-flash-jev is 2.0-4.5x faster than the others at 8k and 1.5-2.7x at 50k. At 50k the eight attention layers, quadratic in
-the length, take about three quarters of flash-jev's time (164 TFLOP at about 110 TFLOPS on bf16 tensor cores, against
+StartLux-Prism is 2.0-4.5x faster than the others at 8k and 1.5-2.7x at 50k. At 50k the eight attention layers, quadratic in
+the length, take about three quarters of StartLux-Prism's time (164 TFLOP at about 110 TFLOPS on bf16 tensor cores, against
 0.35 POP of int8 projections at about 600 TOPS: operation counts and the kernels' measured rates), and every engine runs
 attention on bf16 tensor cores, so the int8 projections' advantage covers a smaller share. `--attn-qk8` (q k^T on int8
 tensor cores; off by default for its probability error, `docs/optimizations.md`) takes 15% off at 50k.
@@ -337,7 +337,7 @@ numbers take the unchunked path.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="images/prefix-cache-dark.svg">
-  <img src="images/prefix-cache.svg" width="760" alt="Follow-up questions about evidence already sent, StartLux-Decision-4B on an RTX 5090, longest JevBench items, p50 ms of the first request and of follow-ups: flash-jev int8 with its prefix cache 54.1 and 5.4; vLLM 162.0 and 42.6; flash-jev int8 without cache 50.7 and 48.0; SGLang 129.9 and 113.3; decider 104.6 and 157.8; StartLux-Decision server 173.9 and 173.6.">
+  <img src="images/prefix-cache.svg" width="760" alt="Follow-up questions about evidence already sent, StartLux-Decision-4B on an RTX 5090, longest JevBench items, p50 ms of the first request and of follow-ups: StartLux-Prism int8 with its prefix cache 54.1 and 5.4; vLLM 162.0 and 42.6; StartLux-Prism int8 without cache 50.7 and 48.0; SGLang 129.9 and 113.3; decider 104.6 and 157.8; StartLux-Decision server 173.9 and 173.6.">
 </picture>
 
 The tables above send every request with new evidence, so no engine can reuse anything across requests. A client that
@@ -351,15 +351,15 @@ yes/no and a 4-level score about the same evidence). p50 ms, first request / fol
 
 | engine (cache across requests) | ticket | longpage | jevbench |
 |---|---|---|---|
-| **flash-jev int8** (prefix cache, default; 2026-10-10) | 9.5 / **4.6** | 25.6 / **4.7** | 54.1 / **5.4** |
-| flash-jev int8, `--prefix-cache 0` | 9.6 / 9.3 | 25.6 / 19.1 | 50.7 / 48.0 |
+| **StartLux-Prism int8** (prefix cache, default; 2026-10-10) | 9.5 / **4.6** | 25.6 / **4.7** | 54.1 / **5.4** |
+| StartLux-Prism int8, `--prefix-cache 0` | 9.6 / 9.3 | 25.6 / 19.1 | 50.7 / 48.0 |
 | SGLang 0.5.21 via adapter (radix cache) | 29.0 / 17.7 | 69.8 / 55.9 | 129.9 / 113.3 |
 | vLLM 0.31 via adapter (automatic prefix caching) | 34.6 / 33.8 | 86.0 / 75.4 | 162.0 / 42.6 |
 | decider 1.9.0 compile + FP8, stand-in weights (none across requests) | 16.3 / 41.0 | 44.5 / 33.6 | 104.6 / 157.8 |
 | StartLux-Decision server (system text only) | 24.4 / 24.4 | 79.6 / 58.2 | 173.9 / 173.6 |
 
 (Follow-ups without a cache differ from first requests only by their questions' length; decider's follow-ups, a yes/no
-and a 4-level score, were slower than its first requests in every scenario - not investigated.) flash-jev answers a
+and a 4-level score, were slower than its first requests in every scenario - not investigated.) StartLux-Prism answers a
 follow-up in about the time of a request with no evidence at all: 2x faster than recomputing on the ticket, 4x on the
 page, 8.7x on long evidence, and 8-20x faster than SGLang's and vLLM's follow-ups. Its hits are bit-identical to
 recomputing the evidence.
@@ -368,7 +368,7 @@ Cost on requests that never reuse their evidence: measured in one process, two e
 cache off), requests interleaved so clock changes hit both alike (`bench/cache_cost.py`, 100 pairs): startlux3 +0.03 ms
 (+0.35%), startlux1 +0.07 ms (+0.8%), longpage2 +0.03 ms (+0.1%), the longest JevBench item 0.00 ms, a 480-token JevBench
 item +0.13 ms (+1.3%); readme3, yesno and review1 (evidence under 64 tokens, not cached) 0. The first-request column
-above differs more between the two flash-jev rows (54.1 against 50.7 ms; 55.2 in the cache-on run measured next to the
+above differs more between the two StartLux-Prism rows (54.1 against 50.7 ms; 55.2 in the cache-on run measured next to the
 cache-off one on 2026-10-09) because the runs held different clocks: that cache-on run alternated long and short
 requests and averaged 2.31 GHz, the cache-off run 2.61 GHz (NVML, recorded in `results/prefix/`). The standard suites
 (the first table) run with the cache on, within 2% of cache-off runs, 205/231.
@@ -381,7 +381,7 @@ With long evidence the KV rows run out first (23 entries of about 2,750 tokens i
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="images/rtx5090-9b-dark.svg">
-  <img src="images/rtx5090-9b.svg" width="760" alt="StartLux-Decision-9B on an RTX 5090. JevBench mean ms per item one request at a time, and requests per second from 32 clients: flash-jev int8 21.6 and 53.3; decider compile + FP8 50.3 and 22.6; flash-jev bf16 52.1 and 19.9; SGLang native 59.8 and 21.7; SGLang via adapter 62.1 and 20.5; StartLux-Decision server 71.2 and 14.2; JevK5 74.4 and 13.6; decider default 76.1 and 12.6; vLLM 84.9 and 18.9; llama.cpp 162.7 and 5.7.">
+  <img src="images/rtx5090-9b.svg" width="760" alt="StartLux-Decision-9B on an RTX 5090. JevBench mean ms per item one request at a time, and requests per second from 32 clients: StartLux-Prism int8 21.6 and 53.3; decider compile + FP8 50.3 and 22.6; StartLux-Prism bf16 52.1 and 19.9; SGLang native 59.8 and 21.7; SGLang via adapter 62.1 and 20.5; StartLux-Decision server 71.2 and 14.2; JevK5 74.4 and 13.6; decider default 76.1 and 12.6; vLLM 84.9 and 18.9; llama.cpp 162.7 and 5.7.">
 </picture>
 
 The same procedure on StartLux-Decision-v1-9B's Q8_0 GGUF (`StartLux-Decision-9B-Q8_0.gguf`, 9.53 GB, SHA-256
@@ -392,14 +392,14 @@ make the fp32 reference's decision on 23/23 questions, largest probability diffe
 gives the Triton kernel's bits on all 297 configs; prefix-cache hits are bit-identical), then `scripts/stress.sh` with
 the environment `scripts/prepare_model.sh` printed. Settings changed for 17.9 GB of bf16 weights: SGLang
 `--max-mamba-cache-size 96` (19 running requests; 160 does not fit), decider `DECIDER_GRAPH_TOKEN_BUDGET=16384` (its
-default, 32,768, runs out of memory in its warm-up). flash-jev's largest batch is 49,152 tokens with its prefix cache
+default, 32,768, runs out of memory in its warm-up). StartLux-Prism's largest batch is 49,152 tokens with its prefix cache
 and 65,536 without (the long-evidence runs). decider and JevK5 have no 9B checkpoints: stand-in weights only (speed;
 scores in parentheses). The model card gives 200/231 for this file.
 
 | engine | startlux3 | startlux1 | readme3 | yesno | longpage2 | wide33 | review1 | max req/s (c) | JevBench | JevBench mean / p50 / p95 |
 |---|---|---|---|---|---|---|---|---|---|---|
-| **flash-jev int8** (W8A8) | **15.50** | **14.27** | **10.75** | **7.71** | **36.50** | **17.87** | **7.80** | **182 (64)** | 200/231 | **21.6 / 8.0 / 76** |
-| flash-jev bf16 | 29.84 | 24.29 | 17.22 | 13.54 | 89.29 | 33.51 | 13.19 | 68 (64) | 201/231 | 52.1 / 12.8 / 210 |
+| **StartLux-Prism int8** (W8A8) | **15.50** | **14.27** | **10.75** | **7.71** | **36.50** | **17.87** | **7.80** | **182 (64)** | 200/231 | **21.6 / 8.0 / 76** |
+| StartLux-Prism bf16 | 29.84 | 24.29 | 17.22 | 13.54 | 89.29 | 33.51 | 13.19 | 68 (64) | 201/231 | 52.1 / 12.8 / 210 |
 | decider 1.9.0, compile + FP8, stand-in weights | 111.56 | 25.75 | 56.25 | 16.52 | 137.51 | 24.98 | 56.07 | 25 (16) | (202) | 50.3 / 23.8 / 164 |
 | SGLang 0.5.21 native `/v1/systemone` (bf16) | 73.98 | 35.84 | 37.49 | 25.24 | 185.24 | 45.08 | 25.71 | 45 (64) | 199/231 | 59.8 / 22.3 / 214 |
 | SGLang 0.5.21 (bf16, via adapter) | 81.50 | 34.92 | 46.22 | 22.20 | 185.09 | 57.06 | 26.30 | 39 (64) | 201/231 | 62.1 / 26.4 / 212 |
@@ -409,21 +409,21 @@ scores in parentheses). The model card gives 200/231 for this file.
 | vLLM 0.31 (bf16, via adapter) | 111.01 | 46.89 | 64.38 | 30.94 | 231.14 | 88.52 | 29.86 | 36 (16) | 201/231 | 84.9 / 38.6 / 271 |
 | llama.cpp b10639 (Q8_0) + StartLux GGUF server | 346.41 | 100.68 | 283.79 | 88.02 | 445.30 | 271.93 | 87.11 | 6 (16) | 200/231 | 162.7 / 95.7 / 399 |
 
-flash-jev int8 against the best other engine on each: startlux3 4.8x (74.0 ms, SGLang native), startlux1 1.8x (25.8,
+StartLux-Prism int8 against the best other engine on each: startlux3 4.8x (74.0 ms, SGLang native), startlux1 1.8x (25.8,
 decider compile+FP8), readme3 3.5x, yesno 2.1x, longpage2 3.8x, wide33 1.4x, review1 2.4x, throughput 4.0x (45, SGLang
 native), JevBench mean 2.3x (50.3, decider compile+FP8), p50 2.8x, p95 2.2x: further ahead than on the 4B, the larger
 projections being more of the work. Every engine that renders StartLux's prompts scores 200 or 201.
 
-Many clients at once (requests/s, p50 ms; no engine failed a request) and long evidence (the 4B's settings; flash-jev
+Many clients at once (requests/s, p50 ms; no engine failed a request) and long evidence (the 4B's settings; StartLux-Prism
 `--prefix-cache 0`):
 
 | engine | JevBench, 8 / 16 / 32 clients | 8k tokens, 8 / 16 / 32 clients | 8k: one at a time, 4 clients | 50k: one at a time |
 |---|---|---|---|---|
-| **flash-jev int8** | **53.2 (147) / 53.2 (298) / 53.3 (587)** | **4.07 / 4.02 / 4.01** | **244 ms, 4.05 req/s** | **2,582 ms** |
+| **StartLux-Prism int8** | **53.2 (147) / 53.2 (298) / 53.3 (587)** | **4.07 / 4.02 / 4.01** | **244 ms, 4.05 req/s** | **2,582 ms** |
 | decider 1.9.0, compile + FP8, stand-in | 24.1 / 23.8 / 22.6 | 2.25 / 2.24 / 2.23 | 458 ms, 2.23 req/s | 4,925 ms |
 | SGLang 0.5.21 native | 20.8 / 21.4 / 21.7 | - | - | - |
 | SGLang 0.5.21 (via adapter) | 19.9 / 20.4 / 20.5 | 1.69 / 1.68 / 1.67 | 603 ms, 1.68 req/s | 4,515 ms |
-| flash-jev bf16 | 19.9 / 20.0 / 19.9 | - | - | - |
+| StartLux-Prism bf16 | 19.9 / 20.0 / 19.9 | - | - | - |
 | vLLM 0.31 (via adapter) | 18.7 / 18.9 / 18.9 | 1.54 / 1.53 / 1.52 | 702 ms, 1.53 req/s | 5,039 ms |
 | StartLux-Decision server | 14.3 / 14.2 / 14.2 | 1.43 / 1.42 / 1.42 | 699 ms, 1.42 req/s | fails (as on the 4B) |
 | JevK5 0.3.3, stand-in | 13.7 / 13.6 / 13.6 | 1.45 / 1.43 / 1.43 | 690 ms, 1.44 req/s | 5,031 ms |
@@ -438,7 +438,7 @@ not fit; with FP8 weights it does.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="images/h200-27b-dark.svg">
-  <img src="images/h200-27b.svg" width="760" alt="StartLux-Decision-27B on an H200. JevBench mean ms per item one request at a time, and requests per second from 32 clients: flash-jev int8 41.0 and 30.6; decider compile + FP8 66.8 and 15.4; flash-jev bf16 68.2 and 16.7; SGLang native 90.1 and 18.8; SGLang via adapter 92.0 and 17.7; StartLux-Decision server 96.0 and 10.4; decider default 99.9 and 9.6; JevK5 101.1 and 9.9; vLLM 119.1 and 15.4; llama.cpp 589.2 and 1.4.">
+  <img src="images/h200-27b.svg" width="760" alt="StartLux-Decision-27B on an H200. JevBench mean ms per item one request at a time, and requests per second from 32 clients: StartLux-Prism int8 41.0 and 30.6; decider compile + FP8 66.8 and 15.4; StartLux-Prism bf16 68.2 and 16.7; SGLang native 90.1 and 18.8; SGLang via adapter 92.0 and 17.7; StartLux-Decision server 96.0 and 10.4; decider default 99.9 and 9.6; JevK5 101.1 and 9.9; vLLM 119.1 and 15.4; llama.cpp 589.2 and 1.4.">
 </picture>
 
 StartLux-Decision-v1-27B from its Q8_0 GGUF (`StartLux-Decision-27B-Q8_0.gguf`, 28.60 GB, SHA-256 `5868a8a2…`; the
@@ -449,7 +449,7 @@ folders; the converted bf16 checkpoint and its views as for the 9B (`scripts/pre
 needed the CUDA folder's `lib64 -> lib` link, as on the RTX 5090 server. decider and JevK5 have no 27B checkpoints:
 stand-in weights only (speed; scores in parentheses).
 
-flash-jev on Hopper (`docs/optimizations.md`, "H200"): its int8 GEMMs on warpgroup-MMA kernels with TMA and warp
+StartLux-Prism on Hopper (`docs/optimizations.md`, "H200"): its int8 GEMMs on warpgroup-MMA kernels with TMA and warp
 specialization (`csrc/w8a8_wgmma.cu`; 1,240-1,420 TOPS at 4,000-8,000 tokens) and a dispatch table measured on the
 H200 (`kernels/gemm_table_h200.json`), wider attention and linear-attention tiles than on the RTX 5090, int64 offsets
 for its 131,072-token batches; int8 calibration computed on the H200. Correctness there: int8 and bf16 make the fp32
@@ -459,9 +459,9 @@ Triton kernel's bits (915 configs), prefix-cache hits are bit-identical to misse
 
 | engine (27B Q8_0, H200) | startlux3 | startlux1 | readme3 | yesno | longpage2 | wide33 | review1 | max req/s (c) | JevBench | JevBench mean / p50 / p95 |
 |---|---|---|---|---|---|---|---|---|---|---|
-| **flash-jev int8** (W8A8) | **25.01** | **22.78** | **16.98** | **13.38** | **71.57** | **31.37** | **13.63** | **100 (64)** | 207/231 | **41.0 / 14.2 / 146** |
+| **StartLux-Prism int8** (W8A8) | **25.01** | **22.78** | **16.98** | **13.38** | **71.57** | **31.37** | **13.63** | **100 (64)** | 207/231 | **41.0 / 14.2 / 146** |
 | decider 1.9.0, compile + FP8, stand-in weights | 158.57 | 33.16 | 66.42 | 20.18 | 291.16 | 32.97 | 66.01 | 17 (64) | (206) | 66.8 / 26.2 / 222 |
-| flash-jev bf16 | 38.60 | 37.11 | 23.86 | 18.82 | 116.14 | 44.76 | 18.69 | 56 (64) | 209/231 | 68.2 / 19.4 / 267 |
+| StartLux-Prism bf16 | 38.60 | 37.11 | 23.86 | 18.82 | 116.14 | 44.76 | 18.69 | 56 (64) | 209/231 | 68.2 / 19.4 / 267 |
 | SGLang 0.5.21 native `/v1/systemone` (bf16) | 97.93 | 57.37 | 60.62 | 57.11 | 200.17 | 70.97 | 57.36 | 38 (64) | 211/231 | 90.1 / 57.7 / 244 |
 | SGLang 0.5.21 (bf16, via adapter) | 95.48 | 59.59 | 60.59 | 57.93 | 201.47 | 117.84 | 57.95 | 32 (64) | 209/231 | 92.0 / 58.8 / 247 |
 | StartLux-Decision server (bf16) | 108.23 | 52.20 | 50.61 | 29.92 | 296.70 | 77.80 | 30.19 | 19 (64) | 209/231 | 96.0 / 37.3 / 339 |
@@ -470,26 +470,26 @@ Triton kernel's bits (915 configs), prefix-cache hits are bit-identical to misse
 | vLLM 0.31 (bf16, via adapter) | 175.80 | 74.94 | 136.97 | 69.49 | 207.16 | 205.92 | 71.88 | 27 (64) | 209/231 | 119.1 / 72.3 / 305 |
 | llama.cpp b10639 (Q8_0) + StartLux GGUF server | 1308.49 | 363.70 | 1095.01 | 320.32 | 1675.92 | 1018.82 | 327.33 | 2 (16) | 209/231 | 589.2 / 359.6 / 1431 |
 
-flash-jev int8 against the best other engine on each: startlux3 3.8x (95.5 ms, SGLang), startlux1 1.5x (33.2, decider
+StartLux-Prism int8 against the best other engine on each: startlux3 3.8x (95.5 ms, SGLang), startlux1 1.5x (33.2, decider
 compile+FP8), readme3 3.0x (50.6, StartLux's server), yesno 1.5x (20.2), longpage2 2.8x (200.2, SGLang native), wide33
 1.05x (33.0, decider compile+FP8, which renders a shorter prompt), review1 2.2x (30.2), throughput 2.6x (38, SGLang
 native), JevBench mean 1.6x (66.8, decider compile+FP8), p50 1.8x, p95 1.5x. Its 207/231 is two hard items below the
-bf16 engines' 209 (the model card's): W8A8 on this model moves two near-ties; flash-jev bf16 scores 209.
+bf16 engines' 209 (the model card's): W8A8 on this model moves two near-ties; StartLux-Prism bf16 scores 209.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="images/h200-27b-long-dark.svg">
-  <img src="images/h200-27b-long.svg" width="760" alt="Long evidence, StartLux-Decision-27B on an H200, p50 ms at 8,000 and 50,000 tokens: flash-jev int8 432 and 3,693; decider compile + FP8 698 and 7,301; SGLang 704 and 4,936; vLLM 833 and 5,743; JevK5 847 and 5,783; StartLux-Decision server 870, fails at 50,000; decider default 1,062 and 6,779; llama.cpp 3,514 and 28,623.">
+  <img src="images/h200-27b-long.svg" width="760" alt="Long evidence, StartLux-Decision-27B on an H200, p50 ms at 8,000 and 50,000 tokens: StartLux-Prism int8 432 and 3,693; decider compile + FP8 698 and 7,301; SGLang 704 and 4,936; vLLM 833 and 5,743; JevK5 847 and 5,783; StartLux-Decision server 870, fails at 50,000; decider default 1,062 and 6,779; llama.cpp 3,514 and 28,623.">
 </picture>
 
 Many clients at once (requests/s, p50 ms; no engine failed a request) and long evidence (every engine with the 4B's
-long-context settings; flash-jev with its prefix cache):
+long-context settings; StartLux-Prism with its prefix cache):
 
 | engine | JevBench, 8 / 16 / 32 clients | 8k tokens, 8 / 16 / 32 clients | 8k: one at a time, 4 clients | 50k: one at a time |
 |---|---|---|---|---|
-| **flash-jev int8** | **29.1 (257) / 29.8 (545) / 30.6 (968)** | **2.33 / 2.34 / 2.33** | **432 ms, 2.32 req/s** | **3,693 ms** |
+| **StartLux-Prism int8** | **29.1 (257) / 29.8 (545) / 30.6 (968)** | **2.33 / 2.34 / 2.33** | **432 ms, 2.32 req/s** | **3,693 ms** |
 | SGLang 0.5.21 native | 16.3 / 18.0 / 18.8 | - | - | - |
 | SGLang 0.5.21 (via adapter) | 15.8 / 17.2 / 17.7 | 1.35 / 1.47 / 1.47 | 704 ms, 1.37 req/s | 4,936 ms |
-| flash-jev bf16 | 16.1 / 16.3 / 16.7 | - | - | - |
+| StartLux-Prism bf16 | 16.1 / 16.3 / 16.7 | - | - | - |
 | decider 1.9.0, compile + FP8, stand-in | 15.9 / 16.0 / 15.4 | 1.35 / 1.42 / 1.43 | 698 ms, 1.18 req/s | 7,301 ms |
 | vLLM 0.31 (via adapter) | 14.2 / 15.1 / 15.4 | 1.26 / 1.26 / 1.26 | 833 ms, 1.26 req/s | 5,743 ms |
 | StartLux-Decision server | 10.4 / 10.4 / 10.4 | 1.15 / 1.14 / 1.14 | 870 ms, 1.15 req/s | fails (as on the 4B) |
@@ -499,17 +499,17 @@ long-context settings; flash-jev with its prefix cache):
 
 JevBench from 32 clients: 1.6x the next best (SGLang native); 8k-token requests from 32 clients: 1.6x (SGLang); one
 8k request 1.6x faster than the next (decider compile+FP8, SGLang), a 50k one 1.3x (SGLang, with FlashAttention 3:
-attention is most of a 50k pass). With the RTX 5090's attention tiles (a first flash-jev run the same day; its files
+attention is most of a 50k pass). With the RTX 5090's attention tiles (a first StartLux-Prism run the same day; its files
 in `results/h200_attn32/`) the 50k request took 5,642 ms, behind SGLang, and 8k 482 ms; JevBench and the other suites
 within 1-3% of the table's.
 
-**The Q4_K_M file on the H200** (16.55 GB): flash-jev on its own 4-bit weights (W4A8), and requantized at start-up to
+**The Q4_K_M file on the H200** (16.55 GB): StartLux-Prism on its own 4-bit weights (W4A8), and requantized at start-up to
 the int8 path's per-row W8A8 (`--precision int8` on the same file); llama.cpp on the file:
 
 | engine (27B Q4_K_M, H200) | startlux3 | yesno | longpage2 | max req/s (c) | JevBench | JevBench mean / p50 / p95 | JevBench, 8 / 16 / 32 clients | 8k: alone, 8-32 clients | 50k alone |
 |---|---|---|---|---|---|---|---|---|---|
-| **flash-jev W4A8** | **91.49** | **42.58** | **270.93** | **25 (64)** | 207/231 | **155.2 / 43.8 / 571** | **7.2 / 7.4 / 7.5** | **1,711 ms, 0.59 req/s** | **11,446 ms** |
-| flash-jev, requantized to per-row W8A8 | 25.11 | 13.40 | 71.65 | 100 (64) | 207/231 | 41.1 / 14.0 / 147 | - | - | - |
+| **StartLux-Prism W4A8** | **91.49** | **42.58** | **270.93** | **25 (64)** | 207/231 | **155.2 / 43.8 / 571** | **7.2 / 7.4 / 7.5** | **1,711 ms, 0.59 req/s** | **11,446 ms** |
+| StartLux-Prism, requantized to per-row W8A8 | 25.11 | 13.40 | 71.65 | 100 (64) | 207/231 | 41.1 / 14.0 / 147 | - | - | - |
 | llama.cpp b10639 | 1381.20 | 330.66 | 1811.97 | 2 (4) | 207/231 | 626.7 / 374.2 / 1564 | 1.4 / 1.4 / 1.3 | 3,946 ms, 0.25 req/s | 29,941 ms |
 
 W4A8 against llama.cpp on the same file: JevBench mean 4.0x, p50 8.5x, 5.0-5.6x its rate from 8-32 clients, 8k and 50k
@@ -521,28 +521,28 @@ mma.sync (200-300 TOPS against the int8 path's 1,250 on wgmma: `docs/optimizatio
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="images/q4km-dark.svg">
-  <img src="images/q4km.svg" width="760" alt="Q4_K_M files, JevBench mean ms per item, flash-jev W4A8 against llama.cpp on the same file: 4B on an RTX 5090 19.7 against 135.8; 9B on an RTX 5090 32.1 against 160.3; 27B on an RTX 5090 112.7 against 439.3; 27B on an H200 155.2 against 626.7.">
+  <img src="images/q4km.svg" width="760" alt="Q4_K_M files, JevBench mean ms per item, StartLux-Prism W4A8 against llama.cpp on the same file: 4B on an RTX 5090 19.7 against 135.8; 9B on an RTX 5090 32.1 against 160.3; 27B on an RTX 5090 112.7 against 439.3; 27B on an H200 155.2 against 626.7.">
 </picture>
 
 StartLux-Decision-v1's Q4_K_M GGUFs (`StartLux-Decision-4B-Q4_K_M.gguf` 2.71 GB, `-9B-Q4_K_M.gguf` 5.63 GB,
 `-27B-Q4_K_M.gguf` 16.55 GB; Q4_K with Q6_K for some tensors) run on
-flash-jev's W4A8 path (`--precision auto` picks it for a k-quant file): the file's Q4_K / Q6_K values as they are, int8
-activations with one scale per 256 inputs, int8 tensor cores (`flash_jev/kernels/w4a8.py`, `csrc/w4a8_gemm.cu`; how and
+StartLux-Prism's W4A8 path (`--precision auto` picks it for a k-quant file): the file's Q4_K / Q6_K values as they are, int8
+activations with one scale per 256 inputs, int8 tensor cores (`startlux_prism/kernels/w4a8.py`, `csrc/w4a8_gemm.cu`; how and
 why: `docs/optimizations.md`). Requantizing the 4-bit weights to the int8 path's per-row W8A8 instead (the first way
 tried) gave the 4B 198/231: a second quantization on top of the 4-bit one. llama.cpp runs the same file (`-c 16384
 --parallel 4`, its model card's settings). p50 ms at concurrency 1, as the first table; RTX 5090, 2026-10-11:
 
 | engine (on the Q4_K_M file) | startlux3 | startlux1 | readme3 | yesno | longpage2 | wide33 | review1 | max req/s (c) | JevBench | JevBench mean / p50 / p95 |
 |---|---|---|---|---|---|---|---|---|---|---|
-| **4B: flash-jev W4A8** | **14.15** | **12.01** | **8.75** | **5.88** | **33.53** | **15.57** | **6.19** | **198 (64)** | **201/231** | **19.7 / 6.6 / 72** |
-| 4B: flash-jev bf16 (dequantized) | 18.94 | 16.14 | 11.55 | 9.01 | 50.39 | 20.48 | 8.88 | 126 (64) | 202/231 | 29.6 / 8.8 / 115 |
-| 4B: flash-jev, requantized to per-row W8A8 | 10.09 | 9.42 | 6.51 | 5.19 | 24.24 | 12.12 | 5.30 | 295 (64) | 198/231 | 15.4 / 5.5 / 54 |
+| **4B: StartLux-Prism W4A8** | **14.15** | **12.01** | **8.75** | **5.88** | **33.53** | **15.57** | **6.19** | **198 (64)** | **201/231** | **19.7 / 6.6 / 72** |
+| 4B: StartLux-Prism bf16 (dequantized) | 18.94 | 16.14 | 11.55 | 9.01 | 50.39 | 20.48 | 8.88 | 126 (64) | 202/231 | 29.6 / 8.8 / 115 |
+| 4B: StartLux-Prism, requantized to per-row W8A8 | 10.09 | 9.42 | 6.51 | 5.19 | 24.24 | 12.12 | 5.30 | 295 (64) | 198/231 | 15.4 / 5.5 / 54 |
 | 4B: llama.cpp b10639 | 315.20 | 89.56 | 267.24 | 83.96 | 379.43 | 256.08 | 82.10 | 7 (4) | 201/231 | 135.8 / 89.3 / 322 |
 | 4B: SGLang 0.5.21 GGUF (its dp4a kernels) | 329.05 | 129.02 | 141.18 | 57.70 | 786.97 | 186.52 | 63.23 | 9 (64) | 200/231 | 249.8 / 73.8 / 959 |
-| **9B: flash-jev W4A8** | **21.48** | **16.52** | **13.29** | **10.57** | **56.53** | **22.29** | **10.25** | **117 (64)** | **200/231** | **32.1 / 10.0 / 117** |
-| 9B: flash-jev, requantized to per-row W8A8 | 15.50 | 14.36 | 10.75 | 7.69 | 36.48 | 17.71 | 7.68 | 183 (64) | 201/231 | 21.7 / 7.9 / 76 |
+| **9B: StartLux-Prism W4A8** | **21.48** | **16.52** | **13.29** | **10.57** | **56.53** | **22.29** | **10.25** | **117 (64)** | **200/231** | **32.1 / 10.0 / 117** |
+| 9B: StartLux-Prism, requantized to per-row W8A8 | 15.50 | 14.36 | 10.75 | 7.69 | 36.48 | 17.71 | 7.68 | 183 (64) | 201/231 | 21.7 / 7.9 / 76 |
 | 9B: llama.cpp b10639 | 345.94 | 100.67 | 283.17 | 86.07 | 453.34 | 270.71 | 86.46 | 6 (4) | 200/231 | 160.3 / 94.1 / 403 |
-| **27B: flash-jev W4A8** | **67.36** | **61.59** | **42.52** | **28.91** | **202.00** | **74.97** | **29.40** | **32 (64)** | **207/231** | **112.7 / 34.8 / 418** |
+| **27B: StartLux-Prism W4A8** | **67.36** | **61.59** | **42.52** | **28.91** | **202.00** | **74.97** | **29.40** | **32 (64)** | **207/231** | **112.7 / 34.8 / 418** |
 | 27B: llama.cpp b10639 | 970.57 | 282.29 | 789.26 | 241.74 | 1249.94 | 763.35 | 246.71 | 2 (4) | 206/231 | 439.3 / 270.2 / 1091 |
 
 The model cards give 201/231 for the 4B and 9B files (llama.cpp) and 208 for the 27B's. W4A8 scores 201, 200 and 207
@@ -565,14 +565,14 @@ answers bit-identical before and after). Every engine on the 27B, Q8_0 and Q4_K_
 [the H200 section](#startlux-decision-v1-27b-on-an-h200).
 
 **Under stress** (`scripts/stress.sh` steps 1-5 on the 4B and 9B Q4_K_M files, 2026-10-11:
-`ENGINES="flash-jev-w4a8 llamacpp"`, `STRESS_PREC=w4a8 FLASHJEV_PREC=w4a8 MAXCTX_ENGINES=flash-jev`; requests/s, p50 ms in
+`ENGINES="startlux-prism-w4a8 llamacpp"`, `STRESS_PREC=w4a8 STARTLUX_PRISM_PREC=w4a8 MAXCTX_ENGINES=StartLux-Prism`; requests/s, p50 ms in
 brackets):
 
 | on the Q4_K_M file | JevBench c=8 | c=16 | c=32 | score per pass (c=32) | 8k c=8 | c=16 | c=32 | 8k alone p50 | 50k alone p50 |
 |---|---|---|---|---|---|---|---|---|---|
-| **4B: flash-jev W4A8** | **59.0 (134)** | **59.1 (269)** | **58.4 (530)** | 201/202/202 | **4.34 (1845)** | **4.29 (3728)** | **4.27 (7485)** | **231** | **2,322** |
+| **4B: StartLux-Prism W4A8** | **59.0 (134)** | **59.1 (269)** | **58.4 (530)** | 201/202/202 | **4.34 (1845)** | **4.29 (3728)** | **4.27 (7485)** | **231** | **2,322** |
 | 4B: llama.cpp b10639 | 6.6 (1160) | 6.6 (2395) | 6.5 (4800) | 199/200/199 | 1.35 (4412) | 1.33 (10384) | 1.33 (21910) | 746 | 5,493 |
-| **9B: flash-jev W4A8** | **34.5 (221)** | **34.7 (465)** | **34.6 (936)** | 200/200/200 | **2.70 (2960)** | **2.67 (5989)** | **2.66 (12019)** | **369** | **3,209** |
+| **9B: StartLux-Prism W4A8** | **34.5 (221)** | **34.7 (465)** | **34.6 (936)** | 200/200/200 | **2.70 (2960)** | **2.67 (5989)** | **2.66 (12019)** | **369** | **3,209** |
 | 9B: llama.cpp b10639 | 6.2 (1209) | 6.3 (2519) | 6.3 (5043) | 199/199/199 | 1.07 (5586) | 1.05 (13177) | 1.05 (27662) | 948 | 6,536 |
 
 W4A8 serves JevBench at 9x (4B) and 5.5x (9B) llama.cpp's rate and 8k-token requests at 3.2x and 2.5x; every token of
@@ -587,7 +587,7 @@ no GGUF tensor-name map for Qwen3.5 (`Unknown gguf model_type: qwen3_5_text`); a
 llama.cpp's converted tensors as they are (norms + 1, -exp(A_log), the linear-attention value heads in tiled order),
 could not load in_proj_qkv as three shards of a GGUF parameter, and would drop the 9B's untied output head.
 `bench/adapters/sglang_gguf.py` supplies these at load time without changing SGLang (llama.cpp's conversion undone as in
-`flash_jev/tools/gguf_to_hf.py`; the quantized tensors' rows reordered, never requantized; ssm_out's input permuted
+`startlux_prism/tools/gguf_to_hf.py`; the quantized tensors' rows reordered, never requantized; ssm_out's input permuted
 instead of its columns), and `scripts/compare.sh sglang-gguf` runs it with the `sglang` flags. On the 4B it scores
 200/231, which checks the loading, and is 6.2x slower than SGLang on the bf16 checkpoint (JevBench mean 249.8 ms against
 40.1) and 12.7x slower than W4A8: its Q4_K and Q6_K MMQ kernels have no tensor-core instructions on sm_120 (64 dp4a per
@@ -598,7 +598,7 @@ shard. The 9B did not start: its launches died at random ([Crashes](#crashes-on-
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="images/max-context-dark.svg">
-  <img src="images/max-context.svg" width="760" alt="The longest request in one pass without chunked prefill, seconds per request. StartLux-Decision-4B on an RTX 5090 at 16k, 32k, 48k, 64k and 96k tokens: flash-jev int8 0.38, 0.98, 1.81, 2.86 and 5.57; SGLang 0.69, 1.56, 2.56, 3.74, out of memory at 96k. StartLux-Decision-27B on an H200 at 16k to 128k: flash-jev int8 0.91, 2.05, 3.46, 5.12, 9.23, 14.2; SGLang 1.42, 2.98, 4.70, 6.61, 10.8, 15.7.">
+  <img src="images/max-context.svg" width="760" alt="The longest request in one pass without chunked prefill, seconds per request. StartLux-Decision-4B on an RTX 5090 at 16k, 32k, 48k, 64k and 96k tokens: StartLux-Prism int8 0.38, 0.98, 1.81, 2.86 and 5.57; SGLang 0.69, 1.56, 2.56, 3.74, out of memory at 96k. StartLux-Decision-27B on an H200 at 16k to 128k: StartLux-Prism int8 0.91, 2.05, 3.46, 5.12, 9.23, 14.2; SGLang 1.42, 2.98, 4.70, 6.61, 10.8, 15.7.">
 </picture>
 
 `scripts/max_context.sh`: one request at a time at 16k, 32k, 48k, 64k, 96k, 128k, 192k and 256k tokens until one
@@ -608,8 +608,8 @@ fails, each engine computing the whole prompt in one forward pass (p50 ms of one
 
 | engine | 16k | 32k | 48k | 64k | 96k | longest |
 |---|---|---|---|---|---|---|
-| flash-jev int8 (default: prefix cache on) | 379 | 980 | 1,812 | 2,870 | refused (HTTP 422) | 65,536 tokens (its largest batch) |
-| flash-jev int8, `--prefix-cache 0` | 377 | 978 | 1,814 | 2,861 | 5,567 | 98,304 tokens |
+| StartLux-Prism int8 (default: prefix cache on) | 379 | 980 | 1,812 | 2,870 | refused (HTTP 422) | 65,536 tokens (its largest batch) |
+| StartLux-Prism int8, `--prefix-cache 0` | 377 | 978 | 1,814 | 2,861 | 5,567 | 98,304 tokens |
 | SGLang 0.5.21, `--chunked-prefill-size -1` | - | - | - | - | - | does not start (below) |
 | SGLang, the same with `--mem-fraction-static 0.6 --max-mamba-cache-size 16` | 692 | 1,562 | 2,559 | 3,741 | out of memory | between 64k and 96k |
 | vLLM 0.31, `--no-enable-chunked-prefill` | - | - | - | - | - | does not start (below) |
@@ -618,27 +618,27 @@ SGLang without chunking sizes its memory for one pass over its whole context (26
 KV cache nothing ("raise --mem-fraction-static above 0.264"); with the static fraction lowered by hand it reaches 64k.
 vLLM refuses this model without chunked prefill ("Chunked prefill is required for mamba cache mode 'align'"). With their
 default chunked prefill both reach the model's 262,144 tokens: one 256,000-token request took 33.9 s on SGLang and
-38.2 s on vLLM. flash-jev computes a request in one pass by design (a CUDA graph per batch size); its largest batch
+38.2 s on vLLM. StartLux-Prism computes a request in one pass by design (a CUDA graph per batch size); its largest batch
 comes from GPU memory (README, Serving), and a longer request is refused, never cut.
 
 **StartLux-Decision-v1-27B (`StartLux-Decision-27B-Q8_0.gguf`, W4A8: `-Q4_K_M.gguf`) on the H200:**
 
 | engine (27B Q8_0, H200) | 16k | 32k | 48k | 64k | 96k | 128k | longest |
 |---|---|---|---|---|---|---|---|
-| **flash-jev int8** (prefix cache on; off: within 1%) | **910** | **2,047** | **3,460** | **5,120** | **9,234** | **14,205** | 131,072 tokens (its largest batch) |
+| **StartLux-Prism int8** (prefix cache on; off: within 1%) | **910** | **2,047** | **3,460** | **5,120** | **9,234** | **14,205** | 131,072 tokens (its largest batch) |
 | SGLang 0.5.21, `--chunked-prefill-size -1` | 1,424 | 2,984 | 4,697 | 6,605 | 10,821 | 15,705 | between 128k and 192k (out of memory) |
 | SGLang, the same with `--mem-fraction-static 0.6 --max-mamba-cache-size 16` | 1,427 | 2,990 | 4,714 | 6,604 | 10,835 | 15,682 | between 128k and 192k |
 | vLLM 0.31, `--no-enable-chunked-prefill` | - | - | - | - | - | - | does not start (as on the 4B) |
-| flash-jev W4A8 (Q4_K_M) | 3,422 | 7,054 | 10,924 | 15,045 | 24,069 | 34,054 | 131,072 tokens |
+| StartLux-Prism W4A8 (Q4_K_M) | 3,422 | 7,054 | 10,924 | 15,045 | 24,069 | 34,054 | 131,072 tokens |
 
-flash-jev int8 is 1.56x SGLang at 16k and 1.11x at 128k (attention, quadratic in the length, takes over; SGLang's is
+StartLux-Prism int8 is 1.56x SGLang at 16k and 1.11x at 128k (attention, quadratic in the length, takes over; SGLang's is
 FlashAttention 3). With the RTX 5090's attention tiles it took 29.2 s at 128k. With their default chunked prefill
-SGLang and vLLM answer a 256,000-token request in 41.7 s and 45.9 s; flash-jev refuses anything beyond its largest
+SGLang and vLLM answer a 256,000-token request in 41.7 s and 45.9 s; StartLux-Prism refuses anything beyond its largest
 batch (HTTP 422), never cuts it.
 
 ## Accuracy: StartLux-Decision-v1's evaluation
 
-Does flash-jev's speed cost accuracy? StartLux-Decision-v1's own evaluation, unchanged (`eval/suites.py` of
+Does StartLux-Prism's speed cost accuracy? StartLux-Decision-v1's own evaluation, unchanged (`eval/suites.py` of
 [StartLuxLabs/StartLux-Decision-v1](https://github.com/StartLuxLabs/StartLux-Decision-v1), byte-identical to its main
 branch on 2026-10-13): the seven accuracy suites of the Intern-Decision bundle (InternLM/Intern-Decision @ 2f81580: the
 three public JevBench tiers, Typed Decisions test, ToolACE test, AG News test and WildJailBreak test; 10,751 rows,
@@ -648,7 +648,7 @@ distribution; its own scorer, expected Brier and ECE). Every engine through its 
 (`suites.py predict --endpoint`), on the RTX 5090, 2026-10-13. The reference is StartLux-Decision's own server
 (`startlux_decision.server`, the implementation the published numbers come from) on the same GPU, the same weights
 (bf16, converted from the same Q8_0 file) and the same client. It reproduces StartLux's published averages: 91.15 for the
-4B (published 91.17; StartLux's own rerun gives 91.15) and 91.06 for the 9B (91.08). flash-jev int8 also ran from 8
+4B (published 91.17; StartLux's own rerun gives 91.15) and 91.06 for the 9B (91.08). StartLux-Prism int8 also ran from 8
 clients at once.
 
 ### StartLux-Decision-v1-4B (RTX 5090)
@@ -656,46 +656,46 @@ clients at once.
 | engine | Easy | Original | Hard | Typed | ToolACE | AG News | WildJB | Average | JevBench public | Brier (Hard) | ECE (Hard) | pilot Brier | pilot ECE |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 | StartLux-Decision server (reference) | 100.00 | 100.00 | 75.68 | 79.95 | 94.19 | 90.83 | 97.38 | **91.15** | 204 | 0.3747 | 0.1074 | 0.4991 | 0.0584 |
-| flash-jev int8 | 100.00 | 100.00 | 76.58 | 79.30 | 94.19 | 90.74 | 97.19 | **91.14** | 205 | 0.3740 | 0.1153 | 0.4998 | 0.0615 |
-| flash-jev int8, 8 clients at once | 100.00 | 100.00 | 76.58 | 79.30 | 94.19 | 90.74 | 97.19 | **91.14** | 205 | 0.3740 | 0.1153 | 0.4998 | 0.0615 |
-| flash-jev bf16 | 100.00 | 100.00 | 76.58 | 79.80 | 94.19 | 90.82 | 97.42 | **91.26** | 205 | 0.3755 | 0.1034 | 0.4994 | 0.0585 |
-| flash-jev W4A8 (Q4_K_M file) | 100.00 | 100.00 | 72.97 | 78.90 | 93.55 | 90.95 | 96.88 | **90.46** | 201 | 0.3712 | 0.1024 | 0.4930 | 0.0568 |
+| StartLux-Prism int8 | 100.00 | 100.00 | 76.58 | 79.30 | 94.19 | 90.74 | 97.19 | **91.14** | 205 | 0.3740 | 0.1153 | 0.4998 | 0.0615 |
+| StartLux-Prism int8, 8 clients at once | 100.00 | 100.00 | 76.58 | 79.30 | 94.19 | 90.74 | 97.19 | **91.14** | 205 | 0.3740 | 0.1153 | 0.4998 | 0.0615 |
+| StartLux-Prism bf16 | 100.00 | 100.00 | 76.58 | 79.80 | 94.19 | 90.82 | 97.42 | **91.26** | 205 | 0.3755 | 0.1034 | 0.4994 | 0.0585 |
+| StartLux-Prism W4A8 (Q4_K_M file) | 100.00 | 100.00 | 72.97 | 78.90 | 93.55 | 90.95 | 96.88 | **90.46** | 201 | 0.3712 | 0.1024 | 0.4930 | 0.0568 |
 | StartLux-Decision-v1-4B, published (original weights) | 100.00 | 100.00 | 75.68 | 79.95 | 94.19 | 90.91 | 97.47 | 91.17 | | | | | |
 
 | engine, against | decisions | same decision | right → wrong | wrong → right | mean / max abs. probability difference | bit-identical |
 |---|---|---|---|---|---|---|
-| flash-jev int8, against StartLux-Decision server (reference) | 12,351 | 12,223 (98.96%) | 70 | 47 | 0.0055 / 0.235 | 0 |
-| flash-jev int8, 8 clients at once, against StartLux-Decision server (reference) | 12,351 | 12,223 (98.96%) | 70 | 47 | 0.0055 / 0.235 | 0 |
-| flash-jev bf16, against StartLux-Decision server (reference) | 12,351 | 12,330 (99.83%) | 11 | 9 | 0.0008 / 0.026 | 0 |
-| flash-jev W4A8 (Q4_K_M file), against StartLux-Decision server (reference) | 12,351 | 12,111 (98.06%) | 127 | 99 | 0.0098 / 0.423 | 0 |
-| flash-jev int8, 8 clients at once, against flash-jev int8 | 12,351 | 12,351 (100.00%) | 0 | 0 | 0.0000 / 0.000 | 12,351 |
+| StartLux-Prism int8, against StartLux-Decision server (reference) | 12,351 | 12,223 (98.96%) | 70 | 47 | 0.0055 / 0.235 | 0 |
+| StartLux-Prism int8, 8 clients at once, against StartLux-Decision server (reference) | 12,351 | 12,223 (98.96%) | 70 | 47 | 0.0055 / 0.235 | 0 |
+| StartLux-Prism bf16, against StartLux-Decision server (reference) | 12,351 | 12,330 (99.83%) | 11 | 9 | 0.0008 / 0.026 | 0 |
+| StartLux-Prism W4A8 (Q4_K_M file), against StartLux-Decision server (reference) | 12,351 | 12,111 (98.06%) | 127 | 99 | 0.0098 / 0.423 | 0 |
+| StartLux-Prism int8, 8 clients at once, against StartLux-Prism int8 | 12,351 | 12,351 (100.00%) | 0 | 0 | 0.0000 / 0.000 | 12,351 |
 
 ### StartLux-Decision-v1-9B (RTX 5090)
 
 | engine | Easy | Original | Hard | Typed | ToolACE | AG News | WildJB | Average | JevBench public | Brier (Hard) | ECE (Hard) | pilot Brier | pilot ECE |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 | StartLux-Decision server (reference) | 100.00 | 97.22 | 74.77 | 81.35 | 94.84 | 91.99 | 97.24 | **91.06** | 201 | 0.3563 | 0.0785 | 0.4774 | 0.0376 |
-| flash-jev int8 | 100.00 | 95.83 | 74.77 | 81.35 | 94.52 | 91.91 | 97.19 | **90.80** | 200 | 0.3555 | 0.0905 | 0.4762 | 0.0299 |
-| flash-jev bf16 | 100.00 | 97.22 | 74.77 | 81.30 | 94.84 | 92.00 | 97.24 | **91.05** | 201 | 0.3566 | 0.0787 | 0.4774 | 0.0380 |
-| flash-jev W4A8 (Q4_K_M file) | 100.00 | 97.22 | 73.87 | 80.45 | 95.16 | 92.05 | 97.10 | **90.84** | 200 | 0.3571 | 0.0770 | 0.4784 | 0.0360 |
+| StartLux-Prism int8 | 100.00 | 95.83 | 74.77 | 81.35 | 94.52 | 91.91 | 97.19 | **90.80** | 200 | 0.3555 | 0.0905 | 0.4762 | 0.0299 |
+| StartLux-Prism bf16 | 100.00 | 97.22 | 74.77 | 81.30 | 94.84 | 92.00 | 97.24 | **91.05** | 201 | 0.3566 | 0.0787 | 0.4774 | 0.0380 |
+| StartLux-Prism W4A8 (Q4_K_M file) | 100.00 | 97.22 | 73.87 | 80.45 | 95.16 | 92.05 | 97.10 | **90.84** | 200 | 0.3571 | 0.0770 | 0.4784 | 0.0360 |
 | StartLux-Decision-v1-9B, published (original weights) | 100.00 | 97.22 | 74.77 | 81.45 | 94.84 | 91.97 | 97.33 | 91.08 | | | | | |
 
 | engine, against | decisions | same decision | right → wrong | wrong → right | mean / max abs. probability difference | bit-identical |
 |---|---|---|---|---|---|---|
-| flash-jev int8, against StartLux-Decision server (reference) | 12,351 | 12,261 (99.27%) | 49 | 40 | 0.0041 / 0.306 | 0 |
-| flash-jev bf16, against StartLux-Decision server (reference) | 12,351 | 12,339 (99.90%) | 6 | 6 | 0.0006 / 0.032 | 0 |
-| flash-jev W4A8 (Q4_K_M file), against StartLux-Decision server (reference) | 12,351 | 12,191 (98.70%) | 84 | 68 | 0.0078 / 0.744 | 0 |
+| StartLux-Prism int8, against StartLux-Decision server (reference) | 12,351 | 12,261 (99.27%) | 49 | 40 | 0.0041 / 0.306 | 0 |
+| StartLux-Prism bf16, against StartLux-Decision server (reference) | 12,351 | 12,339 (99.90%) | 6 | 6 | 0.0006 / 0.032 | 0 |
+| StartLux-Prism W4A8 (Q4_K_M file), against StartLux-Decision server (reference) | 12,351 | 12,191 (98.70%) | 84 | 68 | 0.0078 / 0.744 | 0 |
 
 ### StartLux-Decision-v1-27B, its Q4_K_M file (RTX 5090)
 
-The 27B's Q8_0 file and its bf16 weights do not fit the RTX 5090, so neither flash-jev int8 nor the reference server runs it there: the Q4_K_M file on W4A8 against StartLux's published rows. (The int8 path and the reference on the 27B need the H200; its GPUs were all in use on 2026-10-13.)
+The 27B's Q8_0 file and its bf16 weights do not fit the RTX 5090, so neither StartLux-Prism int8 nor the reference server runs it there: the Q4_K_M file on W4A8 against StartLux's published rows. (The int8 path and the reference on the 27B need the H200; its GPUs were all in use on 2026-10-13.)
 
 | engine | Easy | Original | Hard | Typed | ToolACE | AG News | WildJB | Average | JevBench public | Brier (Hard) | ECE (Hard) | pilot Brier | pilot ECE |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| flash-jev W4A8 (Q4_K_M file) | 100.00 | 97.22 | 80.18 | 80.70 | 94.84 | 90.97 | 98.37 | **91.76** | 207 | 0.2548 | 0.1020 | 0.4826 | 0.0725 |
+| StartLux-Prism W4A8 (Q4_K_M file) | 100.00 | 97.22 | 80.18 | 80.70 | 94.84 | 90.97 | 98.37 | **91.76** | 207 | 0.2548 | 0.1020 | 0.4826 | 0.0725 |
 | StartLux-Decision-v1-27B, published (original weights) | 100.00 | 100.00 | 79.28 | 80.20 | 94.52 | 90.57 | 98.19 | 91.82 | | | | | |
 
-Per suite, flash-jev int8 against the reference (same decision; right → wrong / wrong → right):
+Per suite, StartLux-Prism int8 against the reference (same decision; right → wrong / wrong → right):
 
 | suite | decisions | 4B | 9B |
 |---|---|---|---|
@@ -733,7 +733,7 @@ folder its `eval/fetch_benchmarks.sh` fills), then `python bench/accuracy_tables
 StartLux-Decision-v1.1-27B-AutoThink from its Q8_0 GGUF (`StartLux-Decision-v1.1-27B-AutoThink-Q8_0.gguf`, 28.60 GB,
 SHA-256 `28757be9a8fae5253201edd155e553e7a7324d9f1130ad20ac1009780d90659d`, the release on Hugging Face), int8
 calibration computed on the first start, on one H200 of a second 8-GPU H200 server (the same driver and software as the
-first), 2026-10-13. flash-jev thinks as StartLux-Decision v1.1's package does: a thought when the first read-out's top
+first), 2026-10-13. StartLux-Prism thinks as StartLux-Decision v1.1's package does: a thought when the first read-out's top
 probability is below 0.9 (sampled at temperature 0.6, top-k 20, top-p 0.95, at most 4,096 tokens), a second read-out
 after it, the two mixed 0.25 / 0.75; `think_mode` "never" is the one-pass answer.
 
@@ -774,17 +774,17 @@ per step at 512 tokens, 20.1 at 4,096, where attention and the recurrent states'
 
 ## StartLux-Decision v1.1 27B AutoThink against its official engine
 
-flash-jev against Startlux-decide-inference, StartLux-Decision v1.1's own package and server (`startlux-decide`), on
+StartLux-Prism against Startlux-decide-inference, StartLux-Decision v1.1's own package and server (`startlux-decide`), on
 one 8-GPU H200 server, one GPU per server, 2026-10-13/14. Other users' jobs ran on two other GPUs of the server meanwhile.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="images/v11-official-latency-dark.svg">
-  <img src="images/v11-official-latency.svg" width="840" alt="Mean ms per request, one at a time: one yes/no question of about 256 tokens, flash-jev int8 19.0, official engine FP8 53.1, BF16 54.2; about 8,192 tokens, 439.8, 531.2, 728.8; the official README's three questions, 17.4, 92.9, 93.1.">
+  <img src="images/v11-official-latency.svg" width="840" alt="Mean ms per request, one at a time: one yes/no question of about 256 tokens, StartLux-Prism int8 19.0, official engine FP8 53.1, BF16 54.2; about 8,192 tokens, 439.8, 531.2, 728.8; the official README's three questions, 17.4, 92.9, 93.1.">
 </picture>
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="images/v11-official-throughput-dark.svg">
-  <img src="images/v11-official-throughput.svg" width="840" alt="JevBench requests per second: read-outs from one client, flash-jev int8 24.2, official engine FP8 12.1, BF16 10.6; read-outs from 64 clients, 30.7, 26.3, 18.3; with thoughts from 64 clients, 7.61, 6.52, 5.89.">
+  <img src="images/v11-official-throughput.svg" width="840" alt="JevBench requests per second: read-outs from one client, StartLux-Prism int8 24.2, official engine FP8 12.1, BF16 10.6; read-outs from 64 clients, 30.7, 26.3, 18.3; with thoughts from 64 clients, 7.61, 6.52, 5.89.">
 </picture>
 
 **The servers:**
@@ -799,15 +799,15 @@ one 8-GPU H200 server, one GPU per server, 2026-10-13/14. Other users' jobs ran 
   - FP8: the same server with `--quantization fp8`.
   - No MTP: the folder's config declares one MTP layer, but the release ships no `mtp.*` tensors, so the launcher
     turns MTP speculative decoding off ("no MTP (the folder holds no MTP weights)").
-- **flash-jev int8:** the Q8_0 GGUF release (SHA-256 `28757be9...`, the same file as above) with its mmproj, server
+- **StartLux-Prism int8:** the Q8_0 GGUF release (SHA-256 `28757be9...`, the same file as above) with its mmproj, server
   defaults (64 thoughts at once), at this repository's commit `6e47e4d`.
 - **What differs between the two sides:**
-  - The weights. The official engine reads the BF16 release; flash-jev reads the Q8_0 GGUF made from it, so
-    flash-jev's weight values carry Q8_0's rounding.
+  - The weights. The official engine reads the BF16 release; StartLux-Prism reads the Q8_0 GGUF made from it, so
+    StartLux-Prism's weight values carry Q8_0's rounding.
   - The thought sampler. Both sample at T 0.6, top-k 20, top-p 0.95 with the same seeds, but the random number
     generators differ, so the two sides write different thoughts.
   - The linear-attention state. vLLM keeps the recurrent state of thoughts in bf16 (`mamba_ssm_cache_dtype` auto
-    takes the model's dtype); flash-jev keeps it in fp32.
+    takes the model's dtype); StartLux-Prism keeps it in fp32.
 
 **Clients.** Requests that time one at a time come from the official engine's own client (`startlux-decide bench`),
 with 5 warm-up requests dropped from the 25 of each file. Its `--warmup` would replay the file's first requests,
@@ -816,7 +816,7 @@ which would then be timed as prefix-cache hits. Every request has its own eviden
 
 **One request at a time** (mean ms; p50 and p95 within 2% of the mean for one-pass requests):
 
-| request | official, BF16 | official, FP8 | **flash-jev int8** | flash-jev bf16 |
+| request | official, BF16 | official, FP8 | **StartLux-Prism int8** | StartLux-Prism bf16 |
 |---|---|---|---|---|
 | one yes/no question, ~256 prompt tokens | 54.2 | 53.1 | **19.0** | 25.5 |
 | ~1,024 tokens | 116.3 | 114.5 | **57.6** | 89.2 |
@@ -825,23 +825,23 @@ which would then be timed as prefix-cache hits. Every request has its own eviden
 | the official README's three questions, `think_mode` never | 93.1 | 92.9 | **17.4** | 23.8 |
 | the same, `think_mode` auto (109 of 165 questions think) | 1,775 | 1,296 | **785** | 1,542 |
 
-flash-jev bf16 (weights dequantized from the Q8_0 GGUF) ran this table only.
+StartLux-Prism bf16 (weights dequantized from the Q8_0 GGUF) ran this table only.
 
 **JevBench, read-outs only** (`think_mode` never; requests/s over three passes of the 231 items):
 
-| clients | official, BF16 | official, FP8 | **flash-jev int8** |
+| clients | official, BF16 | official, FP8 | **StartLux-Prism int8** |
 |---|---|---|---|
 | 1 | 10.6 | 12.1 | **24.2** |
 | 16 | 17.8 | 25.8 | **29.9** |
 | 64 | 18.3 | 26.3 | **30.7** |
 | correct per pass, of 231 | 212-213 | 211-214 | 212-216 |
 
-One request at a time, flash-jev's read-outs take less than half the time. From many clients, both engines are bound
-by the GPU's tensor cores, which run int8 and FP8 at the same rate on an H200, and flash-jev's lead narrows to 17%.
+One request at a time, StartLux-Prism's read-outs take less than half the time. From many clients, both engines are bound
+by the GPU's tensor cores, which run int8 and FP8 at the same rate on an H200, and StartLux-Prism's lead narrows to 17%.
 
 **JevBench with thoughts, one request at a time** (`think_mode` auto, the release's default):
 
-| | official, BF16 | official, FP8 | **flash-jev int8** |
+| | official, BF16 | official, FP8 | **StartLux-Prism int8** |
 |---|---|---|---|
 | correct, of 231 | 226 | 225 | 224 |
 | mean / p50 / p95 ms per item | 1,702 / 56 / 11,481 | 1,150 / 55 / 6,713 | 1,212 / **21** / 6,961 |
@@ -851,13 +851,13 @@ by the GPU's tensor cores, which run int8 and FP8 at the same rate on an H200, a
 | thought tokens/s, one sequence | 63 | **94** | **94** |
 | requests/s | 0.59 | **0.87** | 0.83 |
 
-Thoughts are generated at the same speed on flash-jev int8 and on the official engine's FP8, at 94 tokens per
-second for one sequence. Per token, the two take the same time. flash-jev's mean is higher only because of one
+Thoughts are generated at the same speed on StartLux-Prism int8 and on the official engine's FP8, at 94 tokens per
+second for one sequence. Per token, the two take the same time. StartLux-Prism's mean is higher only because of one
 3,948-token thought; the official engine's longest is 1,429 tokens.
 
 **JevBench with thoughts from many clients** (`think_mode` auto, requests/s over three passes):
 
-| clients | official, BF16 | official, FP8 | **flash-jev int8** |
+| clients | official, BF16 | official, FP8 | **StartLux-Prism int8** |
 |---|---|---|---|
 | 16 | 3.77 | 4.66 | **4.94** |
 | 64 | 5.89 | 6.52 | **7.61** |
@@ -870,29 +870,29 @@ three servers at once, so the times compare only roughly):
 |---|---|---|---|---|---|---|---|---|---|---|---|
 | official, BF16 | 100.00 | 100.00 | 94.59 | 78.20 | 95.48 | 90.83 | 91.67 | 92.97 | 0.0999 | 0.0547 | 1,252 s |
 | official, FP8 | 100.00 | 98.61 | 94.59 | 78.35 | 95.81 | 90.71 | 91.72 | 92.83 | 0.1044 | 0.0443 | 957 s |
-| **flash-jev int8** | 100.00 | 98.61 | 94.59 | 78.50 | 96.13 | 90.83 | 91.90 | 92.94 | 0.1093 | 0.0531 | **750 s** |
+| **StartLux-Prism int8** | 100.00 | 98.61 | 94.59 | 78.50 | 96.13 | 90.83 | 91.90 | 92.94 | 0.1093 | 0.0531 | **750 s** |
 
-flash-jev's scores are those of its earlier run ([thinking](#startlux-decision-v11-27b-autothink-thinking)), to the
+StartLux-Prism's scores are those of its earlier run ([thinking](#startlux-decision-v11-27b-autothink-thinking)), to the
 digit, although the questions now came from 16 clients at once.
 
 **Accuracy with thoughts, many samples.** One thought per question, as in the suites, puts the three servers level.
 Many thoughts per question show a small gap. In the many-client JevBench runs every request carries its own request
-number, so every pass draws new thoughts. Over nine samples of the 231 items, flash-jev int8 averages 221.2 correct,
+number, so every pass draws new thoughts. Over nine samples of the 231 items, StartLux-Prism int8 averages 221.2 correct,
 against 226.0 for the official BF16 server and 224.9 for FP8. Without thoughts the three score the same.
 
 A cross-read experiment locates it. The setup:
 - **Questions:** the 67 JevBench items that thought, each with 3 request numbers, `think_mode` always (201 thoughts per
   writer).
 - **Reading:** every thought read twice: by the official engine's read-out (vLLM completions, as its backend reads)
-  and by flash-jev int8. Each read is mixed with the writer's own first read-out.
-- **Check:** a writer's own read-out rebuilt this way gives the probabilities its server reported (flash-jev: bit for
+  and by StartLux-Prism int8. Each read is mixed with the writer's own first read-out.
+- **Check:** a writer's own read-out rebuilt this way gives the probabilities its server reported (StartLux-Prism: bit for
   bit).
 
-| thoughts written by | official read-out | flash-jev int8 read-out |
+| thoughts written by | official read-out | StartLux-Prism int8 read-out |
 |---|---|---|
 | official engine, BF16 | 187 | 185 |
-| flash-jev, bf16 (the Q8_0 weights dequantized) | 186 | 185 |
-| flash-jev int8 | 180 | 178 |
+| StartLux-Prism, bf16 (the Q8_0 weights dequantized) | 186 | 185 |
+| StartLux-Prism int8 | 180 | 178 |
 
 What the experiment shows:
 - **The gap is in writing the thoughts:** int8 thoughts lose about 7 of 201 questions whoever reads them.
@@ -901,11 +901,11 @@ What the experiment shows:
   the official engine's. The int8 path quantizes every activation row of a decode step to int8 with one scale per row,
   and over a long generation the error shows. Read-outs see it far less.
 
-**flash-jev int8 against flash-jev bf16** on the same Q8_0 weights (bf16: the blocks dequantized, cuBLAS), one H200.
+**StartLux-Prism int8 against StartLux-Prism bf16** on the same Q8_0 weights (bf16: the blocks dequantized, cuBLAS), one H200.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="images/v11-precision-dark.svg">
-  <img src="images/v11-precision.svg" width="840" alt="flash-jev int8 against bf16 on StartLux-Decision v1.1 27B, one H200. Prefill tokens per second: one prompt of 1,024 tokens 18,865 against 11,571; 8,192 tokens 19,219 against 11,424; 32,768 tokens 15,810 against 10,155; passes of 8,192 tokens of short prompts 20,855 against 11,958. Decode ms per step: 1 sequence 10.47 against 14.89; 8 sequences 11.06 against 15.90; 64 sequences 16.70 against 21.74.">
+  <img src="images/v11-precision.svg" width="840" alt="StartLux-Prism int8 against bf16 on StartLux-Decision v1.1 27B, one H200. Prefill tokens per second: one prompt of 1,024 tokens 18,865 against 11,571; 8,192 tokens 19,219 against 11,424; 32,768 tokens 15,810 against 10,155; passes of 8,192 tokens of short prompts 20,855 against 11,958. Decode ms per step: 1 sequence 10.47 against 14.89; 8 sequences 11.06 against 15.90; 64 sequences 16.70 against 21.74.">
 </picture>
 
 Prefill (`bench/prefill_speed.py`):
@@ -946,10 +946,10 @@ rendered text such as an invoice, signs and a shipping label, counting), 1 to 8 
 to 2,400 x 1,600 pixels, aspect ratios up to 20:1.
 
 **Against transformers** (`tests/vision_reference.py`): `Qwen3_5ForConditionalGeneration` on a bf16 checkpoint converted
-from the same Q8_0 GGUF and mmproj (`flash_jev/tools/gguf_to_hf.py --mmproj`), 24 image requests with 53 questions, and
+from the same Q8_0 GGUF and mmproj (`startlux_prism/tools/gguf_to_hf.py --mmproj`), 24 image requests with 53 questions, and
 11 text questions as the yardstick:
 
-| flash-jev | same decision (images) | max \|Δp\| | mean \|Δp\| | max \|Δlogit\| | text: max / mean \|Δp\| |
+| StartLux-Prism | same decision (images) | max \|Δp\| | mean \|Δp\| | max \|Δlogit\| | text: max / mean \|Δp\| |
 |---|---|---|---|---|---|
 | bf16 | 53 of 53 | 0.0042 | 0.00008 | 0.093 | 0.0048 / 0.00056 |
 | int8 | 53 of 53 | 0.046 | 0.00044 | 2.26 | 0.053 / 0.0040 |
@@ -990,7 +990,7 @@ own rounds differ by up to 0.47 ms.
 
 ## Several GPUs: data parallelism
 
-`python -m flash_jev.dp`: one flash-jev int8 server per GPU behind the router (README, Serving), StartLux-Decision-v1.1-27B-AutoThink on
+`python -m startlux_prism.dp`: one StartLux-Prism int8 server per GPU behind the router (README, Serving), StartLux-Decision-v1.1-27B-AutoThink on
 GPUs 1-3 of the second H200 server, 2026-10-14; JevBench as above (requests/s over three passes, each request with its own
 evidence).
 
@@ -1013,7 +1013,7 @@ Four GPUs as four one-GPU servers, two 2-GPU servers or one 4-GPU server:
 ## Tensor parallelism: the 27B on 2 and 4 H200s
 
 StartLux-Decision-v1.1-27B-AutoThink (the Q8_0 file of [the thinking section](#startlux-decision-v11-27b-autothink-thinking),
-int8) with `--tp 2` and `--tp 4` (`flash_jev/tp.py`), on the second H200 server: eight H200s on NVSwitch (NV18 between
+int8) with `--tp 2` and `--tp 4` (`startlux_prism/tp.py`), on the second H200 server: eight H200s on NVSwitch (NV18 between
 every pair), torch 2.14.1, Triton 3.8.0, NCCL 2.30.7, 2026-10-14. Two GPUs ran on GPUs 1-2, four on GPUs 3-6, one on
 GPU 6 (speed) and GPU 1 (server), at most two configurations at a time on disjoint GPUs (other users' jobs ran on GPUs
 0 and 7). Every answer is the single GPU's, bit for bit (README, [Correctness](../README.md#correctness)): letter
@@ -1050,7 +1050,7 @@ four 1.45-2.0x.
 A lone thought's step: 10.5 ms on one GPU, 7.7 on two (1.36x), 6.5 on four (1.61x); 64 thoughts at once with
 4,096-token prompts 1.38x and 1.85x.
 
-**The all-reduces' share** (`FLASHJEV_TP_ABLATE=1`: every GPU computes its shard without them - wrong results, the
+**The all-reduces' share** (`STARTLUX_PRISM_TP_ABLATE=1`: every GPU computes its shard without them - wrong results, the
 time of the rest; share = 1 - without / with):
 
 | | 256 tokens | 1,024 | 4,096 | 8,192 | 16,384 | 32 x 256 | decode, 1 sequence | 8 | 64 |
@@ -1066,7 +1066,7 @@ the sums of the shortest passes are read by their consumer
 ([optimizations](optimizations.md#tensor-parallelism-one-27b-over-2-or-4-h200s-2026-10-14): what was measured, kept
 and dropped).
 
-**JevBench through the server** (`python -m flash_jev.server --tp N`, `bench/run_jevbench.py`, the 231 public items;
+**JevBench through the server** (`python -m startlux_prism.server --tp N`, `bench/run_jevbench.py`, the 231 public items;
 the memory in use on the first GPU after start, every configuration with the same buffers: 131,072 tokens per pass,
 the 64-entry prefix cache, 64 thoughts at once with their KV rows):
 
@@ -1075,7 +1075,7 @@ the 64-entry prefix cache, 64 thoughts at once with their KV rows):
 | 1 | 41.0 / 14.2 / 146 | 29.9 / 30.9 | 1,209 / 19.5 | 4.09 s | 5.07 / 6.28 | 113.9 GiB |
 | 2 | 34.4 / 14.9 / 114 | 40.6 / 43.3 | 902 / 19.4 | 3.04 s | 6.56 / 8.26 | 64.0 GiB |
 | 4 | 29.0 / 12.4 / 93 | 49.8 / 54.0 | 768 / 17.0 | 2.59 s | 7.75 / 9.81 | 37.7 GiB |
-| 4: two servers of 2 (`flash_jev.dp --tp 2`) | 36.0 / 15.7 / 118 | 77.0 / 84.0 | 902 / 19.9 | 3.04 s | 8.71 / 12.13 | 64.0 GiB |
+| 4: two servers of 2 (`startlux_prism.dp --tp 2`) | 36.0 / 15.7 / 118 | 77.0 / 84.0 | 902 / 19.9 | 3.04 s | 8.71 / 12.13 | 64.0 GiB |
 
 Every configuration scores 214 of 231 without thoughts and 224 with them, the same 67 items thinking the same
 thoughts. The many-client runs send three passes (never) or two (auto) of request-numbered items; the auto runs start
@@ -1085,7 +1085,7 @@ GPUs and 1.41x on four without thoughts, 1.34x and 1.57x with them; the median i
 the long prompts and the thoughts carry the gain. From 16 and 64 clients: 1.36-1.40x and 1.66-1.75x without
 thoughts, 1.29-1.32x and 1.53-1.56x with them.
 
-**Both at once** (the last row): `python -m flash_jev.dp --gpus 1,2,3,4 --tp 2`, two 2-GPU servers behind the router,
+**Both at once** (the last row): `python -m startlux_prism.dp --gpus 1,2,3,4 --tp 2`, two 2-GPU servers behind the router,
 the same runs. The 231 items one at a time gave the single GPU's probabilities and thoughts, bit for bit, with and
 without thoughts. On four GPUs, two 2-GPU servers answer 1.56x the read-outs of one 4-GPU server from 64 clients
 (84.0 against 54.0 requests/s) and 1.24x with thoughts (12.13 against 9.81), each request at a 2-GPU server's speed
@@ -1094,7 +1094,7 @@ plus the router's hop (36.0 against 34.4 ms on average). The most each configura
 
 ## Four H200s: the most throughput
 
-Four GPUs three ways: four one-GPU servers behind the router (`python -m flash_jev.dp --gpus 1,2,3,4`), two 2-GPU
+Four GPUs three ways: four one-GPU servers behind the router (`python -m startlux_prism.dp --gpus 1,2,3,4`), two 2-GPU
 servers (the same with `--tp 2`) and one 4-GPU server (`--tp 4`, [above](#tensor-parallelism-the-27b-on-2-and-4-h200s)).
 StartLux-Decision-v1.1-27B-AutoThink in int8 on GPUs 1-4 of the second H200 server, 2026-10-14; JevBench's 231 items,
 every request with its own request number; requests/s over the whole run.
@@ -1135,7 +1135,7 @@ one GPU).
 ## Eight H200s: against the official engine
 
 All eight GPUs of the second H200 server, 2026-10-14, each engine with its own data parallelism:
-- **flash-jev int8:** `python -m flash_jev.dp --gpus 0,1,2,3,4,5,6,7`, eight one-GPU servers behind the router.
+- **StartLux-Prism int8:** `python -m startlux_prism.dp --gpus 0,1,2,3,4,5,6,7`, eight one-GPU servers behind the router.
 - **Official engine:** Startlux-decide-inference with its own launcher, `startlux-decide serve --launch-vllm --gpus
   0,1,2,3,4,5,6,7`: one vLLM 0.31.0 server per GPU behind its front end, the BF16 release with its release flags.
 
@@ -1145,13 +1145,13 @@ JevBench's 231 items, every request with its own request number; requests/s over
 
 | clients | 128 | 256 | 512 | 1,024 |
 |---|---|---|---|---|
-| **flash-jev int8** | **235.9** | **237.8** | **234.1** | **232.0** |
+| **StartLux-Prism int8** | **235.9** | **237.8** | **234.1** | **232.0** |
 | official, BF16 | 130.8 | 137.5 | 136.5 | 135.5 |
-| flash-jev's lead | 1.80x | 1.73x | 1.71x | 1.71x |
-| p50 / p95 ms, flash-jev | 516 / 834 | 985 / 1,509 | 2,039 / 2,669 | 3,899 / 5,006 |
+| StartLux-Prism's lead | 1.80x | 1.73x | 1.71x | 1.71x |
+| p50 / p95 ms, StartLux-Prism | 516 / 834 | 985 / 1,509 | 2,039 / 2,669 | 3,899 / 5,006 |
 | p50 / p95 ms, official | 749 / 2,503 | 1,805 / 3,189 | 3,373 / 5,473 | 6,415 / 9,657 |
 
-Both level off from 128-256 clients. flash-jev's 237.8 requests/s is 7.7x one GPU's (30.9,
+Both level off from 128-256 clients. StartLux-Prism's 237.8 requests/s is 7.7x one GPU's (30.9,
 [above](#tensor-parallelism-the-27b-on-2-and-4-h200s)), 29.7 per GPU; the official engine's 137.5 is 17.2 per GPU
 (one GPU: 18.3 from 64 clients, [above](#startlux-decision-v11-27b-autothink-against-its-official-engine)). Every pass
 scored 211-216 of 231 on both.
@@ -1161,11 +1161,11 @@ seed, so both engines answer the same requests):
 
 | clients | 256 | 512 |
 |---|---|---|
-| **flash-jev int8** | **38.05** | **40.99** |
+| **StartLux-Prism int8** | **38.05** | **40.99** |
 | official, BF16 | 27.42 | 29.86 |
-| flash-jev's lead | 1.39x | 1.37x |
-| correct per pass, mean of 16: flash-jev / official | 222.0 / 225.5 | 222.0 / 225.4 |
-| the run / its longest request, s: flash-jev | 97 / 86 | 90 / 85 |
+| StartLux-Prism's lead | 1.39x | 1.37x |
+| correct per pass, mean of 16: StartLux-Prism / official | 222.0 / 225.5 | 222.0 / 225.4 |
+| the run / its longest request, s: StartLux-Prism | 97 / 86 | 90 / 85 |
 | the run / its longest request, s: official | 135 / 108 | 124 / 109 |
 
 These runs are bound by their tails: the longest request (a thought of up to 4,096 tokens, decoded among many) takes
@@ -1205,7 +1205,7 @@ clients on every model), where no engine failed a request.
 
 ## Engine configurations
 
-* **flash-jev** (`scripts/serve.sh start int8|bf16|w4a8`): CUDA graphs per token bucket (64 tokens up to the largest
+* **StartLux-Prism** (`scripts/serve.sh start int8|bf16|w4a8`): CUDA graphs per token bucket (64 tokens up to the largest
   batch, sized from free GPU memory), tree-batched forward, W8A8 with SmoothQuant (int8), W4A8 (Q4_K_M) or cuBLAS bf16,
   pipelined scheduler (batches of up to 8,192 tokens; a longer request runs alone), direct execution on an idle server,
   prefix cache.

@@ -1,4 +1,4 @@
-"""AutoThink: StartLux-Decision v1.1's thinking path (startlux_decide/pipeline.py, Apache-2.0) on flash-jev's engine.
+"""AutoThink: StartLux-Decision v1.1's thinking path (startlux_decide/pipeline.py, Apache-2.0) on StartLux-Prism's engine.
 
 One question of a request:
 
@@ -252,7 +252,7 @@ class Framing:
         msgs = [{"role": "system", "content": J.SYSTEM}, {"role": "user", "content": self.MARK}]
         off = _render(src, msgs, False).split(self.MARK)
         if off != [HEAD, TAIL]:
-            raise ValueError(f"{model_dir}: the chat template's one-pass prompt is not flash-jev's (prompt.py)")
+            raise ValueError(f"{model_dir}: the chat template's one-pass prompt is not StartLux-Prism's (prompt.py)")
         self.head, self.tail = _render(src, msgs, True).split(self.MARK)
         if not self.tail.rstrip().endswith(THINK_OPEN):
             self.tail += THINK_OPEN + "\n"

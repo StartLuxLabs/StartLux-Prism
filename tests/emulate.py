@@ -13,11 +13,11 @@ import torch.nn.functional as F
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "bench"))
-from flash_jev import gguf_weights, jevfmt as J  # noqa: E402
-from flash_jev.decide import softmax_t  # noqa: E402
-from flash_jev.engine import batch as B  # noqa: E402
-from flash_jev.prompt import Tokenizer, rows_for  # noqa: E402
-from flash_jev.reference import (Reference, apply_rope, gdn_chunked, l2norm, linear, rms_norm,  # noqa: E402
+from startlux_prism import gguf_weights, jevfmt as J  # noqa: E402
+from startlux_prism.decide import softmax_t  # noqa: E402
+from startlux_prism.engine import batch as B  # noqa: E402
+from startlux_prism.prompt import Tokenizer, rows_for  # noqa: E402
+from startlux_prism.reference import (Reference, apply_rope, gdn_chunked, l2norm, linear, rms_norm,  # noqa: E402
                                  rope_cos_sin)
 
 

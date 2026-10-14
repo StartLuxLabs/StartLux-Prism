@@ -1,6 +1,6 @@
 # Correctness and tests
 
-How flash-jev's answers are checked against the models' own packages and an fp32 reference, and how to run the tests and benchmarks. The short version is in the [README](../README.md).
+How StartLux-Prism's answers are checked against the models' own packages and an fp32 reference, and how to run the tests and benchmarks. The short version is in the [README](../README.md).
 
 ## Correctness
 
@@ -49,8 +49,8 @@ On the GPU server, from the repository (`scripts/sync.sh` copies the working tre
 ```bash
 M=~/jev/models/StartLux-Decision-4B-Q8_0-GGUF; JB=~/jev/src/jevbench-7ce310c7
 python tests/test_engine.py --gguf $M/StartLux-Decision-4B-Q8_0.gguf --model-dir $M --jevbench $JB/datasets/public
-python tests/test_stress.py --model-dir $M --jevbench $JB --start int8 [--quick] --out results/stress/flash-jev-int8.json
-python bench/run_jevbench.py --url http://127.0.0.1:8092/v1/systemone --label flash-jev --out results/jevbench/x.json
+python tests/test_stress.py --model-dir $M --jevbench $JB --start int8 [--quick] --out results/stress/startlux-prism-int8.json
+python bench/run_jevbench.py --url http://127.0.0.1:8092/v1/systemone --label StartLux-Prism --out results/jevbench/x.json
 python bench/charts.py                                                        # docs/images
 ```
 
@@ -67,5 +67,5 @@ python bench/charts.py                                                        # 
 | `tests/test_dp.py` | the data-parallel router on the CPU, against fake workers: evidence affinity, routing by load, failover, `--tp` groups |
 | `tests/test_tp.py` | tensor parallelism against one GPU, bit for bit: read-outs, cache hits, batches, wide choices, decode logits and tokens, images (`--tp 2 --gpus 2,3 --ref-gpu 1`); `--server`: JevBench with thoughts through a `--tp` server and a one-GPU server |
 | `tests/test_stress.py` | a running server under load: long evidence counted in full, the capacity limit refused cleanly, many clients without a failed request, bit-identical answers under load |
-| `scripts/accuracy_v1.sh` | StartLux-Decision-v1's evaluation suites through every flash-jev precision and StartLux's own server |
+| `scripts/accuracy_v1.sh` | StartLux-Decision-v1's evaluation suites through every StartLux-Prism precision and StartLux's own server |
 | `bench/run_jevbench.py`, `bench/prefill_speed.py`, `bench/decode_speed.py`, `bench/vision_latency.py` | JevBench through any `/v1/systemone` server (latency, throughput, agreement); prefill and decode on the engine itself (`--tp N` too); images |

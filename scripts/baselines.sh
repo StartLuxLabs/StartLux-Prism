@@ -3,7 +3,7 @@
 #
 #   scripts/baselines.sh llamacpp      # llama.cpp llama-server + StartLux-Decision's gguf_server (the official GGUF path)
 #   scripts/baselines.sh startlux      # StartLux-Decision's own torch server (fla + causal-conv1d + CUDA graphs) on the
-#                                      # bf16 checkpoint converted from the same GGUF (flash_jev/tools/gguf_to_hf.py)
+#                                      # bf16 checkpoint converted from the same GGUF (startlux_prism/tools/gguf_to_hf.py)
 #   scripts/baselines.sh vllm          # vLLM (OpenAI server, bf16 CausalLM view of the same weights) behind
 #                                      # bench/adapters/framework_systemone.py (StartLux prompts + letter readout)
 #   scripts/baselines.sh sglang        # SGLang (/v1/score) behind the same adapter
@@ -36,11 +36,11 @@ SRC=$JEV/src/StartLux-Decision
 HERE=$(cd "$(dirname "$0")/.." && pwd)
 LOG=$JEV/logs
 mkdir -p "$LOG"
-export FLASHJEV_BENCH=1   # marks every process started here: `stop` kills nothing else (other users' vLLM / SGLang servers
+export STARTLUX_PRISM_BENCH=1   # marks every process started here: `stop` kills nothing else (other users' vLLM / SGLang servers
                       # on a shared machine have the same command lines, possibly under the same account)
 
 ours() {      # pid: a process these scripts started
-  tr '\0' '\n' 2>/dev/null < "/proc/$1/environ" | grep -qx FLASHJEV_BENCH=1   # (a gone process: no message)
+  tr '\0' '\n' 2>/dev/null < "/proc/$1/environ" | grep -qx STARTLUX_PRISM_BENCH=1   # (a gone process: no message)
 }
 
 adapter() {   # backend upstream_port: the /v1/systemone adapter in front of a framework server

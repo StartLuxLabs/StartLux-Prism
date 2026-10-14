@@ -3,7 +3,7 @@
 # latency), the HTTP suites (latency at concurrency 1) and the concurrency sweep (throughput), stop it.  Every engine
 # gets the same client, the same unique requests (bench/run_http.py) and the same warmup.
 #
-#   scripts/compare.sh flash-jev-int8 flash-jev-bf16 flash-jev-w4a8 sglang sglang-native sglang-gguf vllm startlux llamacpp decider decider-real jevk5 \
+#   scripts/compare.sh startlux-prism-int8 startlux-prism-bf16 startlux-prism-w4a8 sglang sglang-native sglang-gguf vllm startlux llamacpp decider decider-real jevk5 \
 #       jevk5-real
 #
 # Results: results/jevbench/<label>.json and results/http/<label>.json (TAG=-x appends -x to the labels).
@@ -14,7 +14,7 @@
 # BENCH=jevconc: JevBench throughput at CONC clients (8,16,32; PASSES passes over the items per level, 3):
 # results/jevbench_conc/; BENCH=longconc: 8k-token requests at CONC clients (CONC_SECONDS per level, 30):
 # results/long_conc/ (run it with the long-context settings above).
-# FLASHJEV_FLAGS passes extra flags to the flash-jev server (e.g. --prefix-cache 0).
+# STARTLUX_PRISM_FLAGS passes extra flags to the StartLux-Prism server (e.g. --prefix-cache 0).
 set -uo pipefail
 JEV=${JEV:-$HOME/jev}
 cd "$(dirname "$0")/.."
@@ -80,11 +80,11 @@ for engine in "$@"; do
   echo "=== $engine ($(date +%H:%M:%S))"
   gpu_idle
   case "$engine" in
-    flash-jev-int8|flash-jev-bf16|flash-jev-w4a8)
-      prec=${engine#flash-jev-}
+    startlux-prism-int8|startlux-prism-bf16|startlux-prism-w4a8)
+      prec=${engine#startlux-prism-}
       bash scripts/serve.sh start "$prec" 8092 > /dev/null || continue
-      measure "flash-jev-$prec" http://127.0.0.1:8092/v1/systemone \
-        "{\"engine\": \"flash-jev\", \"precision\": \"$prec\", \"weights\": \"$WEIGHTS GGUF\"}" ;;
+      measure "startlux-prism-$prec" http://127.0.0.1:8092/v1/systemone \
+        "{\"engine\": \"StartLux-Prism\", \"precision\": \"$prec\", \"weights\": \"$WEIGHTS GGUF\"}" ;;
     sglang|sglang-native)
       bash scripts/baselines.sh sglang > /dev/null || continue
       if [ "$engine" = sglang ]; then

@@ -17,7 +17,7 @@ import numpy as np
 import torch
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
-from flash_jev.engine.model import Engine, Options  # noqa: E402
+from startlux_prism.engine.model import Engine, Options  # noqa: E402
 
 
 def main():
@@ -29,11 +29,11 @@ def main():
     ap.add_argument("--lengths", default="256,1024,4096,8192,16384,32768")
     ap.add_argument("--batches", default="32x256,64x128,8x1024")
     ap.add_argument("--reps", type=int, default=10)
-    ap.add_argument("--tp", type=int, default=1, help="tensor parallelism over --gpus (int8; flash_jev/tp.py)")
+    ap.add_argument("--tp", type=int, default=1, help="tensor parallelism over --gpus (int8; startlux_prism/tp.py)")
     ap.add_argument("--gpus", default="", help="with --tp: the GPUs (default: the visible ones)")
     a = ap.parse_args()
     if a.tp > 1:
-        from flash_jev import tp as TP
+        from startlux_prism import tp as TP
         TP.start(a.tp, a.gpus or None)
     lengths = [int(x) for x in a.lengths.split(",")]
     batches = [tuple(int(v) for v in b.split("x")) for b in a.batches.split(",")]

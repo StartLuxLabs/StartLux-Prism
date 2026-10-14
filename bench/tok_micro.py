@@ -11,8 +11,8 @@ import time
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 sys.path.insert(0, os.path.dirname(__file__))
-from flash_jev import jevfmt as J  # noqa: E402
-from flash_jev.prompt import Tokenizer, render_text, rows_for, split_prompt  # noqa: E402
+from startlux_prism import jevfmt as J  # noqa: E402
+from startlux_prism.prompt import Tokenizer, render_text, rows_for, split_prompt  # noqa: E402
 from run_http import uniquify  # noqa: E402
 import suites  # noqa: E402
 

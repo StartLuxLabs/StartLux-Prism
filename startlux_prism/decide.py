@@ -89,7 +89,7 @@ def choice_answer(dist, none=None, abstain=False):
 
 
 def request_controls(body):
-    """StartLux-Decision v1.1's request controls (startlux_decide/controls.py) where flash-jev answers in one pass (v1
+    """StartLux-Decision v1.1's request controls (startlux_decide/controls.py) where StartLux-Prism answers in one pass (v1
     folders; AutoThink folders on the w4a8 path) -> {"allow_none", "none_check"} (None: not given).  The thinking
     controls are validated as there; a request that asks for a thought (think_mode "auto" or "always") is refused
     (AutoThink folders on the int8 and bf16 paths think: think.parse_controls).  Raises ValueError for a bad value."""
@@ -99,7 +99,7 @@ def request_controls(body):
         if mode not in THINK_MODES:
             raise ValueError(f"think_mode must be one of {', '.join(THINK_MODES)} (or hybrid, plain, think), not {tm!r}")
         if mode != "never":
-            raise ValueError('flash-jev answers this model in one pass: leave think_mode out or set it to "never" (it '
+            raise ValueError('StartLux-Prism answers this model in one pass: leave think_mode out or set it to "never" (it '
                              "thinks with StartLux-Decision v1.1 AutoThink models on the int8 and bf16 paths)")
     for name in ("gate", "mix"):
         v = body.get(name)

@@ -12,7 +12,7 @@
 <line x1="294.5" y1="115.0" x2="294.5" y2="197.0" stroke="#e1e0d9" stroke-width="1" shape-rendering="crispEdges"/>
 <text x="294.5" y="212.0" font-size="11" fill="#898781" text-anchor="middle" font-weight="400" style="font-variant-numeric: tabular-nums">20</text>
 <line x1="163.1" y1="115.0" x2="163.1" y2="197.0" stroke="#c3c2b7" stroke-width="1" shape-rendering="crispEdges"/>
-<path d="M163.1,125.0 H318.1 A4.0,4.0 0 0 1 322.1,129.0 V135.0 A4.0,4.0 0 0 1 318.1,139.0 H163.1 Z" fill="#2a78d6"><title>flash-jev int8: 24.2 req/s</title></path>
+<path d="M163.1,125.0 H318.1 A4.0,4.0 0 0 1 322.1,129.0 V135.0 A4.0,4.0 0 0 1 318.1,139.0 H163.1 Z" fill="#2a78d6"><title>StartLux-Prism int8: 24.2 req/s</title></path>
 <text x="328.1" y="136.3" font-size="12" fill="#0b0b0b" text-anchor="start" font-weight="600" style="font-variant-numeric: tabular-nums" stroke="#fcfcfb" stroke-width="3" stroke-linejoin="round" paint-order="stroke">24.2</text>
 <path d="M163.1,151.0 H238.6 A4.0,4.0 0 0 1 242.6,155.0 V161.0 A4.0,4.0 0 0 1 238.6,165.0 H163.1 Z" fill="#b4b2aa"><title>official engine, FP8: 12.1 req/s</title></path>
 <text x="248.6" y="162.3" font-size="12" fill="#52514e" text-anchor="start" font-weight="400" style="font-variant-numeric: tabular-nums" stroke="#fcfcfb" stroke-width="3" stroke-linejoin="round" paint-order="stroke">12.1</text>
@@ -25,7 +25,7 @@
 <line x1="555.6" y1="115.0" x2="555.6" y2="197.0" stroke="#e1e0d9" stroke-width="1" shape-rendering="crispEdges"/>
 <text x="555.6" y="212.0" font-size="11" fill="#898781" text-anchor="middle" font-weight="400" style="font-variant-numeric: tabular-nums">40</text>
 <line x1="391.4" y1="115.0" x2="391.4" y2="197.0" stroke="#c3c2b7" stroke-width="1" shape-rendering="crispEdges"/>
-<path d="M391.4,125.0 H513.4 A4.0,4.0 0 0 1 517.4,129.0 V135.0 A4.0,4.0 0 0 1 513.4,139.0 H391.4 Z" fill="#2a78d6"><title>flash-jev int8: 30.7 req/s</title></path>
+<path d="M391.4,125.0 H513.4 A4.0,4.0 0 0 1 517.4,129.0 V135.0 A4.0,4.0 0 0 1 513.4,139.0 H391.4 Z" fill="#2a78d6"><title>StartLux-Prism int8: 30.7 req/s</title></path>
 <text x="523.4" y="136.3" font-size="12" fill="#0b0b0b" text-anchor="start" font-weight="600" style="font-variant-numeric: tabular-nums" stroke="#fcfcfb" stroke-width="3" stroke-linejoin="round" paint-order="stroke">30.7</text>
 <path d="M391.4,151.0 H495.4 A4.0,4.0 0 0 1 499.4,155.0 V161.0 A4.0,4.0 0 0 1 495.4,165.0 H391.4 Z" fill="#b4b2aa"><title>official engine, FP8: 26.3 req/s</title></path>
 <text x="505.4" y="162.3" font-size="12" fill="#52514e" text-anchor="start" font-weight="400" style="font-variant-numeric: tabular-nums" stroke="#fcfcfb" stroke-width="3" stroke-linejoin="round" paint-order="stroke">26.3</text>
@@ -36,16 +36,16 @@
 <line x1="722.4" y1="115.0" x2="722.4" y2="197.0" stroke="#e1e0d9" stroke-width="1" shape-rendering="crispEdges"/>
 <text x="722.4" y="212.0" font-size="11" fill="#898781" text-anchor="middle" font-weight="400" style="font-variant-numeric: tabular-nums">5</text>
 <line x1="619.7" y1="115.0" x2="619.7" y2="197.0" stroke="#c3c2b7" stroke-width="1" shape-rendering="crispEdges"/>
-<path d="M619.7,125.0 H771.9 A4.0,4.0 0 0 1 775.9,129.0 V135.0 A4.0,4.0 0 0 1 771.9,139.0 H619.7 Z" fill="#2a78d6"><title>flash-jev int8: 7.61 req/s</title></path>
+<path d="M619.7,125.0 H771.9 A4.0,4.0 0 0 1 775.9,129.0 V135.0 A4.0,4.0 0 0 1 771.9,139.0 H619.7 Z" fill="#2a78d6"><title>StartLux-Prism int8: 7.61 req/s</title></path>
 <text x="781.9" y="136.3" font-size="12" fill="#0b0b0b" text-anchor="start" font-weight="600" style="font-variant-numeric: tabular-nums" stroke="#fcfcfb" stroke-width="3" stroke-linejoin="round" paint-order="stroke">7.61</text>
 <path d="M619.7,151.0 H749.6 A4.0,4.0 0 0 1 753.6,155.0 V161.0 A4.0,4.0 0 0 1 749.6,165.0 H619.7 Z" fill="#b4b2aa"><title>official engine, FP8: 6.52 req/s</title></path>
 <text x="759.6" y="162.3" font-size="12" fill="#52514e" text-anchor="start" font-weight="400" style="font-variant-numeric: tabular-nums" stroke="#fcfcfb" stroke-width="3" stroke-linejoin="round" paint-order="stroke">6.52</text>
 <path d="M619.7,177.0 H736.6 A4.0,4.0 0 0 1 740.6,181.0 V187.0 A4.0,4.0 0 0 1 736.6,191.0 H619.7 Z" fill="#b4b2aa"><title>official engine, BF16: 5.89 req/s</title></path>
 <text x="746.6" y="188.3" font-size="12" fill="#52514e" text-anchor="start" font-weight="400" style="font-variant-numeric: tabular-nums" stroke="#fcfcfb" stroke-width="3" stroke-linejoin="round" paint-order="stroke">5.89</text>
-<text x="151.1" y="136.3" font-size="12.5" fill="#0b0b0b" text-anchor="end" font-weight="600">flash-jev int8</text>
+<text x="151.1" y="136.3" font-size="12.5" fill="#0b0b0b" text-anchor="end" font-weight="600">StartLux-Prism int8</text>
 <text x="151.1" y="162.3" font-size="12.5" fill="#52514e" text-anchor="end" font-weight="400">official engine, FP8</text>
 <text x="151.1" y="188.3" font-size="12.5" fill="#52514e" text-anchor="end" font-weight="400">official engine, BF16</text>
 <text x="22.0" y="243.0" font-size="11.5" fill="#898781" text-anchor="start" font-weight="400">Official engine: Startlux-decide-inference (StartLux-Decision v1.1's own package, commit b70404d) with its release flags on vLLM 0.31.0, from the</text>
-<text x="22.0" y="259.0" font-size="11.5" fill="#898781" text-anchor="start" font-weight="400">BF16 release (FP8: vLLM's --quantization fp8); the release has no MTP weights, so neither side drafts tokens. flash-jev int8 from the Q8_0 GGUF</text>
-<text x="22.0" y="275.0" font-size="11.5" fill="#898781" text-anchor="start" font-weight="400">release. One H200 per server, 2026-10-13/14. Three passes over the items per measurement, every request with its own evidence.</text>
+<text x="22.0" y="259.0" font-size="11.5" fill="#898781" text-anchor="start" font-weight="400">BF16 release (FP8: vLLM's --quantization fp8); the release has no MTP weights, so neither side drafts tokens. StartLux-Prism int8 from the Q8_0</text>
+<text x="22.0" y="275.0" font-size="11.5" fill="#898781" text-anchor="start" font-weight="400">GGUF release. One H200 per server, 2026-10-13/14. Three passes over the items per measurement, every request with its own evidence.</text>
 </svg>

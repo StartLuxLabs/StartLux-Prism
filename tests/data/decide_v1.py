@@ -1,4 +1,4 @@
-# flash-jev's decide.py as of commit e9c7ca7 (before StartLux-Decision v1.1 support): tests/test_v11.py checks that v1
+# StartLux-Prism's decide.py as of commit e9c7ca7 (before StartLux-Decision v1.1 support): tests/test_v11.py checks that v1
 # folders still answer exactly as this code did.
 """Typed decisions on top of any forward pass: request -> rows -> letter logits -> answers.
 

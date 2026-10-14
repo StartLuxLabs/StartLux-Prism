@@ -1,6 +1,6 @@
 """TypeSafe-compatible /v1/systemone server with continuous batching.
 
-    python -m flash_jev.server --gguf X.gguf --model-dir DIR [--precision int8] [--port 8092]
+    python -m startlux_prism.server --gguf X.gguf --model-dir DIR [--precision int8] [--port 8092]
 
 POST /v1/systemone  {"state": ..., "questions": {key: {"type", "instructions", "criteria"}}, optional "images"}
   -> {"answers": {...}, "usage": {"input_tokens", "output_tokens"}, "model", "latency_ms", "timings"}
@@ -24,7 +24,7 @@ StartLux-Decision v1.1 AutoThink folders (int8 or bf16) think as v1.1 does (thin
 request controls, return_details with v1.1's details and timing_ms): thoughts are generated on the GPU
 (engine/decode.py) by think.ThinkScheduler, this scheduler with decode steps interleaved between the batches.
 
---tp N --gpus a,b,...: one model over N GPUs (tensor parallelism, int8; flash_jev/tp.py).  This process is rank 0 and
+--tp N --gpus a,b,...: one model over N GPUs (tensor parallelism, int8; startlux_prism/tp.py).  This process is rank 0 and
 serves as above; the other ranks are processes it starts, which replay its passes and decode steps on their shards.
 """
 from __future__ import annotations
@@ -170,7 +170,7 @@ def main():
                     help="auto: w4a8 for a k-quant file (Q4_K_M: its own 4-bit weights), int8 (W8A8) for Q8_0")
     ap.add_argument("--calib", default="",
                     help="int8: the activation ranges file, computed and saved on the first start (default: "
-                         "~/.cache/flash-jev/calib/<model file>-<size>-v1.pt, under $FLASHJEV_CACHE if set)")
+                         "~/.cache/startlux-prism/calib/<model file>-<size>-v1.pt, under $STARTLUX_PRISM_CACHE if set)")
     ap.add_argument("--host", default="127.0.0.1")
     ap.add_argument("--port", type=int, default=8092)
     ap.add_argument("--max-tokens", type=int, default=0,
@@ -182,7 +182,7 @@ def main():
     ap.add_argument("--budget", type=int, default=8192,
                     help="tokens per batched pass when requests queue (a longer request still runs alone)")
     ap.add_argument("--no-graphs", action="store_true")
-    ap.add_argument("--name", help="model name in answers (default: the GGUF file's, e.g. StartLux-Decision-9B (flash-jev))")
+    ap.add_argument("--name", help="model name in answers (default: the GGUF file's, e.g. StartLux-Decision-9B (StartLux-Prism))")
     ap.add_argument("--no-direct", action="store_true", help="always go through the scheduler thread")
     ap.add_argument("--prefix-cache", type=int, default=64,
                     help="prefix cache entries: evidence states kept for later requests (48 MiB each; 0: off)")
@@ -222,7 +222,7 @@ def main():
                     help="each image is resized to at most this many pixels (one token per 32 x 32)")
     ap.add_argument("--tp", type=int, default=1,
                     help="tensor parallelism: one model over this many GPUs (2 or 4 on the 27B; the int8 path), for "
-                         "lower latency (flash_jev/tp.py)")
+                         "lower latency (startlux_prism/tp.py)")
     ap.add_argument("--gpus", default="", help="with --tp: the GPUs, e.g. 4,5 (default: the visible ones)")
     a = ap.parse_args()
     from .vision import find_mmproj, is_mmproj
@@ -246,12 +246,12 @@ def main():
         CAL.ensure(a.gguf, a.model_dir, a.calib, CAL.first_gpu(a.gpus))   # the shards need them: once, on one GPU
         from . import tp as TP
         TP.start(a.tp, a.gpus or None)              # before anything uses CUDA: the group's GPUs become the visible ones
-    a.name = a.name or re.sub(r"-Q8_0$", "", os.path.basename(a.gguf).removesuffix(".gguf")) + " (flash-jev)"
+    a.name = a.name or re.sub(r"-Q8_0$", "", os.path.basename(a.gguf).removesuffix(".gguf")) + " (StartLux-Prism)"
     from .gguf import GGUFFile
     from .modelcfg import folder_kind
     kind = folder_kind(a.model_dir, GGUFFile(a.gguf).meta)
     if kind == "instant":
-        sys.exit("this is a StartLux-Decision v1.1 Instant model (its prompt is read bidirectionally): flash-jev runs "
+        sys.exit("this is a StartLux-Decision v1.1 Instant model (its prompt is read bidirectionally): StartLux-Prism runs "
                  "prompts causally and does not serve it yet")
     sys.setswitchinterval(a.switch_interval)
     thinks = kind == "auto_think" and a.precision in ("int8", "bf16")       # thoughts: engine/decode.py, think.py
@@ -296,7 +296,7 @@ def main():
     bad_json = 400 if kind == "v1" else 422          # as the reference server of each release answers a broken body
 
     models = json.dumps({"models": [{"name": a.name, "description": "StartLux-Decision typed decision model on "
-                                     "flash-jev", "release_date": "2026-10-01"}]}).encode()
+                                     "StartLux-Prism", "release_date": "2026-10-01"}]}).encode()
     health = json.dumps({"status": "ok", "model": a.name, "precision": a.precision, "tp": a.tp,
                          "max_tokens": engine.max_tokens,
                          "batch_tokens": budget, "kind": kind, "think_mode": defaults.think_mode if thinks else "never",

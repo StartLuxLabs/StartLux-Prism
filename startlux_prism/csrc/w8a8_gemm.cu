@@ -304,7 +304,7 @@ __device__ __forceinline__ void epilogue(const int32_t (&acc)[Tile<BM, BN, BK, W
   const int warp = threadIdx.x / 32, lane = threadIdx.x % 32;
   const int wm = warp / WARPS_N, wn = warp % WARPS_N;
   const int g = lane / 4, t4 = lane % 4;
-#ifndef FLASHJEV_EPI_SKIP
+#ifndef STARTLUX_PRISM_EPI_SKIP
   if constexpr (EPI != 0) {
     if (mode == ADD) {
       // residual add, a row slice (16-row tile i, half) at a time: all of the slice's residual loads are issued
@@ -367,7 +367,7 @@ __device__ __forceinline__ void epilogue(const int32_t (&acc)[Tile<BM, BN, BK, W
         }
         float v0 = __fmul_rn(__fmul_rn((float)acc[i][j][half * 2], s_a), sw[col]);
         float v1 = __fmul_rn(__fmul_rn((float)acc[i][j][half * 2 + 1], s_a), col + 1 < N ? sw[col + 1] : 0.f);
-#ifdef FLASHJEV_EPI_SKIP  // measurement build (bench/epilogue_cost.py): no output writes; the product stays live
+#ifdef STARTLUX_PRISM_EPI_SKIP  // measurement build (bench/epilogue_cost.py): no output writes; the product stays live
         if (v0 == 1.2345e30f && v1 == 1.2345e30f) reinterpret_cast<int32_t*>(out)[0] = 0;
         continue;
 #endif
@@ -768,14 +768,14 @@ void w8a8_gemm_sk(torch::Tensor a, torch::Tensor sa, torch::Tensor w, torch::Ten
 #undef W8A8_SK_CASE
 }
 
-TORCH_LIBRARY(flash_jev, m) {
+TORCH_LIBRARY(startlux_prism, m) {
   m.def("w8a8_gemm(Tensor a, Tensor sa, Tensor w, Tensor sw, Tensor(a!) out, Tensor n_rows, int epi, int cfg, "
         "int split, int stages, int mode=2, Tensor(b!)? workspace=None, Tensor(c!)? counters=None, "
         "int slot_stride=0, int pdl=0) -> ()");
   m.def("w8a8_gemm_sk(Tensor a, Tensor sa, Tensor w, Tensor sw, Tensor(a!) out, Tensor n_rows, Tensor(b!) ws, "
         "Tensor(c!) counters, int epi, int cfg, int stages, int grid, int sk_waves, int pdl=0) -> ()");
 }
-TORCH_LIBRARY_IMPL(flash_jev, CUDA, m) {
+TORCH_LIBRARY_IMPL(startlux_prism, CUDA, m) {
   m.impl("w8a8_gemm", &w8a8_gemm);
   m.impl("w8a8_gemm_sk", &w8a8_gemm_sk);
 }

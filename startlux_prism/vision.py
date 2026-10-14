@@ -20,7 +20,7 @@ conversion (the HF names, what tools/gguf_to_hf.py writes for the transformers r
 StartLux-Decision v1.1 towers have none (clip.vision.is_deepstack_layers all false), and a file with any is refused.
 
 The same arithmetic, so the same bits: the features equal transformers' module on the same weights bit for bit, image
-by image, when both run the same attention kernel (tests/vision_reference.py encoder; flash-jev pins PyTorch's flash
+by image, when both run the same attention kernel (tests/vision_reference.py encoder; StartLux-Prism pins PyTorch's flash
 attention, ATTENTION, where transformers lets PyTorch pick cuDNN's on Hopper, which differs in the last bits and from
 one process to the next).  Two changes keep the bits and save time: the RoPE runs in one Triton kernel with
 transformers' roundings (kernels/vision_rope.py), and small images replay a CUDA graph per image size (GRAPH_TOKENS).
@@ -101,7 +101,7 @@ def load(path):
         raise ValueError(f"{path}: not a vision projector (llama.cpp clip GGUF)")
     proj = m.get("clip.projector_type")
     if proj != "qwen3vl_merger":
-        raise ValueError(f"{path}: projector {proj!r}; flash-jev reads the Qwen3.5 tower (qwen3vl_merger)")
+        raise ValueError(f"{path}: projector {proj!r}; StartLux-Prism reads the Qwen3.5 tower (qwen3vl_merger)")
     if any(bool(x) for x in m.get("clip.vision.is_deepstack_layers", [])):
         raise ValueError(f"{path}: deepstack layers are not supported (StartLux-Decision's towers have none)")
     eps = float(m.get("clip.vision.attention.layer_norm_epsilon", 1e-6))
