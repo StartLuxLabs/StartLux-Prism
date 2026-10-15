@@ -377,6 +377,16 @@ inline bool sm90_or_later() {
   return known[dev] == 2;
 }
 
+// Dynamic shared memory a block may opt in to: 99 KB on the RTX 5090 and Ada, 163 KB on the A100 / A800, 227 KB on
+// Hopper (a fixed 99 KB kept the larger tiles' deeper pipelines off the other two).
+inline int smem_optin() {
+  static int known[64] = {};  // per device: 0 not asked yet
+  int dev = 0;
+  C10_CUDA_CHECK(cudaGetDevice(&dev));
+  if (!known[dev]) C10_CUDA_CHECK(cudaDeviceGetAttribute(&known[dev], cudaDevAttrMaxSharedMemoryPerBlockOptin, dev));
+  return known[dev];
+}
+
 template <int BM, int BN, int WARPS_M, int WARPS_N, int STAGES, int KIND, int EPI, int MINB>
 void launch(const torch::Tensor& a, const torch::Tensor& as, const torch::Tensor& xs, const torch::Tensor& wq,
             const torch::Tensor& wsc, const torch::Tensor& wmn, const torch::Tensor& wd, const torch::Tensor& wdm,
@@ -387,7 +397,7 @@ void launch(const torch::Tensor& a, const torch::Tensor& as, const torch::Tensor
   TORCH_CHECK(wd.size(0) == K / 256 && wd.is_contiguous() && wsc.is_contiguous() && wsc.size(1) == N &&
                   as.size(0) == K / 256 && as.size(1) == M && as.is_contiguous(),
               "super-block-major scales: d [K / 256, N], sc [K / 256, N, *], a [K / 256, M]");
-  TORCH_CHECK(C::SMEM <= 101376, "this tile config's stages exceed the shared memory of a block");
+  TORCH_CHECK(C::SMEM <= smem_optin(), "this tile config's stages exceed the shared memory of a block");
   auto kern = w4a8_kernel<BM, BN, WARPS_M, WARPS_N, STAGES, KIND, EPI, MINB>;
   static bool configured = false;
   if (!configured) {
@@ -686,6 +696,172 @@ void kgroups_stages(int stages, const torch::Tensor& a, const torch::Tensor& as,
   TORCH_CHECK(false, "w4a8: K-group configs take 2, 3 or 4 stages");
 }
 
+// ------------------------------------------------------------------------------------------------ GEMV, 1-8 rows
+// The K-group kernel's four warps share a 32-column tile: a 5,120-wide projection is 160 CTAs, under five warps per SM
+// of an H200, which stream its weights at 1.2-2 TB/s of 4.8.  Here a warp has columns of its own (COLS) for all of a
+// decode step's rows (up to MR): at step i lane l reads piece p = 32 i + l of each column - 16 bytes, a Q4_K sub-block
+// (32 values) or a Q6_K one (16) - and dp4a sums it against the rows' activations; the lanes of a super-block (8 or 16)
+// add their integer sums with shuffles and compute its t (the tile kernel's steps, one rounding each), and the warp
+// folds the step's super-blocks in increasing b, y = fma(a, t, y): the same bits.
+constexpr int GV_WARPS = 4;   // warps per CTA
+constexpr int GV_PIECES = 8;  // 16-byte weight loads in flight per lane (over its columns)
+
+__device__ __forceinline__ uint4 ld_stream16(const void* p) {  // weights: read once, past L1
+  uint4 v;
+  asm volatile("ld.global.nc.L1::no_allocate.v4.u32 {%0, %1, %2, %3}, [%4];"
+               : "=r"(v.x), "=r"(v.y), "=r"(v.z), "=r"(v.w)
+               : "l"(p));
+  return v;
+}
+
+template <int KIND, int EPI, int MR, int COLS>
+__global__ void __launch_bounds__(GV_WARPS * 32)
+    w4a8_gemv_kernel(const int8_t* __restrict__ A, const float* __restrict__ as, const int8_t* __restrict__ xs,
+                     const uint8_t* __restrict__ Wq, const uint8_t* __restrict__ wsc,
+                     const uint8_t* __restrict__ wmn, const float* __restrict__ wd, const float* __restrict__ wdm,
+                     void* __restrict__ out, int ldo, const int* __restrict__ n_rows, int M, int N, int K) {
+  constexpr int SUBS = KIND == 0 ? 8 : 16;          // pieces (sub-blocks) per super-block
+  constexpr int ITER = GV_PIECES / COLS > 1 ? GV_PIECES / COLS : 1;
+  constexpr unsigned FULL = 0xffffffffu;
+  const int live = min(*n_rows, MR);
+  const int lane = threadIdx.x % 32;
+  const int n0 = (blockIdx.x * GV_WARPS + (int)threadIdx.x / 32) * COLS;
+  if (n0 >= N || live <= 0) return;
+  const int NB = K / 256, pieces = NB * SUBS;
+  const size_t wrow = KIND == 0 ? (size_t)K / 2 : (size_t)K;  // weight bytes of a column
+  float y[COLS][MR];
+#pragma unroll
+  for (int c = 0; c < COLS; ++c)
+#pragma unroll
+    for (int m = 0; m < MR; ++m) y[c][m] = 0.f;
+  for (int p0 = 0; p0 < pieces; p0 += 32 * ITER) {
+    uint4 w[ITER][COLS];           // the pieces, and with them their scales: sc | m << 8 (Q4_K), sc (Q6_K), d, dmin
+    uint32_t sm[ITER][COLS];
+    float dd[ITER][COLS], ddm[ITER][COLS];
+#pragma unroll
+    for (int i = 0; i < ITER; ++i) {
+      const int p = p0 + 32 * i + lane, b = (p < pieces ? p : 0) / SUBS, g = p % SUBS;
+#pragma unroll
+      for (int c = 0; c < COLS; ++c) {
+        const bool ok = p < pieces && n0 + c < N;
+        const size_t sb = ((size_t)b * N + n0 + c) * SUBS + g, db = (size_t)b * N + n0 + c;
+        w[i][c] = ok ? ld_stream16(Wq + (size_t)(n0 + c) * wrow + (size_t)p * 16) : make_uint4(0u, 0u, 0u, 0u);
+        sm[i][c] = ok ? (KIND == 0 ? (uint32_t)__ldg(wsc + sb) | (uint32_t)__ldg(wmn + sb) << 8 : (uint32_t)__ldg(wsc + sb))
+                      : 0u;
+        dd[i][c] = ok ? __ldg(wd + db) : 0.f;
+        ddm[i][c] = ok && KIND == 0 ? __ldg(wdm + db) : 0.f;
+      }
+    }
+#pragma unroll
+    for (int i = 0; i < ITER; ++i) {
+      const int pb = p0 + 32 * i;
+      if (pb >= pieces) break;                      // the same for the whole warp
+      const int p = pb + lane;
+      const bool on = p < pieces;
+      const int b = (on ? p : pb) / SUBS, g = p % SUBS;
+      float t[COLS][MR], av[MR];
+#pragma unroll
+      for (int m = 0; m < MR; ++m) {
+        av[m] = m < live ? as[(size_t)b * M + m] : 0.f;
+        int xa[4] = {0, 0, 0, 0}, xb[4] = {0, 0, 0, 0}, S = 0;
+        if (on && m < live) {
+          const int8_t* x = A + (size_t)m * K + (size_t)p * (KIND == 0 ? 32 : 16);
+          const uint4 u = __ldg(reinterpret_cast<const uint4*>(x));
+          xa[0] = (int)u.x, xa[1] = (int)u.y, xa[2] = (int)u.z, xa[3] = (int)u.w;
+          if constexpr (KIND == 0) {
+            const uint4 v = __ldg(reinterpret_cast<const uint4*>(x + 16));
+            xb[0] = (int)v.x, xb[1] = (int)v.y, xb[2] = (int)v.z, xb[3] = (int)v.w;
+            const int8_t* sp = xs + ((size_t)b * M + m) * 16;
+            S = (int)sp[g] + 64 * (int)sp[8 + g];   // the sub-block's activation sum (quantize_ref's split)
+          }
+        }
+#pragma unroll
+        for (int c = 0; c < COLS; ++c) {
+          int acc = 0, mins = 0;
+          if (on && m < live && n0 + c < N) {
+            const uint32_t wv[4] = {w[i][c].x, w[i][c].y, w[i][c].z, w[i][c].w};
+            int s = 0;
+            if constexpr (KIND == 0) {
+#pragma unroll
+              for (int j = 0; j < 4; ++j) {
+                s = __dp4a((int)(wv[j] & 0x0F0F0F0Fu), xa[j], s);
+                s = __dp4a((int)((wv[j] >> 4) & 0x0F0F0F0Fu), xb[j], s);
+              }
+              acc = (int)(sm[i][c] & 0xFFu) * s;
+              mins = (int)(sm[i][c] >> 8) * S;
+            } else {
+#pragma unroll
+              for (int j = 0; j < 4; ++j) s = __dp4a((int)wv[j], xa[j], s);
+              acc = (int)(int8_t)(sm[i][c] & 0xFFu) * s;
+            }
+          }
+#pragma unroll
+          for (int o = 1; o < SUBS; o <<= 1) {      // the super-block's lanes: exact integer sums
+            acc += __shfl_xor_sync(FULL, acc, o);
+            if constexpr (KIND == 0) mins += __shfl_xor_sync(FULL, mins, o);
+          }
+          float tv = __fmul_rn(dd[i][c], (float)acc);
+          if constexpr (KIND == 0) tv = __fmaf_rn(-ddm[i][c], (float)mins, tv);
+          t[c][m] = tv;
+        }
+      }
+#pragma unroll
+      for (int s = 0; s < 32 / SUBS; ++s) {         // the step's super-blocks, in increasing b
+        if (pb + s * SUBS >= pieces) break;
+#pragma unroll
+        for (int m = 0; m < MR; ++m) {
+          const float a_ = __shfl_sync(FULL, av[m], s * SUBS);
+#pragma unroll
+          for (int c = 0; c < COLS; ++c) y[c][m] = __fmaf_rn(a_, __shfl_sync(FULL, t[c][m], s * SUBS), y[c][m]);
+        }
+      }
+    }
+  }
+#pragma unroll
+  for (int c = 0; c < COLS; ++c)
+#pragma unroll
+    for (int m = 0; m < MR; ++m)
+      if (lane == c * MR + m && m < live && n0 + c < N) {
+        if constexpr (EPI == 0) {
+          reinterpret_cast<__nv_bfloat16*>(out)[(size_t)m * ldo + n0 + c] = __float2bfloat16_rn(y[c][m]);
+        } else {
+          float* o = reinterpret_cast<float*>(out) + (size_t)m * ldo + n0 + c;
+          *o = __fadd_rn(*o, y[c][m]);
+        }
+      }
+}
+
+template <int KIND, int EPI, int MR, int COLS>
+void launch_gemv(const torch::Tensor& a, const torch::Tensor& as, const torch::Tensor& xs, const torch::Tensor& wq,
+                 const torch::Tensor& wsc, const torch::Tensor& wmn, const torch::Tensor& wd, const torch::Tensor& wdm,
+                 torch::Tensor& out, const torch::Tensor& n_rows) {
+  const int M = a.size(0), K = a.size(1), N = wd.size(1);
+  TORCH_CHECK(K % 256 == 0, "K must be a multiple of 256");
+  TORCH_CHECK(wd.size(0) == K / 256 && wd.is_contiguous() && wsc.is_contiguous() && wsc.size(1) == N &&
+                  as.size(0) == K / 256 && as.size(1) == M && as.is_contiguous(),
+              "super-block-major scales: d [K / 256, N], sc [K / 256, N, *], a [K / 256, M]");
+  const int per_cta = GV_WARPS * COLS;
+  w4a8_gemv_kernel<KIND, EPI, MR, COLS><<<(N + per_cta - 1) / per_cta, GV_WARPS * 32, 0,
+                                          c10::cuda::getCurrentCUDAStream()>>>(
+      a.data_ptr<int8_t>(), as.data_ptr<float>(), KIND == 0 ? xs.data_ptr<int8_t>() : nullptr,
+      reinterpret_cast<const uint8_t*>(wq.data_ptr()), reinterpret_cast<const uint8_t*>(wsc.data_ptr()),
+      KIND == 0 ? wmn.data_ptr<uint8_t>() : nullptr, wd.data_ptr<float>(), KIND == 0 ? wdm.data_ptr<float>() : nullptr,
+      out.data_ptr(), (int)out.stride(0), n_rows.data_ptr<int>(), M, N, K);
+  C10_CUDA_KERNEL_LAUNCH_CHECK();
+}
+
+template <int KIND, int EPI, int COLS>
+void gemv_rows(const torch::Tensor& a, const torch::Tensor& as, const torch::Tensor& xs, const torch::Tensor& wq,
+               const torch::Tensor& wsc, const torch::Tensor& mn, const torch::Tensor& wd, const torch::Tensor& dm,
+               torch::Tensor& out, const torch::Tensor& n_rows) {
+  const int M = a.size(0);
+  if (M <= 1) return launch_gemv<KIND, EPI, 1, COLS>(a, as, xs, wq, wsc, mn, wd, dm, out, n_rows);
+  if (M <= 2) return launch_gemv<KIND, EPI, 2, COLS>(a, as, xs, wq, wsc, mn, wd, dm, out, n_rows);
+  if (M <= 4) return launch_gemv<KIND, EPI, 4, COLS>(a, as, xs, wq, wsc, mn, wd, dm, out, n_rows);
+  TORCH_CHECK(M <= 8, "w4a8: the GEMV configs take up to 8 rows");
+  return launch_gemv<KIND, EPI, 8, COLS>(a, as, xs, wq, wsc, mn, wd, dm, out, n_rows);
+}
+
 }  // namespace
 
 // cfg: (BM, BN, warps M x N, minimum CTAs per SM - the register cap: 2 holds an 8-warp CTA to 128 registers a thread,
@@ -733,6 +909,26 @@ void w4a8_gemm(torch::Tensor a, torch::Tensor as, torch::Tensor xs, torch::Tenso
       else { W4A8_STAGES(1, 1, BM, BN, WMN, WNN, MB) }          \
     }                                                          \
     break;
+  if (cfg >= 17 && cfg <= 19) {  // GEMV (up to 8 rows): a warp's own 1, 2 or 4 columns
+    TORCH_CHECK(pdl == 0, "w4a8: no programmatic dependent launch for the GEMV configs");
+#define W4A8_GV(COLS)                                                                              \
+  if (kind == 0) {                                                                                 \
+    if (epi == 0) gemv_rows<0, 0, COLS>(a, as, xs, wq, wsc, mn, wd, dm, out, n_rows);              \
+    else gemv_rows<0, 1, COLS>(a, as, xs, wq, wsc, mn, wd, dm, out, n_rows);                       \
+  } else {                                                                                         \
+    if (epi == 0) gemv_rows<1, 0, COLS>(a, as, xs, wq, wsc, mn, wd, dm, out, n_rows);              \
+    else gemv_rows<1, 1, COLS>(a, as, xs, wq, wsc, mn, wd, dm, out, n_rows);                       \
+  }
+    if (cfg == 17) {
+      W4A8_GV(1)
+    } else if (cfg == 18) {
+      W4A8_GV(2)
+    } else {
+      W4A8_GV(4)
+    }
+#undef W4A8_GV
+    return;
+  }
   if (cfg >= 13 && cfg <= 16) {  // K groups (few rows): 8 or 4 warps on the super-blocks of a 16 or 32 x 32 tile
     TORCH_CHECK(pdl == 0, "w4a8: no programmatic dependent launch for the K-group configs");
 #define W4A8_KG(BM, KW)                                                                                   \

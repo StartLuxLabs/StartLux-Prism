@@ -72,7 +72,8 @@ def main():
             n = torch.tensor([M], dtype=torch.int32, device="cuda")
             out = torch.empty(M, N, dtype=torch.bfloat16, device="cuda")
             row = f"{ws[0].kind} {name:22s} [{N:5d}, {K:5d}] M={M:5d}"
-            cands = [(c, st) for c in W.CUDA_CFGS for st in (2, 3, 4)] if a.search else [None]
+            cands = [(c, st) for c in W.CUDA_CFGS for st in ((2,) if c >= 17 else (2, 3, 4))
+                     if not (c >= 17 and M > 8)] if a.search else [None]
             best, times = None, {}
             for cfg in cands:
                 def run4(cfg=cfg):

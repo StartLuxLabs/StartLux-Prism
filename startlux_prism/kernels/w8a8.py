@@ -189,6 +189,12 @@ def gemm(a, a_s, w, w_s, out, n_rows, gk, epi=0, outs=None, cfg=None, slots=None
     N = w.shape[0]
     if cfg is None and gk == K and epi in (0, 1):
         c = _choice(N, K, M)
+        if c and c[0] == "sk":
+            from . import cuda_ext
+            bm, bn = cuda_ext.CFGS[c[1]][:2]
+            if -(-M // bm) * -(-N // bn) > cuda_ext.MAX_TILES:   # more tiles than stream-K's counters (a count beyond
+                c = ["cuda", c[1], c[2], 1]                       # the table's, which takes its largest): the same tiles
+                                                                  # one per CTA, the same bits
         if c and c[0] == "cuda":
             from . import cuda_ext
             split = c[3] if epi == 1 else 1

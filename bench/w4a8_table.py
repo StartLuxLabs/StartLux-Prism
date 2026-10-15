@@ -88,9 +88,11 @@ def main():
                 out = torch.empty(M, N, dtype=torch.bfloat16, device="cuda")
                 res = {}
                 for c, (bm, _, _) in W.CUDA_CFGS.items():     # tiles far from the token count skipped
-                    if (M <= 64 and bm >= 128) or (M >= 512 and bm <= 16) or (c >= 13 and M > 256):
-                        continue                               # (13-16: the K-group kernels, for few rows)
-                    for st in (2, 3, 4):
+                    if (M <= 64 and bm >= 128) or (M >= 512 and bm <= 16) or (c >= 13 and M > 256) or \
+                            (c >= 17 and M > 1):              # 13-16: the K-group kernels, for few rows; 17-19 the
+                        continue                               # GEMV, for one (at two a 27B decode step ran 2% slower
+                                                               # on the H200, though each of its GEMMs alone was as fast)
+                    for st in ((2,) if c >= 17 else (2, 3, 4)):
                         def run(cfg=(c, st)):
                             for w in ws:
                                 W.gemm(xq, xa, xs, w, out, n, cfg=cfg)

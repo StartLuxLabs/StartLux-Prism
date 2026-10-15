@@ -51,7 +51,8 @@ def main():
                 runs = [("triton", lambda o, e: W.gemm_triton(xq, a, xs, w, o, n_rows, epi=e))]
                 runs += [(f"cuda {c}/{st}", lambda o, e, c=c, st=st: W.gemm(xq, a, xs, w, o, n_rows, epi=e,
                                                                              cfg=(c, st)))
-                         for c in W.CUDA_CFGS for st in (2, 3, 4)]
+                         for c in W.CUDA_CFGS for st in ((2,) if c >= 17 else (2, 3, 4))
+                         if not (c >= 17 and m > 8)]       # 17-19: the GEMV, up to 8 rows
                 fails, ran = [], 0
                 for label, run in runs:
                     try:

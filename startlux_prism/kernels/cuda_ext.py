@@ -15,7 +15,6 @@ CFGS = {  # cfg id -> (BM, BN, BK, warps) of the instantiations in w8a8_gemm.cu 
     8: (128, 128, 64, 8), 9: (128, 64, 64, 4), 10: (256, 128, 64, 8), 11: (128, 256, 64, 8), 12: (64, 64, 128, 4),
     13: (128, 128, 128, 8),
 }
-SMEM_LIMIT = 101376           # bytes of dynamic shared memory per block on sm_120 (99 KB)
 WS_BYTES = 96 << 20          # stream-K partial tiles: 2 slots per CTA of BM x BN int32 (2 x 340 x 256 x 128)
 MAX_TILES = 1 << 16          # stream-K tile counters
 
@@ -92,10 +91,17 @@ def gemm_wg(a, a_s, w, w_s, out, n_rows, epi=0, cfg=0, stages=4, split=1, slots=
     load().w8a8_wgmma(a, a_s.reshape(-1), w, w_s.reshape(-1), out, n_rows, epi, cfg, stages, split, stride)
 
 
+@functools.lru_cache(None)
+def smem_limit(device=None):
+    """Dynamic shared memory a block may opt in to on this GPU: 99 KB on the RTX 5090 and Ada, 163 KB on the A100 /
+    A800, 227 KB on Hopper."""
+    return getattr(torch.cuda.get_device_properties(device), "shared_memory_per_block_optin", 101376)
+
+
 def fits(cfg, stages):
-    """Whether a tile config's pipeline stages fit in shared memory."""
+    """Whether a tile config's pipeline stages fit in this GPU's shared memory."""
     bm, bn, bk, _ = CFGS[cfg]
-    return (bm + bn) * bk * stages <= SMEM_LIMIT
+    return (bm + bn) * bk * stages <= smem_limit()
 
 
 @functools.lru_cache(None)

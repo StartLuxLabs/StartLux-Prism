@@ -31,8 +31,9 @@ what it is batched with, on concurrency, or on the cache.
 Ada). Each projection's kernel, tile and K split is chosen per shape and token count from a table measured on that GPU
 model (`kernels/gemm_table_<gpu>.json`):
 - **RTX 5090:** mma.sync kernels (one CTA per tile, split-K, stream-K) and a Triton kernel.
-- **Ampere and Ada (A800, RTX 30 and 40 series):** no table measured yet - the int8 GEMMs run the Triton kernel, W4A8
-  picks its tiles by rule - and no PDL or thread-block clusters (Hopper's), the rest of the code as on the others.
+- **Ampere and Ada (A800, RTX 30 and 40 series):** mma.sync kernels and a Triton kernel as on the RTX 5090, without
+  PDL or thread-block clusters (Hopper's); tables measured on the A800, none yet for the RTX 30 and 40 series (there
+  the int8 GEMMs run the Triton kernel and W4A8 picks its tiles by rule).
 - **H200:** warpgroup-MMA kernels with TMA copies and warp specialization (`csrc/w8a8_wgmma.cu`: 1,240-1,420 TOPS at
   4,000-8,000 tokens, where mma.sync reaches about 530 and cuBLASLt's int8 870-910).
 
@@ -46,7 +47,8 @@ int8 weights halve the weight stream that bounds short requests.
 - **Accumulation:** exact in int32 over all of K, scaled once in the epilogue. Output projections add straight into the
   fp32 residual stream.
 - **Q4_K_M files** keep their 4-bit weights: the W4A8 GEMM unpacks Q4_K / Q6_K blocks next to the MMA, with int8
-  activations per 256 inputs (`csrc/w4a8_gemm.cu`).
+  activations per 256 inputs (`csrc/w4a8_gemm.cu`); a decode step's single row runs a GEMV of its own (dp4a, a warp
+  per column), with the same arithmetic in the same order.
 
 **Last layer at the read positions only.** Keys and values are computed for every token; queries, attention output,
 MLP, norm and the 26 letter rows only where answers are read.

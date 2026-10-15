@@ -1218,7 +1218,9 @@ router died.
 
 2026-10-15, the `ampere-ada` branch (Hopper's PDL and thread-block clusters left out below sm_90:
 [optimizations.md](optimizations.md#ampere-and-ada-the-a800-rtx-30-and-40-series-2026-10-15)), PyTorch 2.14.1 for CUDA
-12.6, Triton 3.8.0. No dispatch tables for these GPUs yet: the int8 GEMMs ran the Triton kernel, W4A8 its tile rule.
+12.6, Triton 3.8.0. First without dispatch tables (the int8 GEMMs on the Triton kernel, W4A8 on its tile rule); then
+the A800 with its own (`kernels/gemm_table_a80080gbpcie.json`, `kernels/w4a8_table_a80080gbpcie.json`: int8 up to 8,192
+rows, W4A8 up to 1,024, its one-row GEMV included), rows "A800 ... tuned" below. The RTX 4090 has none yet.
 
 - **RTX 4090** (24 GB, sm_89, driver 550.107.02, CUDA 12.8 toolkit): StartLux-Decision-v1.1-9B-AutoThink, its Q8_0
   (int8, activation ranges from an earlier start) and Q4_K_M (W4A8) files.
@@ -1245,11 +1247,14 @@ batch, seeded sampling) passes in both precisions:
 | RTX 5090, 9B, int8 | 200, 22.0 | 210, 1,823 | |
 | RTX 5090, 9B, W4A8 | 200, 31.8 | 214, 2,147 | |
 | A800, 27B, int8 | 214, 271.0 / 71.5 | 221, 4,108 / 157 | 69 (60) |
+| A800, 27B, int8, tuned | 214, 141.9 / 36.1 | 221, 2,534 / 78.5 | 69 (60) |
 | A800, 27B, W4A8 | 213, 298.6 / 77.3 | 227, 4,242 / 168 | 69 (65) |
+| A800, 27B, W4A8, tuned | 213, 281.1 / 67.7 | 227, 2,575 / 135 | 69 (65) |
 | H200, 27B, int8 | 214, 41.1 / 15.8 | 224, 1,196 / 19.2 | 67 (61) |
 
 The one-pass answers match the other GPUs' within an item or two; the thoughts' differ more (a sampled thought follows
-the last bits of its logits). Every thought ended by itself on the A800.
+the last bits of its logits). Every thought ended by itself on the A800. The tables change only the kernels: the tuned
+runs give the same answers and the same thoughts, token for token, as the first ones.
 
 **Decode** (`bench/decode_speed.py`, context 512, ms per step):
 
@@ -1258,10 +1263,13 @@ the last bits of its logits). Every thought ended by itself on the A800.
 | RTX 4090, 9B | W4A8 | 11.26 | 11.73 | 13.04 | |
 | RTX 4090, 9B | int8 | 12.15 | 13.23 | 14.62 | |
 | A800, 27B | W4A8 | 32.58 | 34.17 | | 63.21 |
+| A800, 27B, tuned | W4A8 | 17.63 | 20.86 | | 56.14 |
 | A800, 27B | int8 | 34.19 | 35.95 | | 50.68 |
+| A800, 27B, tuned | int8 | 21.29 | 23.54 | | 39.97 |
 
-Twice the RTX 5090's steps on the RTX 4090 (5.04 ms for the 9B's W4A8) and three times the H200's on the A800 (10.51
-ms for the 27B's int8): half and 0.4 of their memory bandwidth, and no tuned tables.
+Without tables, twice the RTX 5090's steps on the RTX 4090 (5.04 ms for the 9B's W4A8) and three times the H200's on
+the A800 (10.51 ms for the 27B's int8): half and 0.4 of their memory bandwidth. With its tables the A800 decodes 1.6-1.9x
+faster at one sequence (W4A8 17.6 ms, int8 21.3), and its thinking items take 38-39% less time.
 
 ## Stress tests
 
