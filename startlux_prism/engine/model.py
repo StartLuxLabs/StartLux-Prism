@@ -34,6 +34,7 @@ import numpy as np
 import torch
 
 from .. import gguf_weights, jevfmt as J
+from .. import progress as P
 from ..kernels import attn as KA
 from ..kernels import cuda_ext as CX
 from ..kernels import elementwise as KE
@@ -147,6 +148,7 @@ class Engine:
             self._tp_id = self.tp.mirror(self, (gguf_path, model_dir, self.opt))   # built on every rank alike
             self.device = self.tp.device
         t0 = time.perf_counter()
+        P.step(f"reading the model file ({os.path.getsize(gguf_path) / 1e9:.1f} GB)")
         w = gguf_weights.load(gguf_path)
         self.cfg = w.config
         self.tok = Tokenizer(model_dir)
@@ -154,6 +156,7 @@ class Engine:
         if self.opt.mmproj and (self.tp is None or self.tp.rank == 0):       # tensor parallel: rank 0 encodes images
             from ..vision import VisionTower
             self.vision = VisionTower(self.opt.mmproj, self.device)
+            P.step(f"vision tower {os.path.basename(self.opt.mmproj)}: loaded")
             if self.vision.cfg.out != self.cfg.hidden:
                 raise ValueError(f"{self.opt.mmproj}: projects to {self.vision.cfg.out}, the decoder's hidden size is "
                                  f"{self.cfg.hidden}")
@@ -194,6 +197,13 @@ class Engine:
         self._init_prefix()
         self.load_s = time.perf_counter() - t0
         self.last = {}
+        o = self.opt
+        free, total = torch.cuda.mem_get_info(self.device)
+        P.step(f"buffers: batches up to {self.max_tokens:,} tokens, prefix cache "
+               f"{o.prefix_cache if self.cache is not None else 0} "
+               f"entries" + (f", {o.think_seqs} thoughts at once" if o.think_seqs > 0 else "")
+               + f"; GPU memory {(total - free) / 2**30:.1f} of {total / 2**30:.1f} GiB in use "
+               f"({self.load_s:.1f} s so far)")
 
     # ------------------------------------------------------------------ weights
     def _bf16_weights(self, w):
@@ -208,6 +218,7 @@ class Engine:
         self.letters = w.output.dequant(torch.float32, torch.tensor(self.tok.letters)).to(dev)  # the readout's rows
         self.out_norm = w.out_norm.to(dev)
         self.layers, self.gdn_index, self.attn_index = [], {}, {}
+        bar = P.Bar("weights to the GPU (bf16)", len(w.layers), "layers")
         for i, l in enumerate(w.layers):
             d = {"attn_norm": l.attn_norm.to(dev), "post_norm": l.post_norm.to(dev), "gu": deq(l.ffn_gate, l.ffn_up),
                  "down": deq(l.ffn_down)}
@@ -219,6 +230,7 @@ class Engine:
                 d.update(inp=deq(l.wqkv, l.wz, l.wbeta, l.walpha), out=deq(l.wout), conv=l.conv.to(dev).contiguous(),
                          dt_bias=l.dt_bias.to(dev), a=l.a.to(dev), ssm_norm=l.ssm_norm.to(dev))
             self.layers.append(d)
+            bar.update(i + 1)
         if not cfg.is_attention(cfg.n_layer - 1):
             raise ValueError("expected the last layer to be full attention")
         self.qn = cfg.n_head * cfg.head_dim * 2                       # query|gate rows of the attention projection
@@ -236,6 +248,7 @@ class Engine:
         self.out_norm = w.out_norm.to(dev)
         self.layers, self.gdn_index, self.attn_index = [], {}, {}
         seg = lambda *m: KW4.segments(m, dev)       # noqa: E731
+        bar = P.Bar("weights to the GPU (W4A8: the file's 4-bit blocks)", len(w.layers), "layers")
         for i, l in enumerate(w.layers):
             d = {"attn_norm": l.attn_norm.to(dev), "post_norm": l.post_norm.to(dev), "gu": seg(l.ffn_gate, l.ffn_up),
                  "down": seg(l.ffn_down)}
@@ -247,6 +260,7 @@ class Engine:
                 d.update(inp=seg(l.wqkv, l.wz, l.wbeta, l.walpha), out=seg(l.wout), conv=l.conv.to(dev).contiguous(),
                          dt_bias=l.dt_bias.to(dev), a=l.a.to(dev), ssm_norm=l.ssm_norm.to(dev))
             self.layers.append(d)
+            bar.update(i + 1)
         torch.cuda.empty_cache()
         if not cfg.is_attention(cfg.n_layer - 1):
             raise ValueError("expected the last layer to be full attention")
@@ -261,6 +275,7 @@ class Engine:
         def quant(qs, act, norm=None):
             return smooth_quant(qs, act, dev, norm)
 
+        bar = P.Bar("int8 weights (SmoothQuant)", len(w.layers), "layers")
         for i, l in enumerate(w.layers):
             d = self.layers[i]
             for k in ("gu", "down", "inp", "out", "qkv", "o"):
@@ -275,6 +290,7 @@ class Engine:
                                                                  d["attn_norm"])
                 d["out_q"], d["out_s"], d["out_inv"] = quant((l.wout,), amax[(i, "out")])
             torch.cuda.empty_cache()
+            bar.update(i + 1)
         self.int8 = True
 
     def _tp_weights(self, w):
@@ -306,6 +322,7 @@ class Engine:
         def cols(qs, act, idx):                       # row-parallel: this rank's input columns
             wq, ws, extra = smooth_quant(qs, act, dev)
             return wq[:, idx].contiguous(), ws, extra[idx].contiguous()
+        bar = P.Bar(f"int8 weight shards (tensor parallel, rank {r} of {n})", len(w.layers), "layers")
         for i, l in enumerate(w.layers):
             d = {"attn_norm": l.attn_norm.to(dev), "post_norm": l.post_norm.to(dev)}
             d["gu_q"], d["gu_s"], d["post_norm_s"] = rows((l.ffn_gate, l.ffn_up), amax[(i, "gu")], ix["gu"],
@@ -326,6 +343,7 @@ class Engine:
                          a=l.a.to(dev)[ix["vh"]].contiguous(), ssm_norm=l.ssm_norm.to(dev))
             self.layers.append(d)
             torch.cuda.empty_cache()
+            bar.update(i + 1)
         if not full.is_attention(full.n_layer - 1):
             raise ValueError("expected the last layer to be full attention")
         self.qn = cfg.n_head * cfg.head_dim * 2                       # this rank's query|gate rows
@@ -336,14 +354,18 @@ class Engine:
     def _load_or_calibrate(self, w):
         path = self.opt.calib
         if path and os.path.exists(path):
+            P.step(f"int8 activation ranges: {path}")
             raw = torch.load(path, map_location=self.device)
             return {(int(k.split(":")[0]), k.split(":")[1]): v for k, v in raw.items()}
+        P.step("int8 activation ranges: computing them (the first start with this file: a bf16 forward of the "
+               "calibration requests)")
         amax = self.calibrate()
         if path:
             os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
             tmp = f"{path}.{os.getpid()}.tmp"
             torch.save({f"{k[0]}:{k[1]}": v for k, v in amax.items()}, tmp)
             os.replace(tmp, path)                    # whole or absent: a server starting meanwhile never reads half
+            P.step(f"int8 activation ranges: saved in {path} for the next starts")
         return amax
 
     @torch.no_grad()
@@ -356,9 +378,11 @@ class Engine:
         graphs, self.opt.graphs = self.opt.graphs, False
         try:
             self._init_prefix()
-            for state, questions in CALIBRATION:
+            bar = P.Bar("calibration requests", len(CALIBRATION))
+            for i, (state, questions) in enumerate(CALIBRATION):
                 recs = [J.from_systemone(state, q) for q in questions.values()]
                 self.run([[r.ids for r in rows_for(self.tok, recs, list(questions))]])
+                bar.update(i + 1)
         finally:
             self.opt.graphs = graphs
             amax, self._rec = self._rec, None
@@ -1021,10 +1045,16 @@ class Engine:
         if self.tp is not None:
             self.tp.call(self, "warm_up", buckets, reads)       # every rank records them, in the same order
         top = min(self.max_tokens, self.opt.graph_max_tokens or self.max_tokens)
-        for T in buckets or [x for x in TOKEN_BUCKETS if x <= top]:
+        bodies = buckets or [x for x in TOKEN_BUCKETS if x <= top]
+        heads = reads or [x for x in READ_BUCKETS if x <= self.opt.max_read]
+        bar = P.Bar("CUDA graphs (a first start also compiles the Triton kernels)", len(bodies) + len(heads),
+                    "batch shapes")
+        for i, T in enumerate(bodies):
             self._graph("body", T)
-        for R in reads or [x for x in READ_BUCKETS if x <= self.opt.max_read]:
+            bar.update(i + 1)
+        for i, R in enumerate(heads):
             self._graph("head", R)
+            bar.update(len(bodies) + i + 1)
         if self.vision is not None:
             self.vision.warm_up()
         torch.cuda.synchronize()

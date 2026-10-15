@@ -1,8 +1,8 @@
 # StartLux-Prism
 
 **A fast CUDA inference engine for StartLux-Decision models.** It serves StartLux-Decision v1 (4B, 9B, 27B) and v1.1
-AutoThink (27B) straight from their GGUF files, behind the TypeSafe `/v1/systemone` API, on the RTX 5090 and the H200,
-on one GPU or several. Like a prism that splits light into its spectrum, it turns each question into a calibrated
+AutoThink (9B, 27B) straight from their GGUF files, behind the TypeSafe `/v1/systemone` API, on the RTX 5090 and the
+H200, on one GPU or several. Like a prism that splits light into its spectrum, it turns each question into a calibrated
 probability for every option.
 
 <picture>
@@ -18,23 +18,54 @@ probability for every option.
 - **The same answers.** Prompts, read-outs, thoughts and decision rules are the model's own; only the forward pass is
   new. v1.1's evaluation suites score 92.94 on StartLux-Prism int8, 92.97 on the official BF16 server and 92.83 in FP8. An
   answer is bit-identical whatever it is batched with, on any number of GPUs, from the cache or not.
-- **All of v1.1.** AutoThink thoughts generated on the GPU (95 tokens/s for one sequence, 3,832 for 64 at once),
-  `none_probability` and `allow_none`, up to 8 images per request.
+- **All of v1.1.** AutoThink thoughts generated on the GPU (95 tokens/s for one sequence, 3,832 for 64 at once), from
+  the Q8_0 and the Q4_K_M files; `none_probability` and `allow_none`, up to 8 images per request.
 - **One GPU or several.** Data parallelism for throughput (four H200s give 3.92x one), tensor parallelism (`--tp 2` or
   `4`) for latency.
 - **The released files as they are.** Q8_0 runs as int8 (W8A8) and Q4_K_M on its own 4-bit weights (W4A8), so the 27B
   fits a 32 GB RTX 5090.
 
-## Quick start
+## Install
 
-Needs Linux, an RTX 5090 (sm_120) or a Hopper GPU (sm_90a), Python 3.12 with PyTorch for CUDA 13, Triton and a CUDA
-toolkit. The CUDA extension builds on first use.
+Needs Linux, an NVIDIA GPU from Ampere on (sm_80 and later: tuned on the RTX 5090 and Hopper, also run on an RTX 4090
+and an A800), Python 3.12 with its headers and venv (on Ubuntu `python3.12-dev python3.12-venv`) and `g++`: the CUDA
+kernels are compiled on the first start, for the GPU they run on. With an NVIDIA driver for CUDA 13 (580 or later):
+
+```bash
+git clone https://github.com/StartLuxLabs/StartLux-Prism && cd StartLux-Prism
+python3.12 -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt     # PyTorch 2.14.1 for CUDA 13, Triton, nvcc 13.0
+source scripts/cuda_env.sh          # nvcc from pip as CUDA_HOME (in every new shell)
+```
+
+With an older driver (550 or 570: CUDA 12), in place of the last two lines: PyTorch for CUDA 12.6 and a CUDA 12
+toolkit's nvcc for the kernels:
+
+```bash
+pip install -r requirements-cu12.txt
+export CUDA_HOME=/usr/local/cuda    # a CUDA 12 toolkit (in every new shell)
+```
+
+A model is its GGUF file and its release's folder files (`config.json`, `decision_config.json`, the tokenizer and the
+chat template) in one directory. The v1 GGUF repositories carry them; for v1.1 they come from the full release:
 
 ```bash
 M=~/models/StartLux-Decision-v1.1-27B-AutoThink-GGUF
+hf download startlux-models/StartLux-Decision-v1.1-27B-AutoThink-GGUF StartLux-Decision-v1.1-27B-AutoThink-Q8_0.gguf --local-dir $M
+hf download startlux-models/StartLux-Decision-v1.1-27B-AutoThink --include "*.json" "*.jinja" --local-dir $M
+```
+
+Add the `mmproj-*.gguf` file to read images. The weights are CC BY-NC 4.0 (non-commercial).
+
+## Quick start
+
+```bash
 G=$M/StartLux-Decision-v1.1-27B-AutoThink-Q8_0.gguf
 python -m startlux_prism.server --gguf $G --model-dir $M --port 8092    # ready when it prints "Ready"
 ```
+
+It prints each loading step as it goes, then `Ready`, its endpoints and a request to try
+([what a start prints](docs/serving.md#what-a-start-prints)).
 
 The first start measures the int8 activation ranges once and keeps them in `~/.cache/startlux-prism/calib`.
 
@@ -67,6 +98,9 @@ python -m startlux_prism.dp --gpus 0,1,2,3,4,5,6,7 --gguf $G --model-dir $M --po
 python -m startlux_prism.server --tp 2 --gpus 0,1 --gguf $G --model-dir $M --port 8092    # tensor parallel: less latency
 python -m startlux_prism.dp --gpus 0,1,2,3 --tp 2 --gguf $G --model-dir $M --port 8092    # both
 ```
+
+To serve other machines (`--host 0.0.0.0`; the server has no authentication of its own), keep the compiled kernels
+and the calibration across restarts, or run it under systemd: [docs/serving.md](docs/serving.md#running-as-a-service).
 
 ## Serving
 

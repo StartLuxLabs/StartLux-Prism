@@ -6,7 +6,8 @@ once, long evidence, follow-up questions served from a prefix cache, the longest
 pass, and the stress test of a running server. Two machines: an RTX 5090 (the 4B, the 9B and the 27B's Q4_K_M file)
 and an H200 (the 27B). Every engine runs alone on the GPU, one after another, through the same HTTP client; the v1
 numbers are from 2026-10-10 to 2026-10-12. Then StartLux-Decision v1.1 27B AutoThink on a second H200 server
-(2026-10-13 and 14): thoughts, its official engine, int8 against bf16, images, and several GPUs (data parallelism,
+(2026-10-13 and 14): thoughts (its Q8_0 and Q4_K_M files, and the 9B's Q4_K_M), its official engine, int8 against
+bf16, images, and several GPUs (data parallelism,
 tensor parallelism, both; eight GPUs against the official engine). Each chart is drawn from the table below it (`python bench/charts.py`).
 
 - [Summary](#summary)
@@ -26,6 +27,7 @@ tensor parallelism, both; eight GPUs against the official engine). Each chart is
 - [Tensor parallelism: the 27B on 2 and 4 H200s](#tensor-parallelism-the-27b-on-2-and-4-h200s)
 - [Four H200s: the most throughput](#four-h200s-the-most-throughput)
 - [Eight H200s: against the official engine](#eight-h200s-against-the-official-engine)
+- [Ampere and Ada: an RTX 4090 and an A800](#ampere-and-ada-an-rtx-4090-and-an-a800)
 - [Stress tests](#stress-tests)
 - [Engine configurations](#engine-configurations) · [Crashes on the RTX 5090 server](#crashes-on-the-rtx-5090-server)
 
@@ -772,6 +774,40 @@ training distribution.)
 One sequence's step takes 10.4 ms, most of it reading the 27 GB of int8 weights; 64 sequences share that read (16.5 ms
 per step at 512 tokens, 20.1 at 4,096, where attention and the recurrent states' traffic grow).
 
+**The Q4_K_M files** (W4A8, 2026-10-14): `StartLux-Decision-v1.1-27B-AutoThink-Q4_K_M.gguf` (16.55 GB, SHA-256
+`245f89a8fbd95d0fccae02aba1a1a63448bab41c308920ad6de247e3b3752588`) and `StartLux-Decision-v1.1-9B-AutoThink-Q4_K_M.gguf`
+(5.63 GB, `c10277820051d4f29654566e94489e0add4ca3e2c5e49e4171ac53c8cf37adc8`), the releases on Hugging Face, think as
+above on one H200 of the same server, the decode steps on their own 4-bit weights
+([optimizations](optimizations.md#w4a8-thoughts-a-q4_k_m-file-decodes-2026-10-14)). JevBench, one request at a time:
+
+| model, file, think_mode | correct, of 231 | mean / p50 ms per item | questions that thought | thought tokens mean / p50 / max | how thoughts ended |
+|---|---|---|---|---|---|
+| 27B, Q4_K_M, never | 212 | 154.2 / 42.0 | - | - | - |
+| **27B, Q4_K_M, auto** | **227** | 1,785 / 81.8 | 69 (30%), 65 of them right | 417 / 249 / 4,096 | 68 closed, 1 at the budget |
+| 9B, Q4_K_M, never | 200 | 46.4 / 13.1 | - | - | - |
+| 9B, Q4_K_M, auto | 211 | 1,590 / 26.4 | 75 (32%), 57 of them right | 1,286 / 902 / 4,096 | 70 closed, 4 at the budget, 1 loop |
+
+From 64 clients (8 passes over the 231 items, every pass new thoughts: each request has its own request number) the
+27B's Q4_K_M file answers 222-227 per pass, 224.9 on average: the official engine's level (BF16 225.5-226.5, FP8
+224.9-225.2 over its many-client runs) and above the Q8_0 file's int8 thoughts (220.5-222.0). The
+[cross-read experiment](#startlux-decision-v11-27b-autothink-against-its-official-engine) traced int8's gap to its
+activations, quantized per token while decoding; W4A8 quantizes them per 256 inputs. Its rate there, 2.39 requests/s,
+is a third of the Q8_0 file's (7.61): under load the read-outs' prefill sets it, and on the H200 W4A8 prefills at
+about a quarter of int8's speed (below).
+
+Decode on the 27B's Q4_K_M file against its Q8_0 file in int8 (`bench/decode_speed.py`; ms per step / tokens per
+second):
+
+| sequences, context | 1, 512 | 8, 512 | 64, 512 | 1, 4,096 | 8, 4,096 | 64, 4,096 |
+|---|---|---|---|---|---|---|
+| W4A8 | 11.58 / 86.3 | 12.39 / 646 | 31.14 / 2,056 | 11.63 / 86.0 | 12.69 / 631 | 34.61 / 1,849 |
+| int8 | 10.51 / 95.1 | 11.08 / 722 | 16.71 / 3,830 | 10.59 / 94.4 | 11.39 / 703 | 20.31 / 3,152 |
+
+Up to 8 thoughts at once, a step on the 4-bit file takes about as long as on the Q8_0 file, though it reads 17.8 GB
+instead of 27: at a few rows the W4A8 GEMMs stream the 27B's shapes at 1.2-2.7 TB/s, W8A8 at 1.2-3.3. At 64 thoughts
+the W4A8 GEMMs' arithmetic sets the pace (mma.sync on Hopper, [Q4_K_M files](#q4_k_m-files-w4a8)), and the read-outs
+without thoughts take 3.8x the Q8_0 file's time on the H200 (154 against 41 ms), for the same reason.
+
 ## StartLux-Decision v1.1 27B AutoThink against its official engine
 
 StartLux-Prism against Startlux-decide-inference, StartLux-Decision v1.1's own package and server (`startlux-decide`), on
@@ -1177,6 +1213,63 @@ The official engine's FP8 setting answers 1.44x its BF16 on one GPU (26.3 agains
 it was not run on eight. The router raises its open-file limit to the hard limit when it starts: at the usual 1,024,
 a first run ran out at 512 clients (every request in flight holds a client's connection and a worker's) and the
 router died.
+
+## Ampere and Ada: an RTX 4090 and an A800
+
+2026-10-15, the `ampere-ada` branch (Hopper's PDL and thread-block clusters left out below sm_90:
+[optimizations.md](optimizations.md#ampere-and-ada-the-a800-rtx-30-and-40-series-2026-10-15)), PyTorch 2.14.1 for CUDA
+12.6, Triton 3.8.0. First without dispatch tables (the int8 GEMMs on the Triton kernel, W4A8 on its tile rule); then
+the A800 with its own (`kernels/gemm_table_a80080gbpcie.json`, `kernels/w4a8_table_a80080gbpcie.json`: int8 up to 8,192
+rows, W4A8 up to 1,024, its one-row GEMV included), rows "A800 ... tuned" below. The RTX 4090 has none yet.
+
+- **RTX 4090** (24 GB, sm_89, driver 550.107.02, CUDA 12.8 toolkit): StartLux-Decision-v1.1-9B-AutoThink, its Q8_0
+  (int8, activation ranges from an earlier start) and Q4_K_M (W4A8) files.
+- **A800 80GB PCIe** (sm_80, driver 570.211.01, CUDA 12.9 toolkit), one GPU of eight: StartLux-Decision-v1.1-27B-AutoThink,
+  Q8_0 (int8, the H200's activation ranges) and Q4_K_M (W4A8).
+
+**Tests.** `tests/test_w4a8.py` (bit-identical to the reference on the model's own weights) and
+`tests/test_cuda_gemm.py --quick` pass on both. `tests/test_decode.py` (decode against prefill, isolation in a running
+batch, seeded sampling) passes in both precisions:
+
+| GPU, model | precision | teacher forcing: max / mean \|dlogit\| | top-1 agreement | isolation and sampling |
+|---|---|---|---|---|
+| RTX 4090, 9B | int8 | 10.24 / 0.246 | 1,002 of 1,024 | bit for bit |
+| RTX 4090, 9B | W4A8 | 7.28 / 0.106 | 1,012 of 1,024 | bit for bit |
+| A800, 27B | int8 | 11.73 / 0.247 | 1,014 of 1,024 | bit for bit |
+| A800, 27B | W4A8 | 1.71 / 0.057 | 1,021 of 1,024 | bit for bit |
+
+**JevBench** (231 public items, one request at a time; auto at gate 0.9), next to the RTX 5090 and the H200:
+
+| GPU, model, precision | never: correct, mean / p50 ms | auto: correct, mean / p50 ms | thought (right) |
+|---|---|---|---|
+| RTX 4090, 9B, int8 | 201, 49.6 / 14.6 | 215, 4,203 / 29.2 | 76 (63) |
+| RTX 4090, 9B, W4A8 | 199, 47.4 / 15.7 | 215, 4,300 / 26.0 | 77 (63) |
+| RTX 5090, 9B, int8 | 200, 22.0 | 210, 1,823 | |
+| RTX 5090, 9B, W4A8 | 200, 31.8 | 214, 2,147 | |
+| A800, 27B, int8 | 214, 271.0 / 71.5 | 221, 4,108 / 157 | 69 (60) |
+| A800, 27B, int8, tuned | 214, 141.9 / 36.1 | 221, 2,534 / 78.5 | 69 (60) |
+| A800, 27B, W4A8 | 213, 298.6 / 77.3 | 227, 4,242 / 168 | 69 (65) |
+| A800, 27B, W4A8, tuned | 213, 281.1 / 67.7 | 227, 2,575 / 135 | 69 (65) |
+| H200, 27B, int8 | 214, 41.1 / 15.8 | 224, 1,196 / 19.2 | 67 (61) |
+
+The one-pass answers match the other GPUs' within an item or two; the thoughts' differ more (a sampled thought follows
+the last bits of its logits). Every thought ended by itself on the A800. The tables change only the kernels: the tuned
+runs give the same answers and the same thoughts, token for token, as the first ones.
+
+**Decode** (`bench/decode_speed.py`, context 512, ms per step):
+
+| GPU, model | precision | 1 sequence | 8 | 16 | 64 |
+|---|---|---|---|---|---|
+| RTX 4090, 9B | W4A8 | 11.26 | 11.73 | 13.04 | |
+| RTX 4090, 9B | int8 | 12.15 | 13.23 | 14.62 | |
+| A800, 27B | W4A8 | 32.58 | 34.17 | | 63.21 |
+| A800, 27B, tuned | W4A8 | 17.63 | 20.86 | | 56.14 |
+| A800, 27B | int8 | 34.19 | 35.95 | | 50.68 |
+| A800, 27B, tuned | int8 | 21.29 | 23.54 | | 39.97 |
+
+Without tables, twice the RTX 5090's steps on the RTX 4090 (5.04 ms for the 9B's W4A8) and three times the H200's on
+the A800 (10.51 ms for the 27B's int8): half and 0.4 of their memory bandwidth. With its tables the A800 decodes 1.6-1.9x
+faster at one sequence (W4A8 17.6 ms, int8 21.3), and its thinking items take 38-39% less time.
 
 ## Stress tests
 

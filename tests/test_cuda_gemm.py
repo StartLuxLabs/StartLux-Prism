@@ -72,6 +72,8 @@ def main():
                                     (2, "workspace"), (2, "atomic")):
                     if K % (bk * split) or (split > 1 and mode == "cluster" and bm * bn * 4 > (bm + bn) * bk * stages):
                         continue
+                    if split > 1 and mode == "cluster" and torch.cuda.get_device_capability()[0] < 9:
+                        continue                                # thread block clusters exist from sm_90 on
                     if mode == "workspace" and M * N * split * 4 > CX.WS_BYTES:
                         continue
                     for rep in range(2):                    # deterministic split-K: the same bits every time

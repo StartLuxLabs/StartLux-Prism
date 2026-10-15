@@ -10,13 +10,15 @@ step feeds it, so every step is the same computation - feed one token per sequen
     norm -> full-vocabulary output head -> top candidates -> sampled token
 
 Precision follows the engine's: int8 (W8A8 projections from the engine's own weights, the GEMM dispatch table's
-small-M kernels) or bf16 (cuBLAS).  The output head (the engine keeps only the letter rows) is loaded here from the
-GGUF file: on the int8 path its Q8_0 values as stored with int8 activations per 32 inputs (kernels/decode.py head_q8),
-on the bf16 path the bf16 weights.
+small-M kernels), w4a8 (a Q4_K_M file's own 4-bit weights, kernels/w4a8.py, whose table measures 1 to 64 rows too) or
+bf16 (cuBLAS).  The output head (the engine keeps only the letter rows) is loaded here from the GGUF file: on the int8
+and w4a8 paths as Q8_0 values with int8 activations per 32 inputs (kernels/decode.py head_q8; a Q8_0 file's as stored,
+a k-quant head - Q4_K_M files store it as Q6_K - requantized to Q8_0 at load), on the bf16 path the bf16 weights.
 
-Batch-invariant on the int8 path: every kernel computes a row from that row's inputs alone, in a fixed order (the int8
-GEMMs give the same bits whatever their tile or split, kernels/w8a8.py), and a token is drawn from uniform(seed, step,
-candidate) - so a thought does not depend on the sequences it is batched with or on when it joined.
+Batch-invariant on the int8 and w4a8 paths: every kernel computes a row from that row's inputs alone, in a fixed order
+(the int8 and W4A8 GEMMs give the same bits whatever their tile or split, kernels/w8a8.py, kernels/w4a8.py), and a token
+is drawn from uniform(seed, step, candidate) - so a thought does not depend on the sequences it is batched with or on
+when it joined.
 
 Positions: a sequence starts at the position after its last prefilled token (taken from the prefill's plan, not
 derived from a token count), +1 per step, equal on all three M-RoPE axes.
@@ -36,12 +38,14 @@ import numpy as np
 import torch
 
 from .. import gguf_weights
+from .. import progress as P
 from ..gguf import GGUFFile
 from ..kernels import attn as KA
 from ..kernels import decode as KD
 from ..kernels import elementwise as KE
 from ..kernels import gdn as KG
 from ..kernels import quant as KQ
+from ..kernels import w4a8 as KW4
 from ..kernels import w8a8 as KW
 
 DEC_BUCKETS = (1, 2, 4, 8, 16, 32, 64, 128, 256)
@@ -100,8 +104,6 @@ class Decoder:
 
     def __init__(self, engine, gguf_path, max_seqs=64, sampling=None, graphs=True, attn="split", max_len=0):
         e = self.eng = engine
-        if e.w4:
-            raise ValueError("thoughts are generated on the int8 and bf16 paths (not w4a8)")
         self.tp = e.tp
         if self.tp is not None:                      # built on every rank alike (tp.py)
             self._tp_id = self.tp.mirror(self, (engine, gguf_path, max_seqs, sampling, graphs, attn, max_len))
@@ -124,7 +126,8 @@ class Decoder:
         self.vshard = 0
         if e.int8 and self.tp is not None and self.vocab % self.tp.world == 0 and self.tp.fast_rows >= self.max_B:
             self.vshard = self.vocab // self.tp.world
-        if e.int8:
+        self.q8_head = e.int8 or e.w4
+        if self.q8_head:
             lo, hi = (self.tp.rank * self.vshard, (self.tp.rank + 1) * self.vshard) if self.vshard else (0, self.vocab)
             self.head_w = w.qs[lo:hi].contiguous()
             self.head_s = w.d.t()[:, lo:hi].contiguous()             # fp16 [K / 32, N]: coalesced per group
@@ -162,6 +165,10 @@ class Decoder:
             else:                                    # the all-reduced output projections (tp.out_proj, quantize_rows)
                 from ..tp import parts_elems
                 b.update(tp_parts=z(parts_elems(B, cfg.hidden), dtype=i32), tp_amax=z(B))
+        elif e.w4:                                   # W4A8 activations (engine/model.py Engine._act), the Q8_0 head's
+            K = max(cfg.ffn, cfg.value_dim, cfg.hidden, cfg.n_head * cfg.head_dim)
+            b.update(aq=z(B * K, dtype=torch.int8), as_=z(B * K // 256), xs=z(B * K // 16, dtype=torch.int8),
+                     hq=z(B, cfg.hidden, dtype=torch.int8), hs=z(B, cfg.hidden // KD.HEAD_G))
         else:
             b.update(x=z(B, cfg.hidden, dtype=bf), delta=z(B, cfg.hidden, dtype=bf), act=z(B, cfg.ffn, dtype=bf))
         if self.attn == "split":
@@ -268,6 +275,43 @@ class Decoder:
         else:
             KD.head_q8(b["hq"], b["hs"], self.head_w, self.head_s, b["logits"], n, B)
 
+    def _act(self, n, k):
+        """W4A8 activations of n rows and k inputs (engine/model.py Engine._act): int8 [n, k], the scales [k / 256, n]
+        and the split sums [k / 256, n, 16]."""
+        b = self.buf
+        return (self._rows(b["aq"], n, k), self._rows(b["as_"], k // 256, n),
+                self._rows(b["xs"], k // 256, n * 16).view(k // 256, n, 16))
+
+    def _layers_w4(self, B):
+        """The engine's W4A8 body (engine/model.py Engine._body_w4) on one token per sequence, then the Q8_0 head."""
+        cfg, e, b, n = self.cfg, self.eng, self.buf, self.n
+        h = b["h"]
+        for i in range(cfg.n_layer):
+            lw = e.layers[i]
+            x = self._act(B, cfg.hidden)
+            KQ.norm_g(h, lw["attn_norm"], *x, n, B, cfg.eps)
+            if i in e.gdn_index:
+                proj = b["proj"][:B, :KW4.seg_width(lw["inp"])]
+                KW4.gemm_segs(*x, lw["inp"], proj, n)
+                self._gdn(i, proj, B)
+                m = self._act(B, cfg.value_dim)
+                KQ.gated_norm_g(b["o"], proj, cfg.conv_dim, lw["ssm_norm"], *m, n, B, cfg)
+                KW4.gemm_segs(*m, lw["out"], h, n, epi=1)
+            else:
+                proj = b["proj"][:B, :KW4.seg_width(lw["qkv"])]
+                KW4.gemm_segs(*x, lw["qkv"], proj, n)
+                mix = self._attn(i, proj, B)
+                m = self._act(B, cfg.n_head * cfg.head_dim)
+                KQ.rows_g(mix, *m, n, B)
+                KW4.gemm_segs(*m, lw["o"], h, n, epi=1)
+            KQ.norm_g(h, lw["post_norm"], *x, n, B, cfg.eps)
+            KW4.gemm_segs(*x, lw["gu"], b["gu"][:B], n)
+            f = self._act(B, cfg.ffn)
+            KQ.swiglu_g(b["gu"], *f, n, B)
+            KW4.gemm_segs(*f, lw["down"], h, n, epi=1)
+        KD.head_quant(h, e.out_norm, b["hq"], b["hs"], n, B, cfg.eps)
+        KD.head_q8(b["hq"], b["hs"], self.head_w, self.head_s, b["logits"], n, B)
+
     def _layers_bf16(self, B):
         cfg, e, b, n = self.cfg, self.eng, self.buf, self.n
         h, x, delta = b["h"], b["x"][:B], b["delta"][:B]
@@ -298,7 +342,7 @@ class Decoder:
         e, b, t = self.eng, self.buf, self.t
         KD.tokens(t["src"], b["tok_out"], b["tok_in"], self.n, B)
         KE.embed(b["tok_in"], e.embed, b["h"], self.n, B)
-        (self._layers_int8 if e.int8 else self._layers_bf16)(B)
+        (self._layers_int8 if e.int8 else self._layers_w4 if e.w4 else self._layers_bf16)(B)
         KD.topk(b["logits"][:B], TOPK, b["vals"][:B], b["idx"][:B])
         KD.sample(b["vals"], b["idx"], t["seed"], t["step"], t["temp"], t["top_p"], t["top_k"], b["tok_out"], self.n, B)
 
@@ -322,11 +366,14 @@ class Decoder:
         if self.tp is not None:
             self.tp.call(self, "warm_up", buckets)    # every rank records them, in the same order
         self._tabs.zero_()
-        for B in buckets or [x for x in DEC_BUCKETS if x <= self.max_B]:
+        sizes = buckets or [x for x in DEC_BUCKETS if x <= self.max_B]
+        bar = P.Bar("decode graphs (thoughts)", len(sizes), "batch sizes")
+        for i, B in enumerate(sizes):
             if self.graphs:
                 self._graph(B)
             else:
                 self._forward(B)
+            bar.update(i + 1)
         torch.cuda.synchronize()
 
     # ------------------------------------------------------------------ public
@@ -404,7 +451,7 @@ class Decoder:
         """The final norm and this decoder's output head on residual rows h [R, hidden] fp32 (tests: the prefill's read
         rows, for its logits at any position) -> [R, vocab] fp32."""
         e, cfg, dev = self.eng, self.cfg, h.device
-        head_w, head_s = self.head_w, self.head_s
+        head_w, head_s = getattr(self, "head_w", None), getattr(self, "head_s", None)     # the Q8_0 head's
         if self.vshard:                              # (tests on rank 0: the whole head, loaded for them)
             if getattr(self, "_full_head", None) is None:
                 w = load_head(self.gguf_path).to(dev)
@@ -417,7 +464,7 @@ class Decoder:
             k = x.shape[0]
             n = torch.tensor([k], dtype=torch.int32, device=dev)
             logits = torch.empty(k, self.vocab, device=dev)
-            if e.int8:
+            if self.q8_head:
                 hq = torch.empty(k, cfg.hidden, dtype=torch.int8, device=dev)
                 hs = torch.empty(k, cfg.hidden // KD.HEAD_G, device=dev)
                 KD.head_quant(x, e.out_norm, hq, hs, n, k, cfg.eps)

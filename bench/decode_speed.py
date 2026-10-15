@@ -1,6 +1,6 @@
 """Decode speed (engine/decode.py): tokens per second for 1 to 64 sequences at once, at a few context lengths.
 
-    python bench/decode_speed.py --gguf MODEL.gguf --model-dir DIR [--precision int8 --calib FILE]
+    python bench/decode_speed.py --gguf MODEL.gguf --model-dir DIR [--precision int8|w4a8|bf16 --calib FILE]
         [--batches 1,2,4,8,16,32,64] [--contexts 512,4096] [--steps 64] [--profile] [--tp N --gpus a,b]
 
 Every sequence is a prompt of the given length (prefilled, state kept), then --steps decode steps are queued as the
@@ -24,7 +24,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--gguf", required=True)
     ap.add_argument("--model-dir", required=True)
-    ap.add_argument("--precision", default="int8", choices=("int8", "bf16"))
+    ap.add_argument("--precision", default="int8", choices=("int8", "w4a8", "bf16"))
     ap.add_argument("--calib", default="")
     ap.add_argument("--batches", default="1,2,4,8,16,32,64")
     ap.add_argument("--contexts", default="512,4096")
@@ -104,7 +104,7 @@ def profile(dec, rows):
         if e.device_time_total <= 0 or name.startswith(("memcpy", "memset")):
             continue
         k = ("output head" if "head_q8" in name or "head_quant" in name
-             else "projections" if any(x in name for x in ("gemm", "w8a8", "wgmma", "gemv", "nvjet", "cutlass", "sm90"))
+             else "projections" if any(x in name for x in ("gemm", "w8a8", "w4a8", "wgmma", "gemv", "nvjet", "cutlass", "sm90"))
              else "attention" if "attn" in name or "attention" in name or "qkv_norm" in name
              else "linear attention" if "conv_step" in name or "gdn_step" in name
              else "norms, swiglu, quant" if any(x in name for x in ("norm", "swiglu", "rows_q8", "fold", "embed"))

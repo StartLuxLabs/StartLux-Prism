@@ -25,8 +25,8 @@ How StartLux-Prism's answers are checked against the models' own packages and an
   - v1.1's loop detector is reproduced on 5,000 texts;
   - 2,885 thinking and read prompts, 899 with images, are identical in text and tokens;
   - 300 whole requests with 499 thoughts give the same answers, details and usage as v1.1's pipeline, to the float;
-  - decode steps agree with the prefill under teacher forcing;
-  - sequences alone, batched or joining a running batch give the same tokens;
+  - decode steps agree with the prefill under teacher forcing (int8, bf16 and W4A8);
+  - sequences alone, batched or joining a running batch give the same tokens and logits, bit for bit (int8 and W4A8);
   - JevBench from 64 clients gives the same thoughts as one request at a time.
 - **Images** (`tests/test_vision.py`, `tests/test_vision_engine.py`, `tests/vision_reference.py`):
   - the tower's features are bit-identical to transformers' on 9 image sizes;

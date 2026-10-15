@@ -1,9 +1,13 @@
 """StartLux-Prism's CUDA C++ kernels (startlux_prism/csrc), compiled on first use with the toolkit in CUDA_HOME and registered
 as torch ops (graph-capturable: they launch on the current stream)."""
 import functools
+import glob
 import os
+import time
 
 import torch
+
+from .. import progress as P
 
 # the canonical path: the build command holds it, and processes that imported startlux_prism by different paths (a script's
 # sys.path entry, a tensor-parallel follower's PYTHONPATH) otherwise rebuilt the extension in turn, each waiting for
@@ -15,7 +19,6 @@ CFGS = {  # cfg id -> (BM, BN, BK, warps) of the instantiations in w8a8_gemm.cu 
     8: (128, 128, 64, 8), 9: (128, 64, 64, 4), 10: (256, 128, 64, 8), 11: (128, 256, 64, 8), 12: (64, 64, 128, 4),
     13: (128, 128, 128, 8),
 }
-SMEM_LIMIT = 101376           # bytes of dynamic shared memory per block on sm_120 (99 KB)
 WS_BYTES = 96 << 20          # stream-K partial tiles: 2 slots per CTA of BM x BN int32 (2 x 340 x 256 x 128)
 MAX_TILES = 1 << 16          # stream-K tile counters
 
@@ -54,12 +57,34 @@ def load():
     base = arch.rstrip("a")                     # "90a" -> TORCH_CUDA_ARCH_LIST "9.0a", "120" -> "12.0"
     os.environ.setdefault("TORCH_CUDA_ARCH_LIST", f"{base[:-1]}.{base[-1]}{arch[len(base):]}")
     sources = ("w8a8_gemm.cu", "w8a8_wgmma.cu", "w4a8_gemm.cu", "l2_prefetch.cu")
+    built = _built("startlux_prism_ext", [os.path.join(CSRC, f) for f in sources])
+    P.step(f"CUDA kernels: {'loading the extension built before' if built else 'compiling the extension'} for "
+           f"sm_{arch}" + ("" if built else " - the first start with this GPU and these sources, a few minutes"))
+    t0 = time.perf_counter()
     _load(name="startlux_prism_ext", sources=[os.path.join(CSRC, f) for f in sources],
           is_python_module=False,
           extra_cuda_cflags=["-O3", f"-gencode=arch=compute_{arch},code=sm_{arch}", "-lineinfo"]
           + (["-DSTARTLUX_PRISM_SM90A"] if arch == "90a" else []),
           extra_cflags=["-O3"], verbose=False)
+    if not built:
+        P.step(f"CUDA kernels: compiled in {time.perf_counter() - t0:.0f} s (kept in "
+               f"{_build_dir('startlux_prism_ext')})")
     return torch.ops.startlux_prism
+
+
+def _build_dir(name):
+    try:
+        from torch.utils.cpp_extension import _get_build_directory
+        return _get_build_directory(name, False)
+    except Exception:                                # noqa: BLE001  a private helper of torch: only for messages
+        return "the torch extensions cache"
+
+
+def _built(name, sources):
+    """An extension library newer than every source in torch's build directory: probably loaded, not compiled (for the
+    start-up message only; torch decides)."""
+    libs = glob.glob(os.path.join(_build_dir(name), f"{name}*.so"))
+    return bool(libs) and max(map(os.path.getmtime, libs)) > max(map(os.path.getmtime, sources))
 
 
 # cfg id -> (BM, BN, TMA pipeline) of csrc/w8a8_wgmma.cu
@@ -92,10 +117,17 @@ def gemm_wg(a, a_s, w, w_s, out, n_rows, epi=0, cfg=0, stages=4, split=1, slots=
     load().w8a8_wgmma(a, a_s.reshape(-1), w, w_s.reshape(-1), out, n_rows, epi, cfg, stages, split, stride)
 
 
+@functools.lru_cache(None)
+def smem_limit(device=None):
+    """Dynamic shared memory a block may opt in to on this GPU: 99 KB on the RTX 5090 and Ada, 163 KB on the A100 /
+    A800, 227 KB on Hopper."""
+    return getattr(torch.cuda.get_device_properties(device), "shared_memory_per_block_optin", 101376)
+
+
 def fits(cfg, stages):
-    """Whether a tile config's pipeline stages fit in shared memory."""
+    """Whether a tile config's pipeline stages fit in this GPU's shared memory."""
     bm, bn, bk, _ = CFGS[cfg]
-    return (bm + bn) * bk * stages <= SMEM_LIMIT
+    return (bm + bn) * bk * stages <= smem_limit()
 
 
 @functools.lru_cache(None)

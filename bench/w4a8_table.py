@@ -62,7 +62,7 @@ def main():
     ap.add_argument("--merge")
     ap.add_argument("--table")
     ap.add_argument("--m", default=",".join(map(str, M_GRID)))
-    ap.add_argument("--copies", type=int, default=4)
+    ap.add_argument("--copies", type=int, default=4, help="weight copies rotated through, at least 3x L2's size")
     a = ap.parse_args()
     table, times, done = {}, {}, set()
     if a.merge and os.path.exists(a.merge):
@@ -77,7 +77,9 @@ def main():
             if key in seen or not todo:
                 continue
             seen.add(key)
-            ws = [w0] + [W.W4(*[t.clone() if torch.is_tensor(t) else t for t in w0]) for _ in range(a.copies - 1)]
+            l2 = torch.cuda.get_device_properties(0).L2_cache_size      # copies for 3x L2: 4 of a 19 MB matrix
+            copies = max(a.copies, -(-3 * l2 // w0.nbytes()))                 # sat in the RTX 5090's 96 MB L2
+            ws = [w0] + [W.W4(*[t.clone() if torch.is_tensor(t) else t for t in w0]) for _ in range(copies - 1)]
             table.setdefault(key, {})
             times.setdefault(key, {})
             for M in todo:
@@ -86,9 +88,11 @@ def main():
                 out = torch.empty(M, N, dtype=torch.bfloat16, device="cuda")
                 res = {}
                 for c, (bm, _, _) in W.CUDA_CFGS.items():     # tiles far from the token count skipped
-                    if (M <= 64 and bm >= 128) or (M >= 512 and bm <= 16):
-                        continue
-                    for st in (2, 3, 4):
+                    if (M <= 64 and bm >= 128) or (M >= 512 and bm <= 16) or (c >= 13 and M > 256) or \
+                            (c >= 17 and M > 1):              # 13-16: the K-group kernels, for few rows; 17-19 the
+                        continue                               # GEMV, for one (at two a 27B decode step ran 2% slower
+                                                               # on the H200, though each of its GEMMs alone was as fast)
+                    for st in ((2,) if c >= 17 else (2, 3, 4)):
                         def run(cfg=(c, st)):
                             for w in ws:
                                 W.gemm(xq, xa, xs, w, out, n, cfg=cfg)

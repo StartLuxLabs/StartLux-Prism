@@ -10,7 +10,7 @@ release does:
 | folder | how it answers | run here |
 |---|---|---|
 | v1 (`"format": "StartLux-Decision-v1"`) | in one pass, exactly as before v1.1 support | 4B, 9B, 27B |
-| v1.1 AutoThink | one pass, then a thought when the first read-out is unsure | 27B: int8 and bf16 (W4A8: one pass) |
+| v1.1 AutoThink | one pass, then a thought when the first read-out is unsure | 27B: int8, bf16 and W4A8; 9B: int8 and W4A8 |
 | v1.1 Instant (prompt read bidirectionally) | not served yet: refused at start-up | |
 
 - **Thoughts.** `think_mode` `auto` (the default) thinks when the first read-out's top probability is below `gate`
@@ -56,6 +56,84 @@ with the pip CUDA 13 toolkit as `CUDA_HOME` and writes `~/jev/env.sh`; then
 `MODEL=~/jev/models/StartLux-Decision-4B-Q8_0-GGUF scripts/serve.sh start int8` starts a server on port 8092 and
 `scripts/serve.sh stop` stops it.
 
+## What a start prints
+
+Each loading step on a line of its own with the time; the weights layer by layer and the CUDA graphs batch shape by
+batch shape (on a terminal the count is redrawn in place, in a log there is a line at each quarter); then `Ready`, the
+endpoints and a request to try, which can be pasted as it is. The 9B in int8 on an RTX 4090, its CUDA extension built
+and its activation ranges saved by an earlier start (counts shortened, the ranges file's path too):
+
+```text
+[01:39:25] StartLux-Prism: StartLux-Decision-v1.1-9B-AutoThink-Q8_0.gguf (v1.1 AutoThink) as int8 on NVIDIA GeForce RTX 4090 (sm_89, 24 GiB)
+[01:39:26] reading the model file (9.5 GB)
+[01:39:39] weights to the GPU (bf16): 8/32 layers
+[01:39:40] weights to the GPU (bf16): 32/32 layers (1.0 s)
+[01:39:40] int8 activation ranges: ~/.cache/startlux-prism/calib/...
+[01:39:41] int8 weights (SmoothQuant): 8/32 layers
+[01:39:42] int8 weights (SmoothQuant): 32/32 layers (2.3 s)
+[01:39:43] buffers: batches up to 16,384 tokens, prefix cache 64 entries, 4 thoughts at once; GPU memory 19.1 of 23.6 GiB in use (17.7 s so far)
+[01:39:44] CUDA graphs (a first start also compiles the Triton kernels): 8/31 batch shapes
+[01:39:44] CUDA graphs (a first start also compiles the Triton kernels): 31/31 batch shapes (0.9 s)
+[01:39:46] decode graphs (thoughts): 3/3 batch sizes (0.2 s)
+loaded in 17.7 s, graphs recorded in 3.1 s; max 16384 tokens per batch; GPU memory 20.2 of 23.6 GiB in use
+Ready: http://127.0.0.1:8092/v1/systemone (int8), started in 22.4 s
+  POST http://127.0.0.1:8092/v1/systemone   decisions (the TypeSafe System One API)
+  GET  http://127.0.0.1:8092/health         status and limits
+  GET  http://127.0.0.1:8092/v1/models      the model served
+  AutoThink: think_mode "auto" unless a request sets "think_mode" ("never", "auto" or "always"); "return_details": true adds the thought's details
+Try it:
+  curl -s http://127.0.0.1:8092/v1/systemone -H 'Content-Type: application/json' -d '{
+    "state": {"ticket": "I was charged twice for order #4411 and the app still shows it as unpaid."},
+    "questions": {
+      "team": {"type": "choice", "instructions": "Which team should handle this ticket?",
+               "criteria": {"billing": "Payments and refunds", "shipping": "Delivery", "technical": "App and login"}},
+      "urgent": {"type": "noul", "instructions": "Should this ticket be answered today?"}}}'
+```
+
+- **A first start** also measures the int8 activation ranges (`int8 activation ranges: computing them`, the
+  calibration requests counted, then where they are saved for the next starts) and, the first time on a GPU model or
+  after the CUDA sources change, compiles the CUDA extension: `CUDA kernels: compiling the extension for sm_89 - the
+  first start with this GPU and these sources, a few minutes`, then the time it took and where it is kept (4 minutes
+  on the RTX 4090, 3 on an A800).
+- **`--host 0.0.0.0`**: the endpoints and the example still use 127.0.0.1, and a line says how other machines reach the
+  server and that it has no authentication or TLS.
+- **`startlux_prism.dp`**: the workers' steps go to their logs (`--log-dir`); the router says where they are, shows
+  the last line of a worker still starting every 20 s, says when each is ready, then prints its own `Ready` and the
+  same endpoints and example.
+
+The `loaded in` and `Ready: http://...` lines keep their form for scripts that wait for them.
+
+## Running as a service
+
+Installed as in the README ([Install](../README.md#install)):
+
+- **Address.** The server listens on `127.0.0.1:8092`; `--host 0.0.0.0` (and `--port`) serve other machines. It has no
+  authentication or TLS of its own: put it behind your gateway.
+- **Ready.** `GET /health` answers once the model is loaded and its graphs recorded.
+- **Caches.** The first start compiles the CUDA kernels (into `TORCH_EXTENSIONS_DIR`, by default
+  `~/.cache/torch_extensions`) and the Triton kernels (`TRITON_CACHE_DIR`, by default `~/.triton/cache`), and measures
+  the int8 activation ranges (`~/.cache/startlux-prism/calib`, a file per model). Keep the three on a persistent disk
+  (in a container: volumes), and later starts skip that work.
+- **Several GPUs.** `python -m startlux_prism.dp --gpus ...` runs a server per GPU behind one port (above);
+  `CUDA_DEVICE_ORDER=PCI_BUS_ID` makes the GPU numbers nvidia-smi's.
+- **systemd**, the repository in `/opt/StartLux-Prism` and a model in `/models/M` (installed from
+  `requirements-cu12.txt`: `Environment=CUDA_HOME=/usr/local/cuda` in place of `source scripts/cuda_env.sh`):
+
+```ini
+[Unit]
+Description=StartLux-Prism
+After=network-online.target
+
+[Service]
+WorkingDirectory=/opt/StartLux-Prism
+Environment=CUDA_DEVICE_ORDER=PCI_BUS_ID
+ExecStart=/bin/bash -c 'source .venv/bin/activate && source scripts/cuda_env.sh && exec python -m startlux_prism.server --gguf /models/M/model.gguf --model-dir /models/M --host 0.0.0.0 --port 8092'
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target
+```
+
 ## Models, GPUs and precisions
 
 | `--precision` | weights | activations | used for |
@@ -65,9 +143,10 @@ with the pip CUDA 13 toolkit as `CUDA_HOME` and writes `~/jev/env.sh`; then
 | `bf16` | dequantized from the GGUF, cuBLAS | bf16 | the parity reference |
 
 Measured:
-- **RTX 5090:** the 4B and 9B (Q8_0: int8 and bf16; Q4_K_M: W4A8) and the 27B's Q4_K_M (W4A8).
-- **H200:** the v1 27B (Q8_0: int8 and bf16; Q4_K_M: W4A8 and int8), and the v1.1 27B AutoThink (Q8_0: int8 and bf16;
-  int8 on 2 and 4 GPUs).
+- **RTX 5090:** the 4B and 9B (Q8_0: int8 and bf16; Q4_K_M: W4A8) and the 27B's Q4_K_M (W4A8); v1.1 AutoThink with
+  thoughts: the 9B (Q8_0: int8).
+- **H200:** the v1 27B (Q8_0: int8 and bf16; Q4_K_M: W4A8 and int8); v1.1 AutoThink with thoughts: the 27B (Q8_0:
+  int8 and bf16, int8 on 2 and 4 GPUs; Q4_K_M: W4A8) and the 9B (Q4_K_M: W4A8).
 - **Several GPUs:** data parallelism with any precision (`startlux_prism.dp`); tensor parallelism with int8, 2 or 4 GPUs on
   the 27B (`--tp`); both together (`startlux_prism.dp --tp 2`).
 

@@ -1,6 +1,7 @@
 """The decode path (engine/decode.py) against the prefill, on the GPU (an AutoThink checkpoint).
 
-    python tests/test_decode.py --gguf MODEL.gguf --model-dir DIR [--precision int8 --calib FILE] --jevbench PUBLIC_DIR
+    python tests/test_decode.py --gguf MODEL.gguf --model-dir DIR [--precision int8|w4a8|bf16 --calib FILE]
+        --jevbench PUBLIC_DIR
         [--n 4] [--tokens 256]
 
 1. teacher forcing: the thinking prompts of --n JevBench items (think.Framing + the forced prefix) are prefilled with
@@ -11,7 +12,7 @@
    makes greedy decoding by repeated prefills produce the same tokens.  The letter logits of the prefill's exact fp32
    rows against the decode head's at the same positions show the output head's own error.
 2. isolation and batch invariance: every sequence decoded alone, and the sequences joining a running batch at
-   different steps: the same tokens (int8: the same logits, bit for bit).
+   different steps: the same tokens (int8 and w4a8: the same logits, bit for bit).
 3. sampling (T 0.6, top-k 20, top-p 0.95): seeded draws are the same alone and batched; at one position, many seeds
    give token frequencies that follow the filtered distribution.
 """
@@ -97,13 +98,14 @@ def prefill_logits(eng, dec, ids, positions):
     for c in range(0, len(positions), eng.opt.max_read):
         P = np.asarray(positions[c:c + eng.opt.max_read])
         plan, T, _ = eng.plan([[ids]])
-        seg = plan.segs[0]
-        assert len(plan.segs) == 1 and seg.start == 0 and len(seg.tokens) == len(ids)
-        rd = (seg.start + P).astype(np.int32)
+        seg = plan.segs[0]                          # the whole prompt, or what follows the system text (its state kept)
+        assert len(plan.segs) == 1 and seg.start == 0 and seg.pos0 + len(seg.tokens) == len(ids)
+        off = P - seg.pos0                          # the read positions within the segment
+        rd = (seg.start + off).astype(np.int32)
         plan.read = list(rd)
         plan.tables["read"] = rd
         plan.tables["read_pos"] = plan.tables["pos"][rd]
-        plan.tables["read_blocks"] = np.stack([np.arange(len(P)), np.ones(len(P)), np.zeros(len(P)), P], 1).astype(
+        plan.tables["read_blocks"] = np.stack([np.arange(len(P)), np.ones(len(P)), np.zeros(len(P)), off], 1).astype(
             np.int32)
         plan.counts["read"] = len(P)
         R = eng._bucket(len(P), READ_BUCKETS)
@@ -111,7 +113,7 @@ def prefill_logits(eng, dec, ids, positions):
         b = eng.launch(Batch(plan, T, R, 0, time.perf_counter(), time.perf_counter(), n_tabs=n_tabs))
         letters += eng.finish(b)
         h = eng.buf["hr"][:len(P)]
-        if not eng.int8:
+        if not (eng.int8 or eng.w4):                 # bf16: the last projection's delta is still apart
             h = h + eng.buf["deltar"][:len(P)].float()
         out.append(dec.head_logits(h.contiguous()))
     return torch.cat(out), letters
@@ -147,7 +149,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--gguf", required=True)
     ap.add_argument("--model-dir", required=True)
-    ap.add_argument("--precision", default="int8", choices=("int8", "bf16"))
+    ap.add_argument("--precision", default="int8", choices=("int8", "w4a8", "bf16"))
     ap.add_argument("--calib", default="")
     ap.add_argument("--jevbench", required=True)
     ap.add_argument("--n", type=int, default=4)
@@ -215,16 +217,17 @@ def main():
           f"{lworst:.4f}", flush=True)
     if a.reference:
         reference(eng, dec, S.s[:a.reference], a.gguf)
-    if eng.int8:
+    if eng.int8 or eng.w4:
         # int8 activations are quantized per token: any two int8 computations of the same logits (the chunked prefill
         # and the recurrent step here) differ by that rounding noise, so greedy paths part at the first close call;
         # --reference shows that both are equally close to the fp32 definition
-        print("   (int8: greedy decoding and greedy-by-prefill part at close calls, not counted as failures)", flush=True)
+        print(f"   ({eng.opt.precision}: greedy decoding and greedy-by-prefill part at close calls, not counted as "
+              "failures)", flush=True)
     else:
         bad += mismatch
 
     # 2. isolation and batch invariance
-    exact = eng.int8
+    exact = eng.int8 or eng.w4                     # batch-invariant GEMMs: the same bits in any batch
     ref_gen = {s["name"]: s["gen"] for s in S.s}
     ref_logits = {s["name"]: s["logits"] for s in S.s}
     n_steps = min(a.tokens, 96)
