@@ -52,7 +52,7 @@ chat template) in one directory. The v1 GGUF repositories carry them; for v1.1 t
 ```bash
 M=~/models/StartLux-Decision-v1.1-27B-AutoThink-GGUF
 hf download startlux-models/StartLux-Decision-v1.1-27B-AutoThink-GGUF StartLux-Decision-v1.1-27B-AutoThink-Q8_0.gguf --local-dir $M
-hf download startlux-models/StartLux-Decision-v1.1-27B-AutoThink --include "*.json" "*.jinja" --local-dir $M
+hf download startlux-models/StartLux-Decision-v1.1-27B-AutoThink --exclude "*.safetensors" --local-dir $M   # tokenizer and config
 ```
 
 Add the `mmproj-*.gguf` file to read images. The weights are CC BY-NC 4.0 (non-commercial).
@@ -165,8 +165,9 @@ suite: [docs/benchmarks.md](docs/benchmarks.md#accuracy-startlux-decision-v1s-ev
 More: [design and code map](docs/design.md), [optimization log](docs/optimizations.md),
 [correctness and tests](docs/testing.md).
 
-StartLux-Prism was called flash-jev until 2026-10-14: `python -m flash_jev.server` (and `.dp`), `import flash_jev` and
-`FLASHJEV_*` environment variables still work, and a calibration file already in `~/.cache/flash-jev` is found.
+StartLux-Prism was called flash-jev until 2026-10-14: `python -m startlux_prism.server` (and `.dp`) and `import
+startlux_prism` replace `flash_jev`; `FLASHJEV_*` environment variables still work, and a calibration file already in
+`~/.cache/flash-jev` is found.
 
 ## License
 
