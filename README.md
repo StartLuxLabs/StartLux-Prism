@@ -165,8 +165,9 @@ suite: [docs/benchmarks.md](docs/benchmarks.md#accuracy-startlux-decision-v1s-ev
 More: [design and code map](docs/design.md), [optimization log](docs/optimizations.md),
 [correctness and tests](docs/testing.md).
 
-StartLux-Prism was called flash-jev until 2026-10-14: `python -m flash_jev.server` (and `.dp`), `import flash_jev` and
-`FLASHJEV_*` environment variables still work, and a calibration file already in `~/.cache/flash-jev` is found.
+StartLux-Prism was called flash-jev until 2026-10-14: `python -m startlux_prism.server` (and `.dp`) and `import
+startlux_prism` replace `flash_jev`; `FLASHJEV_*` environment variables still work, and a calibration file already in
+`~/.cache/flash-jev` is found.
 
 ## License
 
