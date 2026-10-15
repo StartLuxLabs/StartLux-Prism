@@ -993,9 +993,10 @@ Through the server (JevBench, requests/s; correct per pass of 231):
 ## StartLux-Decision v1 27B against the official engine
 
 StartLux-Prism int8 against the official engine of the
-[v1.1 comparison](#startlux-decision-v11-27b-autothink-against-its-official-engine) in FP8, its faster setting, on
-StartLux-Decision v1 27B: the same measurements and clients, without thoughts (v1 answers in one pass). One GPU of the
-first H200 server, the two servers one after the other, 2026-10-15; other users' jobs ran on the other GPUs.
+[v1.1 comparison](#startlux-decision-v11-27b-autothink-against-its-official-engine) in BF16 and in FP8 (the chart: FP8,
+its faster setting), on StartLux-Decision v1 27B: the same measurements and clients, without thoughts (v1 answers in
+one pass). One GPU of the first H200 server, the three servers one after the other, 2026-10-15; other users' jobs ran
+on the other GPUs.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="images/v1-hero-dark.svg">
@@ -1004,8 +1005,8 @@ first H200 server, the two servers one after the other, 2026-10-15; other users'
 
 **The servers:**
 - **Official engine:** Startlux-decide-inference at commit `b70404d` (package 1.1.0), `startlux-decide serve --model
-  DIR --launch-vllm --gpus N --quantization fp8` on vLLM 0.31.0. It serves v1 folders (`format` "StartLux-Decision-v1"
-  in `decision_config.json`) in one pass by default.
+  DIR --launch-vllm --gpus N` on vLLM 0.31.0, and the same with `--quantization fp8` for FP8. It serves v1 folders
+  (`format` "StartLux-Decision-v1" in `decision_config.json`) in one pass by default.
   - Weights: the BF16 release `startlux-models/StartLux-Decision-v1-27B` (commit `5de3f54`, 55.6 GB in 11 shards;
     every file's SHA-256 checked against Hugging Face).
   - The release carries an MTP layer's weights (v1.1's does not), so the launcher turns MTP speculative decoding on
@@ -1015,33 +1016,33 @@ first H200 server, the two servers one after the other, 2026-10-15; other users'
   this repository at `9bea64f`.
 
 **One request at a time** (the official client `startlux-decide bench` with the v1.1 comparison's requests; mean ms,
-the first 5 of each file's 25 requests dropped; p50 and p95 within 3% of the mean, except the official engine's ~1,024
-tokens: 74-98 ms in two groups):
+the first 5 of each file's 25 requests dropped; p50 and p95 within 7% of the mean, StartLux-Prism's within 3%, except
+the official engine's ~1,024 tokens in FP8: 74-98 ms in two groups):
 
-| request | official, FP8 | **StartLux-Prism int8** | StartLux-Prism faster by |
-|---|---|---|---|
-| one yes/no question, ~256 prompt tokens | 54.5 | **18.9** | 2.9x |
-| ~1,024 tokens | 88.5 | **57.0** | 1.6x |
-| ~4,096 tokens | 277.2 | **213.2** | 1.3x |
-| ~8,192 tokens | 539.1 | **438.5** | 1.2x |
-| the official README's three questions | 96.4 | **17.2** | 5.6x |
+| request | official, BF16 | official, FP8 | **StartLux-Prism int8** | StartLux-Prism faster than FP8 by |
+|---|---|---|---|---|
+| one yes/no question, ~256 prompt tokens | 54.7 | 54.5 | **18.9** | 2.9x |
+| ~1,024 tokens | 107.2 | 88.5 | **57.0** | 1.6x |
+| ~4,096 tokens | 387.4 | 277.2 | **213.2** | 1.3x |
+| ~8,192 tokens | 727.2 | 539.1 | **438.5** | 1.2x |
+| the official README's three questions | 95.4 | 96.4 | **17.2** | 5.6x |
 
 **JevBench** (`bench/run_jevbench.py`, `think_mode` never; requests/s over three passes of the 231 items, every request
 with its own request number):
 
-| | official, FP8 | **StartLux-Prism int8** |
-|---|---|---|
-| one at a time, the items as they are: correct of 231, mean ms | 212, 83.3 | 207, **40.9** |
-| requests/s from 1 client | 12.0 | **24.4** |
-| requests/s from 16 clients | 25.0 | **30.0** |
-| requests/s from 64 clients | 25.4 | **30.9** |
-| correct per pass with request numbers (9 passes), of 231 | 205-209 (mean 207.0) | 205-208 (206.7) |
+| | official, BF16 | official, FP8 | **StartLux-Prism int8** |
+|---|---|---|---|
+| one at a time, the items as they are: correct of 231, mean ms | 210, 94.8 | 212, 83.3 | 207, **40.9** |
+| requests/s from 1 client | 10.6 | 12.0 | **24.4** |
+| requests/s from 16 clients | 17.5 | 25.0 | **30.0** |
+| requests/s from 64 clients | 18.1 | 25.4 | **30.9** |
+| correct per pass with request numbers (9 passes), of 231 | 208-210 (mean 208.8) | 205-209 (207.0) | 205-208 (206.7) |
 
-The two score the same: a request number in front of the evidence moves near-ties, and over the nine numbered passes
-both average 207 (StartLux publishes 208 for this model); the items as they are happen to give the official engine 212.
-As on v1.1, StartLux-Prism takes a third of the time for a short question and a fifth for three questions about the
-same evidence, and from many clients both are bound by the tensor cores (int8 and FP8 at the same rate), where its lead
-is 1.2x.
+A request number in front of the evidence moves near-ties, so the scores are the nine numbered passes' more than the
+items as they are (210, 212 and 207): FP8 and StartLux-Prism int8 average 207, BF16 208.8 (StartLux publishes 208 for
+this model). As on v1.1, StartLux-Prism takes a third of the time for a short question and a fifth for three questions
+about the same evidence. From many clients the engines are bound by the tensor cores, which run int8 and FP8 at the
+same rate: StartLux-Prism's lead over FP8 is 1.2x there, and 1.7x over BF16.
 
 ## Images
 

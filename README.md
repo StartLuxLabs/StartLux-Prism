@@ -159,12 +159,12 @@ StartLux-Decision v1.1 27B AutoThink, one H200 per server, the same requests:
 
 StartLux-Decision v1 27B, one H200 per server, the same requests (v1 answers in one pass):
 
-| | official, FP8 | **StartLux-Prism int8** |
-|---|---|---|
-| one short question, ms | 54.5 | **18.9** |
-| three questions, ms | 96.4 | **17.2** |
-| one question of 8,192 tokens, ms | 539.1 | **438.5** |
-| JevBench read-outs, requests/s from 64 clients | 25.4 | **30.9** |
+| | official, BF16 | official, FP8 | **StartLux-Prism int8** |
+|---|---|---|---|
+| one short question, ms | 54.7 | 54.5 | **18.9** |
+| three questions, ms | 95.4 | 96.4 | **17.2** |
+| one question of 8,192 tokens, ms | 727.2 | 539.1 | **438.5** |
+| JevBench read-outs, requests/s from 64 clients | 18.1 | 25.4 | **30.9** |
 
 Under load both engines are bound by the tensor cores, which run int8 and FP8 at the same rate, so the lead narrows to
 17% on v1.1 and 22% on v1. On several H200s, v1.1's read-outs per second: one GPU 30.9, four 121.1, eight 237.8 (the
