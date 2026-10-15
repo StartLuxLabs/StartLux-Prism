@@ -399,6 +399,19 @@ batch and thought (`tests/test_tp.py`), and it holds at 2 and 4 GPUs.  Numbers: 
   the GEMMs 17 -> 8.5 ms of a one-thought step. JevBench with thoughts, one request at a time: 2,862 -> 1,785 ms per
   item, the items that think 9.3 -> 5.7 s; the 9B's file 3,418 -> 1,590 ms (10.4 -> 4.8 s).
 
+## Ampere and Ada: the A800, RTX 30 and 40 series (2026-10-15)
+
+* **What kept them out:** three Hopper instructions, which ptxas refuses below sm_90. The int8 producers' Triton
+  kernels signal PDL (`gdc_launch_dependents`), `csrc/w4a8_gemm.cu` waits for it (`griddepcontrol.wait`), and
+  `csrc/w8a8_gemm.cu`'s cluster split-K uses thread-block clusters. They are now generated for sm_90 and later only
+  (`__CUDA_ARCH__ >= 900`; a `PDL` constexpr in the Triton kernels), and the host turns PDL and clusters on only on
+  such a GPU (`sm90_or_later()`, `quant._pdl()`). Everything else runs as it is; built for sm_80, sm_86 and sm_89.
+* **Run on an RTX 4090 (driver 550) and an A800 (driver 570):** PyTorch 2.14.1 for CUDA 12.6, the system's CUDA 12.8 /
+  12.9 toolkit for the extension. The kernel tests bit for bit, `test_decode` in int8 and W4A8 and JevBench pass:
+  [benchmarks.md](benchmarks.md#ampere-and-ada-an-rtx-4090-and-an-a800).
+* **Open:** no dispatch tables for them yet, so the int8 GEMMs run the Triton kernel and W4A8 its tile rule
+  (`bench/cuda_gemm_micro.py --table`, `bench/w4a8_table.py` measure them).
+
 ## Opt-in
 
 * **int8 attention scores** (`--attn-qk8`, `Options.attn_qk8`): keys also kept as int8 (one scale per token and kv

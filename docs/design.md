@@ -27,10 +27,12 @@ them gives an element the same bits: exact int32 sums, then the same explicitly 
 partials kept in int32. The rest of the pass is per segment and per row. So a request's probabilities do not depend on
 what it is batched with, on concurrency, or on the cache.
 
-**Kernels per GPU.** The extension is built for the GPU it runs on (sm_120 or sm_90a). Each projection's kernel, tile
-and K split is chosen per shape and token count from a table measured on that GPU model
-(`kernels/gemm_table_<gpu>.json`):
+**Kernels per GPU.** The extension is built for the GPU it runs on (sm_120, sm_90a, or sm_80 / 86 / 89 for Ampere and
+Ada). Each projection's kernel, tile and K split is chosen per shape and token count from a table measured on that GPU
+model (`kernels/gemm_table_<gpu>.json`):
 - **RTX 5090:** mma.sync kernels (one CTA per tile, split-K, stream-K) and a Triton kernel.
+- **Ampere and Ada (A800, RTX 30 and 40 series):** no table measured yet - the int8 GEMMs run the Triton kernel, W4A8
+  picks its tiles by rule - and no PDL or thread-block clusters (Hopper's), the rest of the code as on the others.
 - **H200:** warpgroup-MMA kernels with TMA copies and warp specialization (`csrc/w8a8_wgmma.cu`: 1,240-1,420 TOPS at
   4,000-8,000 tokens, where mma.sync reaches about 530 and cuBLASLt's int8 870-910).
 

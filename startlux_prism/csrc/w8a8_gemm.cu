@@ -281,7 +281,9 @@ __device__ __forceinline__ void pdl_prologue(const int8_t* W, int N, int K, int 
     const int r = n0 + i / lines;
     if (r < N) asm volatile("prefetch.global.L2 [%0];" ::"l"(W + (size_t)r * K + k_begin + (i % lines) * 128));
   }
+#if defined(__CUDA_ARCH__) && __CUDA_ARCH__ >= 900  // (before sm_90 no launch is early: sm90_or_later)
   asm volatile("griddepcontrol.wait;" ::: "memory");
+#endif
 }
 
 // pdl: 0 ordinary launch; 1 early launch, no prefetch; 2 the first M tile's CTAs prefetch the first PDL_PF k-tiles of
@@ -438,7 +440,9 @@ __global__ void __launch_bounds__(WARPS_M* WARPS_N * 32)
     if (cluster_k) {
       // deterministic split-K in a thread block cluster: the K splits of this tile are one cluster; each leaves its
       // int32 partial sums in its own shared memory, and rank 0 adds them over distributed shared memory (integer
-      // sums: exact in any order) and runs the one epilogue.  No global round trip.
+      // sums: exact in any order) and runs the one epilogue.  No global round trip.  Clusters exist from sm_90 on
+      // (the launch refuses cluster split-K before: sm90_or_later).
+#if defined(__CUDA_ARCH__) && __CUDA_ARCH__ >= 900
       if constexpr (ACC * THREADS * 4 <= T::SMEM) {
         namespace cg = cooperative_groups;
         cg::cluster_group cluster = cg::this_cluster();
@@ -464,6 +468,7 @@ __global__ void __launch_bounds__(WARPS_M* WARPS_N * 32)
         }
         cluster.sync();  // the other ranks' shared memory must stay alive until rank 0 has read it
       }
+#endif
       return;
     }
     if (ws == nullptr) {  // atomic adds: the fp32 sum depends on the order the splits arrive in
@@ -599,6 +604,20 @@ __global__ void __launch_bounds__(WARPS_M* WARPS_N * 32)
   }
 }
 
+// Programmatic dependent launch and thread block clusters exist from sm_90 (Hopper) on: before it the launches run
+// in order (pdl ignored) and cluster split-K is refused.
+inline bool sm90_or_later() {
+  static int known[64] = {};  // per device: 0 not asked yet, 1 before sm_90, 2 sm_90 or later
+  int dev = 0;
+  C10_CUDA_CHECK(cudaGetDevice(&dev));
+  if (!known[dev]) {
+    int major = 0;
+    C10_CUDA_CHECK(cudaDeviceGetAttribute(&major, cudaDevAttrComputeCapabilityMajor, dev));
+    known[dev] = major >= 9 ? 2 : 1;
+  }
+  return known[dev] == 2;
+}
+
 template <bool SP, int BM, int BN, int BK, int WARPS_M, int WARPS_N, int STAGES, int EPI>
 void launch(const torch::Tensor& a, const torch::Tensor& sa, const torch::Tensor& w, const torch::Tensor& sw,
             torch::Tensor& out, const torch::Tensor& n_rows, int split, int mode, int32_t* ws, int64_t ws_numel,
@@ -607,14 +626,17 @@ void launch(const torch::Tensor& a, const torch::Tensor& sa, const torch::Tensor
   const int M = a.size(0), K = a.size(1), N = w.size(0);
   TORCH_CHECK(K % (BK * split) == 0, "K must be a multiple of BK * split");
   auto kern = w8a8_kernel<SP, BM, BN, BK, WARPS_M, WARPS_N, STAGES, EPI>;
+  const bool sm90 = sm90_or_later();
   static bool configured = false;
   if (!configured) {
     C10_CUDA_CHECK(cudaFuncSetAttribute(kern, cudaFuncAttributeMaxDynamicSharedMemorySize, T::SMEM));
-    C10_CUDA_CHECK(cudaFuncSetAttribute(kern, cudaFuncAttributeNonPortableClusterSizeAllowed, 1));
+    if (sm90) C10_CUDA_CHECK(cudaFuncSetAttribute(kern, cudaFuncAttributeNonPortableClusterSizeAllowed, 1));
     configured = true;
   }
   dim3 grid((N + BN - 1) / BN, (M + BM - 1) / BM, split);
   const int cluster_k = split > 1 && mode == SPLIT_CLUSTER;
+  TORCH_CHECK(!cluster_k || sm90, "cluster split-K needs sm_90 or later");
+  if (!sm90) pdl = 0;
   if (split > 1 && mode == SPLIT_WORKSPACE) {
     TORCH_CHECK((int64_t)grid.x * grid.y <= (1 << 16), "too many tiles for the split-K counters");
     TORCH_CHECK((int64_t)grid.x * grid.y * split * BM * BN <= ws_numel, "split-K workspace too small");
@@ -674,6 +696,7 @@ void launch_sk(const torch::Tensor& a, const torch::Tensor& sa, const torch::Ten
   attr[0].id = cudaLaunchAttributeProgrammaticStreamSerialization;
   attr[0].val.programmaticStreamSerializationAllowed = 1;
   config.attrs = attr;
+  if (!sm90_or_later()) pdl = 0;
   config.numAttrs = pdl ? 1 : 0;
   C10_CUDA_CHECK(cudaLaunchKernelEx(&config, kern, a.data_ptr<int8_t>(), sa.data_ptr<float>(), w.data_ptr<int8_t>(),
                                     sw.data_ptr<float>(), out.data_ptr(), (int)out.stride(0), n_rows.data_ptr<int>(),

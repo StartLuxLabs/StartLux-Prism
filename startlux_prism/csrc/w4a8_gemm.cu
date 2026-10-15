@@ -126,7 +126,9 @@ __global__ void __launch_bounds__(WARPS_M* WARPS_N * 32, MINB)
       const int r = n0 + i / lines;
       if (r < N) asm volatile("prefetch.global.L2 [%0];" ::"l"(Wq + (size_t)r * row_bytes + (i % lines) * 128));
     }
+#if defined(__CUDA_ARCH__) && __CUDA_ARCH__ >= 900  // (before sm_90 no launch is early: sm90_or_later)
     asm volatile("griddepcontrol.wait;" ::: "memory");
+#endif
   }
   const int live = *n_rows;
   const int m0 = blockIdx.y * BM;
@@ -362,6 +364,19 @@ __global__ void __launch_bounds__(WARPS_M* WARPS_N * 32, MINB)
   }
 }
 
+// Programmatic dependent launch exists from sm_90 (Hopper) on: before it the launches run in order (pdl ignored).
+inline bool sm90_or_later() {
+  static int known[64] = {};  // per device: 0 not asked yet, 1 before sm_90, 2 sm_90 or later
+  int dev = 0;
+  C10_CUDA_CHECK(cudaGetDevice(&dev));
+  if (!known[dev]) {
+    int major = 0;
+    C10_CUDA_CHECK(cudaDeviceGetAttribute(&major, cudaDevAttrComputeCapabilityMajor, dev));
+    known[dev] = major >= 9 ? 2 : 1;
+  }
+  return known[dev] == 2;
+}
+
 template <int BM, int BN, int WARPS_M, int WARPS_N, int STAGES, int KIND, int EPI, int MINB>
 void launch(const torch::Tensor& a, const torch::Tensor& as, const torch::Tensor& xs, const torch::Tensor& wq,
             const torch::Tensor& wsc, const torch::Tensor& wmn, const torch::Tensor& wd, const torch::Tensor& wdm,
@@ -388,6 +403,7 @@ void launch(const torch::Tensor& a, const torch::Tensor& as, const torch::Tensor
   attr[0].id = cudaLaunchAttributeProgrammaticStreamSerialization;  // may start while the previous kernel runs
   attr[0].val.programmaticStreamSerializationAllowed = 1;
   config.attrs = attr;
+  if (!sm90_or_later()) pdl = 0;
   config.numAttrs = pdl ? 1 : 0;
   C10_CUDA_CHECK(cudaLaunchKernelEx(
       &config, kern, a.data_ptr<int8_t>(), as.data_ptr<float>(), KIND == 0 ? xs.data_ptr<int8_t>() : nullptr,

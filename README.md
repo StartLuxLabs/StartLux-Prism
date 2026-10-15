@@ -27,8 +27,9 @@ probability for every option.
 
 ## Quick start
 
-Needs Linux, an RTX 5090 (sm_120) or a Hopper GPU (sm_90a), Python 3.12 with PyTorch for CUDA 13, Triton and a CUDA
-toolkit. The CUDA extension builds on first use.
+Needs Linux, an NVIDIA GPU from Ampere on (tuned on the RTX 5090, sm_120, and Hopper, sm_90a; also run on an RTX 4090,
+sm_89, and an A800, sm_80), Python 3.12 with PyTorch, Triton and a CUDA toolkit: PyTorch for CUDA 13 on a 580 or later
+driver, for CUDA 12.6 with a CUDA 12 toolkit on an older one. The CUDA extension builds on first use.
 
 ```bash
 M=~/models/StartLux-Decision-v1.1-27B-AutoThink-GGUF

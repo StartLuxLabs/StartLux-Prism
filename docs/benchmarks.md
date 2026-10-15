@@ -27,6 +27,7 @@ tensor parallelism, both; eight GPUs against the official engine). Each chart is
 - [Tensor parallelism: the 27B on 2 and 4 H200s](#tensor-parallelism-the-27b-on-2-and-4-h200s)
 - [Four H200s: the most throughput](#four-h200s-the-most-throughput)
 - [Eight H200s: against the official engine](#eight-h200s-against-the-official-engine)
+- [Ampere and Ada: an RTX 4090 and an A800](#ampere-and-ada-an-rtx-4090-and-an-a800)
 - [Stress tests](#stress-tests)
 - [Engine configurations](#engine-configurations) · [Crashes on the RTX 5090 server](#crashes-on-the-rtx-5090-server)
 
@@ -1212,6 +1213,55 @@ The official engine's FP8 setting answers 1.44x its BF16 on one GPU (26.3 agains
 it was not run on eight. The router raises its open-file limit to the hard limit when it starts: at the usual 1,024,
 a first run ran out at 512 clients (every request in flight holds a client's connection and a worker's) and the
 router died.
+
+## Ampere and Ada: an RTX 4090 and an A800
+
+2026-10-15, the `ampere-ada` branch (Hopper's PDL and thread-block clusters left out below sm_90:
+[optimizations.md](optimizations.md#ampere-and-ada-the-a800-rtx-30-and-40-series-2026-10-15)), PyTorch 2.14.1 for CUDA
+12.6, Triton 3.8.0. No dispatch tables for these GPUs yet: the int8 GEMMs ran the Triton kernel, W4A8 its tile rule.
+
+- **RTX 4090** (24 GB, sm_89, driver 550.107.02, CUDA 12.8 toolkit): StartLux-Decision-v1.1-9B-AutoThink, its Q8_0
+  (int8, activation ranges from an earlier start) and Q4_K_M (W4A8) files.
+- **A800 80GB PCIe** (sm_80, driver 570.211.01, CUDA 12.9 toolkit), one GPU of eight: StartLux-Decision-v1.1-27B-AutoThink,
+  Q8_0 (int8, the H200's activation ranges) and Q4_K_M (W4A8).
+
+**Tests.** `tests/test_w4a8.py` (bit-identical to the reference on the model's own weights) and
+`tests/test_cuda_gemm.py --quick` pass on both. `tests/test_decode.py` (decode against prefill, isolation in a running
+batch, seeded sampling) passes in both precisions:
+
+| GPU, model | precision | teacher forcing: max / mean \|dlogit\| | top-1 agreement | isolation and sampling |
+|---|---|---|---|---|
+| RTX 4090, 9B | int8 | 10.24 / 0.246 | 1,002 of 1,024 | bit for bit |
+| RTX 4090, 9B | W4A8 | 7.28 / 0.106 | 1,012 of 1,024 | bit for bit |
+| A800, 27B | int8 | 11.73 / 0.247 | 1,014 of 1,024 | bit for bit |
+| A800, 27B | W4A8 | 1.71 / 0.057 | 1,021 of 1,024 | bit for bit |
+
+**JevBench** (231 public items, one request at a time; auto at gate 0.9), next to the RTX 5090 and the H200:
+
+| GPU, model, precision | never: correct, mean / p50 ms | auto: correct, mean / p50 ms | thought (right) |
+|---|---|---|---|
+| RTX 4090, 9B, int8 | 201, 49.6 / 14.6 | 215, 4,203 / 29.2 | 76 (63) |
+| RTX 4090, 9B, W4A8 | 199, 47.4 / 15.7 | 215, 4,300 / 26.0 | 77 (63) |
+| RTX 5090, 9B, int8 | 200, 22.0 | 210, 1,823 | |
+| RTX 5090, 9B, W4A8 | 200, 31.8 | 214, 2,147 | |
+| A800, 27B, int8 | 214, 271.0 / 71.5 | 221, 4,108 / 157 | 69 (60) |
+| A800, 27B, W4A8 | 213, 298.6 / 77.3 | 227, 4,242 / 168 | 69 (65) |
+| H200, 27B, int8 | 214, 41.1 / 15.8 | 224, 1,196 / 19.2 | 67 (61) |
+
+The one-pass answers match the other GPUs' within an item or two; the thoughts' differ more (a sampled thought follows
+the last bits of its logits). Every thought ended by itself on the A800.
+
+**Decode** (`bench/decode_speed.py`, context 512, ms per step):
+
+| GPU, model | precision | 1 sequence | 8 | 16 | 64 |
+|---|---|---|---|---|---|
+| RTX 4090, 9B | W4A8 | 11.26 | 11.73 | 13.04 | |
+| RTX 4090, 9B | int8 | 12.15 | 13.23 | 14.62 | |
+| A800, 27B | W4A8 | 32.58 | 34.17 | | 63.21 |
+| A800, 27B | int8 | 34.19 | 35.95 | | 50.68 |
+
+Twice the RTX 5090's steps on the RTX 4090 (5.04 ms for the 9B's W4A8) and three times the H200's on the A800 (10.51
+ms for the 27B's int8): half and 0.4 of their memory bandwidth, and no tuned tables.
 
 ## Stress tests
 

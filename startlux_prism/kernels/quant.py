@@ -35,12 +35,21 @@ buffers, after a handshake (_tp_sync): the grid's first program sets this rank's
 fence: an acquire), so what each rank wrote before this kernel is visible.  Integer sums are exact in any order, so the
 results are those of the NCCL path and of one GPU (Sync).
 """
+import functools
 from typing import NamedTuple
 
 import torch
 import triton
 import triton.language as tl
 from triton.language.extra.cuda import libdevice
+
+
+@functools.lru_cache(None)
+def _pdl():
+    """The producers signal programmatic dependent launch (griddepcontrol.launch_dependents) on sm_90 and later only:
+    the instruction does not exist before Hopper, and there no GEMM launches early (no dispatch table, so no CUDA GEMM
+    with PDL; csrc/w8a8_gemm.cu)."""
+    return torch.cuda.get_device_capability()[0] >= 9
 
 
 class Sync(NamedTuple):
@@ -136,9 +145,10 @@ def _fold_parts(h, parts_ptr, part_stride, psa_ptr, psw_ptr, r, c, m, HID: tl.co
 def _norm_q8_kernel(h_ptr, w_ptr, q_ptr, s_ptr, rows_ptr, n_ptr, eps, parts_ptr, part_stride, psa_ptr, psw_ptr,
                     ep_ptr, f0, f1, f2, f3, chan, o1, o2, o3,
                     HID: tl.constexpr, HP: tl.constexpr, GATHER: tl.constexpr, NP: tl.constexpr,
-                    RANK: tl.constexpr, NR: tl.constexpr):
+                    RANK: tl.constexpr, NR: tl.constexpr, PDL: tl.constexpr):
     """NR > 1: the deferred add's slots are every rank's (a fused all-reduce, module docstring)."""
-    tl.extra.cuda.gdc_launch_dependents()
+    if PDL:                                          # sm_90 and later (_pdl)
+        tl.extra.cuda.gdc_launch_dependents()
     i = tl.program_id(0).to(tl.int64)
     if i >= tl.load(n_ptr):
         return
@@ -206,12 +216,13 @@ def _ll_amax(amax, t, ep_ptr, w0, w1, w2, w3, off, RANK: tl.constexpr, NR: tl.co
 def _gated_norm_q8_kernel(o_ptr, z_ptr, P, Z_OFF, w_ptr, inv_s_ptr, q_ptr, s_ptr, n_ptr, eps, amax_ptr,
                           ep_ptr, w0, w1, w2, w3, off,
                           HV: tl.constexpr, HP: tl.constexpr, D: tl.constexpr, MODE: tl.constexpr,
-                          RANK: tl.constexpr, NR: tl.constexpr):
+                          RANK: tl.constexpr, NR: tl.constexpr, PDL: tl.constexpr):
     """HP: HV rounded up to a power of two (the 27B's 48 value heads); the rows past HV are masked to zero.  Tensor
     parallel: HV is this rank's heads, HP the whole model's (the same block, so the same order of the sum over D);
     MODE 1 also stores the row's maximum in amax, MODE 2 quantizes with the maximum over the ranks, MODE 3 exchanges
     the maxima itself (module docstring)."""
-    tl.extra.cuda.gdc_launch_dependents()
+    if PDL:                                          # sm_90 and later (_pdl)
+        tl.extra.cuda.gdc_launch_dependents()
     t = tl.program_id(0).to(tl.int64)
     if t >= tl.load(n_ptr):
         return
@@ -248,11 +259,12 @@ def _swiglu_piece(row, inv_s_ptr, FF: tl.constexpr, OFF: tl.constexpr, P: tl.con
 @triton.jit
 def _swiglu_q8_kernel(gu_ptr, inv_s_ptr, q_ptr, s_ptr, n_ptr, amax_ptr, ep_ptr, w0, w1, w2, w3, off,
                       FF: tl.constexpr, P1: tl.constexpr, P2: tl.constexpr, MODE: tl.constexpr, RANK: tl.constexpr,
-                      NR: tl.constexpr):
+                      NR: tl.constexpr, PDL: tl.constexpr):
     """One row, in registers as two power-of-2 pieces (P1 + P2 >= FF: the 27B's 17,408 = 16,384 + 1,024; one power
     of 2 for the whole row left 47% of its lanes masked).  The row's maximum is exact in any order: the same bits.
     MODE 1 / 2 / 3: tensor parallel (module docstring)."""
-    tl.extra.cuda.gdc_launch_dependents()
+    if PDL:                                          # sm_90 and later (_pdl)
+        tl.extra.cuda.gdc_launch_dependents()
     t = tl.program_id(0).to(tl.int64)
     if t >= tl.load(n_ptr):
         return
@@ -274,9 +286,11 @@ def _swiglu_q8_kernel(gu_ptr, inv_s_ptr, q_ptr, s_ptr, n_ptr, amax_ptr, ep_ptr, 
 
 @triton.jit
 def _rows_q8_kernel(x_ptr, inv_s_ptr, q_ptr, s_ptr, n_ptr, amax_ptr, ep_ptr, w0, w1, w2, w3, off,
-                    K: tl.constexpr, KP: tl.constexpr, MODE: tl.constexpr, RANK: tl.constexpr, NR: tl.constexpr):
+                    K: tl.constexpr, KP: tl.constexpr, MODE: tl.constexpr, RANK: tl.constexpr, NR: tl.constexpr,
+                    PDL: tl.constexpr):
     """MODE 1 / 2 / 3: tensor parallel (module docstring)."""
-    tl.extra.cuda.gdc_launch_dependents()
+    if PDL:                                          # sm_90 and later (_pdl)
+        tl.extra.cuda.gdc_launch_dependents()
     t = tl.program_id(0).to(tl.int64)
     if t >= tl.load(n_ptr):
         return
@@ -317,8 +331,10 @@ def _store_g(y, q_ptr, s_ptr, xs_ptr, row, M, K: tl.constexpr, KP: tl.constexpr)
 
 
 @triton.jit
-def _norm_g_kernel(h_ptr, w_ptr, q_ptr, s_ptr, xs_ptr, n_ptr, M, eps, HID: tl.constexpr, HP: tl.constexpr):
-    tl.extra.cuda.gdc_launch_dependents()
+def _norm_g_kernel(h_ptr, w_ptr, q_ptr, s_ptr, xs_ptr, n_ptr, M, eps, HID: tl.constexpr, HP: tl.constexpr,
+                   PDL: tl.constexpr):
+    if PDL:                                          # sm_90 and later (_pdl)
+        tl.extra.cuda.gdc_launch_dependents()
     r = tl.program_id(0).to(tl.int64)
     if r >= tl.load(n_ptr):
         return
@@ -331,10 +347,11 @@ def _norm_g_kernel(h_ptr, w_ptr, q_ptr, s_ptr, xs_ptr, n_ptr, M, eps, HID: tl.co
 
 @triton.jit
 def _gated_norm_g_kernel(o_ptr, z_ptr, P, Z_OFF, w_ptr, q_ptr, s_ptr, xs_ptr, n_ptr, M, eps,
-                         HV: tl.constexpr, HP: tl.constexpr, D: tl.constexpr):
+                         HV: tl.constexpr, HP: tl.constexpr, D: tl.constexpr, PDL: tl.constexpr):
     """HP: HV rounded up to a power of two (the 27B's 48 value heads); the rows past HV are zero, past K for
     _store_g."""
-    tl.extra.cuda.gdc_launch_dependents()
+    if PDL:                                          # sm_90 and later (_pdl)
+        tl.extra.cuda.gdc_launch_dependents()
     t = tl.program_id(0).to(tl.int64)
     if t >= tl.load(n_ptr):
         return
@@ -349,8 +366,9 @@ def _gated_norm_g_kernel(o_ptr, z_ptr, P, Z_OFF, w_ptr, q_ptr, s_ptr, xs_ptr, n_
 
 
 @triton.jit
-def _swiglu_g_kernel(gu_ptr, q_ptr, s_ptr, xs_ptr, n_ptr, M, FF: tl.constexpr, FP: tl.constexpr):
-    tl.extra.cuda.gdc_launch_dependents()
+def _swiglu_g_kernel(gu_ptr, q_ptr, s_ptr, xs_ptr, n_ptr, M, FF: tl.constexpr, FP: tl.constexpr, PDL: tl.constexpr):
+    if PDL:                                          # sm_90 and later (_pdl)
+        tl.extra.cuda.gdc_launch_dependents()
     t = tl.program_id(0).to(tl.int64)
     if t >= tl.load(n_ptr):
         return
@@ -362,8 +380,9 @@ def _swiglu_g_kernel(gu_ptr, q_ptr, s_ptr, xs_ptr, n_ptr, M, FF: tl.constexpr, F
 
 
 @triton.jit
-def _rows_g_kernel(x_ptr, q_ptr, s_ptr, xs_ptr, n_ptr, M, K: tl.constexpr, KP: tl.constexpr):
-    tl.extra.cuda.gdc_launch_dependents()
+def _rows_g_kernel(x_ptr, q_ptr, s_ptr, xs_ptr, n_ptr, M, K: tl.constexpr, KP: tl.constexpr, PDL: tl.constexpr):
+    if PDL:                                          # sm_90 and later (_pdl)
+        tl.extra.cuda.gdc_launch_dependents()
     t = tl.program_id(0).to(tl.int64)
     if t >= tl.load(n_ptr):
         return
@@ -374,22 +393,22 @@ def _rows_g_kernel(x_ptr, q_ptr, s_ptr, xs_ptr, n_ptr, M, K: tl.constexpr, KP: t
 
 def norm_g(h, w, q, s, xs, n, T, eps):
     HID = h.shape[1]
-    _norm_g_kernel[(T,)](h, w, q, s, xs, n, s.shape[1], eps, HID=HID, HP=_p2(HID), num_warps=8)
+    _norm_g_kernel[(T,)](h, w, q, s, xs, n, s.shape[1], eps, HID=HID, HP=_p2(HID), PDL=_pdl(), num_warps=8)
 
 
 def gated_norm_g(o, proj, z_off, w, q, s, xs, n, T, cfg):
     _gated_norm_g_kernel[(T,)](o, proj, proj.stride(0), z_off, w, q, s, xs, n, s.shape[1], cfg.eps, HV=cfg.v_heads,
-                               HP=_p2(cfg.v_heads), D=cfg.gdn_dim, num_warps=8)
+                               HP=_p2(cfg.v_heads), D=cfg.gdn_dim, PDL=_pdl(), num_warps=8)
 
 
 def swiglu_g(gu, q, s, xs, n, T):
     FF = q.shape[1]
-    _swiglu_g_kernel[(T,)](gu, q, s, xs, n, s.shape[1], FF=FF, FP=_p2(FF), num_warps=16)
+    _swiglu_g_kernel[(T,)](gu, q, s, xs, n, s.shape[1], FF=FF, FP=_p2(FF), PDL=_pdl(), num_warps=16)
 
 
 def rows_g(x, q, s, xs, n, T):
     K = q.shape[1]
-    _rows_g_kernel[(T,)](x, q, s, xs, n, s.shape[1], K=K, KP=_p2(K), num_warps=8)
+    _rows_g_kernel[(T,)](x, q, s, xs, n, s.shape[1], K=K, KP=_p2(K), PDL=_pdl(), num_warps=8)
 
 
 def _p2(n):
@@ -409,7 +428,7 @@ def norm_q8(h, w_over_s, q, s, n, T, eps, rows=None, parts=None, pending=None):
     _norm_q8_kernel[(T,)](h, w_over_s, q, s, rows if rows is not None else n, n, eps,
                           parts if np_ else h, parts.stride(0) if np_ else 0, pending.a_s if np_ else s,
                           pending.w_s if np_ else s, *sa, HID=HID, HP=_p2(HID), GATHER=rows is not None, NP=np_,
-                          RANK=RANK, NR=NR, num_warps=8)
+                          RANK=RANK, NR=NR, PDL=_pdl(), num_warps=8)
 
 
 @triton.jit
@@ -447,7 +466,7 @@ def gated_norm_q8(o, proj, z_off, w, inv_s, q, s, n, T, cfg, mode=0, amax=None, 
     sa, RANK, NR = _sync_args(sync, amax)
     _gated_norm_q8_kernel[(T,)](o, proj, proj.stride(0), z_off, w, inv_s, q, s, n, cfg.eps, amax, *sa[:6],
                                 HV=cfg.v_heads, HP=_p2(getattr(cfg, "v_heads_full", cfg.v_heads)), D=cfg.gdn_dim,
-                                MODE=mode, RANK=RANK, NR=NR, num_warps=8)
+                                MODE=mode, RANK=RANK, NR=NR, PDL=_pdl(), num_warps=8)
 
 
 def swiglu_q8(gu, inv_s, q, s, n, T, mode=0, amax=None, sync=None):
@@ -456,11 +475,12 @@ def swiglu_q8(gu, inv_s, q, s, n, T, mode=0, amax=None, sync=None):
     amax = amax if amax is not None else s
     sa, RANK, NR = _sync_args(sync, amax)
     _swiglu_q8_kernel[(T,)](gu, inv_s, q, s, n, amax, *sa[:6], FF=FF, P1=P1, P2=max(_p2(FF - P1), 16), MODE=mode,
-                            RANK=RANK, NR=NR, num_warps=4 if T <= 2048 else 16)
+                            RANK=RANK, NR=NR, PDL=_pdl(), num_warps=4 if T <= 2048 else 16)
 
 
 def rows_q8(x, inv_s, q, s, n, T, mode=0, amax=None, sync=None):
     K = q.shape[1]
     amax = amax if amax is not None else s
     sa, RANK, NR = _sync_args(sync, amax)
-    _rows_q8_kernel[(T,)](x, inv_s, q, s, n, amax, *sa[:6], K=K, KP=_p2(K), MODE=mode, RANK=RANK, NR=NR, num_warps=8)
+    _rows_q8_kernel[(T,)](x, inv_s, q, s, n, amax, *sa[:6], K=K, KP=_p2(K), MODE=mode, RANK=RANK, NR=NR, PDL=_pdl(),
+                          num_warps=8)
