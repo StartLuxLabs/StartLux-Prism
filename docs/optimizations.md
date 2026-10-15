@@ -409,11 +409,11 @@ batch and thought (`tests/test_tp.py`), and it holds at 2 and 4 GPUs.  Numbers: 
 * **Run on an RTX 4090 (driver 550) and an A800 (driver 570):** PyTorch 2.14.1 for CUDA 12.6, the system's CUDA 12.8 /
   12.9 toolkit for the extension. The kernel tests bit for bit, `test_decode` in int8 and W4A8 and JevBench pass:
   [benchmarks.md](benchmarks.md#ampere-and-ada-an-rtx-4090-and-an-a800).
-* **The A800's tables** (`bench/cuda_gemm_micro.py --buckets --max-m 8192 --table`, `bench/w4a8_table.py --m ...` up
-  to 1,024 rows, the 27B's shapes): decode at one sequence 34.2 -> 21.3 ms (int8) and 32.6 -> 17.6 ms (W4A8), JevBench
-  one pass in int8 271 -> 142 ms, with thoughts 4.1 -> 2.5 s in both precisions, the same answers and thoughts. Measuring
-  them took about three hours (the int8 search times every tile, split and stream-K schedule at every bucket). The RTX
-  4090 has none yet: its int8 GEMMs run the Triton kernel, W4A8 its tile rule.
+* **The A800's tables** (`bench/cuda_gemm_micro.py --buckets --max-m 8192 --table`, `bench/w4a8_table.py --m ...` up to
+  1,024 rows, the 27B's shapes): decode at one sequence 34.2 -> 21.3 ms (int8) and 32.6 -> 17.6 ms (W4A8), JevBench one
+  pass in int8 271 -> 142 ms, with thoughts 4.1 -> 2.5 s (int8) and 4.2 -> 2.6 s (W4A8), the same answers and thoughts.
+  Measuring them took about three hours (the int8 search times every tile, split and stream-K schedule at every bucket).
+  The RTX 4090 has none yet: its int8 GEMMs run the Triton kernel, W4A8 its tile rule.
 * **Stream-K past its counters.** A table's largest measured count stands for the larger buckets; on the A800 that was a
   stream-K schedule at 8,192 rows, which a 65,536-row bucket's tiles overflowed ("too few tile counters", 65,536 of
   them) when the server recorded its graphs. `kernels/w8a8.py` now runs such a product on the same tiles one per CTA

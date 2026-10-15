@@ -144,7 +144,7 @@ WantedBy=multi-user.target
 
 Measured:
 - **RTX 5090:** the 4B and 9B (Q8_0: int8 and bf16; Q4_K_M: W4A8) and the 27B's Q4_K_M (W4A8); v1.1 AutoThink with
-  thoughts: the 9B (Q8_0: int8) and the 27B (Q4_K_M: W4A8).
+  thoughts: the 9B (Q8_0: int8; Q4_K_M: W4A8) and the 27B (Q4_K_M: W4A8).
 - **RTX 4090:** v1.1 AutoThink with thoughts, the 9B (Q8_0: int8; Q4_K_M: W4A8).
 - **A800:** v1.1 AutoThink with thoughts, the 27B (Q8_0: int8; Q4_K_M: W4A8).
 - **H200:** the v1 27B (Q8_0: int8 and bf16; Q4_K_M: W4A8 and int8); v1.1 AutoThink with thoughts: the 27B (Q8_0:
@@ -164,7 +164,7 @@ Both paths run the same Q8_0 weights, dequantized to bf16 or requantized to int8
   <img src="images/v11-precision.svg" width="840" alt="StartLux-Prism int8 against bf16 on StartLux-Decision v1.1 27B, one H200. Prefill tokens per second: one prompt of 1,024 tokens 18,865 against 11,571; 8,192 tokens 19,219 against 11,424; 32,768 tokens 15,810 against 10,155; passes of 8,192 tokens of short prompts 20,855 against 11,958. Decode ms per step: 1 sequence 10.47 against 14.89; 8 sequences 11.06 against 15.90; 64 sequences 16.70 against 21.74.">
 </picture>
 
-- **Speed:** int8 is 1.6-1.75x faster in prefill and 1.3-1.44x in decode.
+- **Speed:** int8 is 1.44-1.75x faster in prefill and 1.25-1.44x in decode.
 - **Through the server:** JevBench runs at 30.7 requests/s from 64 clients, against 16.9 for bf16.
 - **Accuracy:** one-pass answers score the same. Thoughts written by bf16 are slightly more accurate (226.2 against
   220.5 correct per pass of 231).
