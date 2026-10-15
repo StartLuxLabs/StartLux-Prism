@@ -1,0 +1,64 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="840" height="502" viewBox="0 0 840 502" role="img" aria-labelledby="title desc" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif">
+<title id="title">StartLux-Decision v1 27B on one H200</title>
+<desc id="desc">StartLux-Prism int8 against the official engine (Startlux-decide-inference with its release flags on vLLM 0.31) in FP8, its faster setting; the same requests to both. v1 answers in one pass.</desc>
+<rect x="0.5" y="0.5" width="839" height="501" rx="8" fill="#1a1a19" stroke="#2c2c2a"/>
+<text x="22.0" y="38.0" font-size="16" fill="#ffffff" text-anchor="start" font-weight="600">StartLux-Decision v1 27B on one H200</text>
+<text x="22.0" y="62.0" font-size="12.5" fill="#c3c2b7" text-anchor="start" font-weight="400">StartLux-Prism int8 against the official engine (Startlux-decide-inference with its release flags on vLLM 0.31) in FP8, its faster setting;</text>
+<text x="22.0" y="80.0" font-size="12.5" fill="#c3c2b7" text-anchor="start" font-weight="400">the same requests to both. v1 answers in one pass.</text>
+<rect x="22.0" y="94.0" width="11" height="11" rx="2" fill="#3987e5"/>
+<text x="39.0" y="104.0" font-size="12.5" fill="#c3c2b7" text-anchor="start" font-weight="400">StartLux-Prism int8</text>
+<rect x="175.6" y="94.0" width="11" height="11" rx="2" fill="#62615c"/>
+<text x="192.6" y="104.0" font-size="12.5" fill="#c3c2b7" text-anchor="start" font-weight="400">official engine, FP8</text>
+<text x="22.0" y="134.0" font-size="12.5" fill="#ffffff" text-anchor="start" font-weight="600">One request at a time: mean ms per request (lower is better)</text>
+<text x="229.4" y="290.0" font-size="11" fill="#898781" text-anchor="middle" font-weight="400" style="font-variant-numeric: tabular-nums">0</text>
+<line x1="387.2" y1="149.0" x2="387.2" y2="275.0" stroke="#2c2c2a" stroke-width="1" shape-rendering="crispEdges"/>
+<text x="387.2" y="290.0" font-size="11" fill="#898781" text-anchor="middle" font-weight="400" style="font-variant-numeric: tabular-nums">200</text>
+<line x1="544.9" y1="149.0" x2="544.9" y2="275.0" stroke="#2c2c2a" stroke-width="1" shape-rendering="crispEdges"/>
+<text x="544.9" y="290.0" font-size="11" fill="#898781" text-anchor="middle" font-weight="400" style="font-variant-numeric: tabular-nums">400</text>
+<line x1="702.7" y1="149.0" x2="702.7" y2="275.0" stroke="#2c2c2a" stroke-width="1" shape-rendering="crispEdges"/>
+<text x="702.7" y="290.0" font-size="11" fill="#898781" text-anchor="middle" font-weight="400" style="font-variant-numeric: tabular-nums">600</text>
+<line x1="229.4" y1="149.0" x2="229.4" y2="275.0" stroke="#383835" stroke-width="1" shape-rendering="crispEdges"/>
+<text x="217.4" y="171.3" font-size="12.5" fill="#ffffff" text-anchor="end" font-weight="400">One question, ~256 tokens</text>
+<path d="M229.4,153.0 H240.4 A4.0,4.0 0 0 1 244.4,157.0 V162.0 A4.0,4.0 0 0 1 240.4,166.0 H229.4 Z" fill="#3987e5"><title>One question, ~256 tokens, StartLux-Prism int8: 18.9 ms</title></path>
+<text x="250.4" y="163.5" font-size="12" fill="#ffffff" text-anchor="start" font-weight="600" style="font-variant-numeric: tabular-nums" stroke="#1a1a19" stroke-width="3" stroke-linejoin="round" paint-order="stroke">18.9</text>
+<text x="284.4" y="163.5" font-size="12" fill="#c3c2b7" text-anchor="start" font-weight="400" stroke="#1a1a19" stroke-width="3" stroke-linejoin="round" paint-order="stroke">2.9x faster</text>
+<path d="M229.4,168.0 H268.4 A4.0,4.0 0 0 1 272.4,172.0 V177.0 A4.0,4.0 0 0 1 268.4,181.0 H229.4 Z" fill="#62615c"><title>One question, ~256 tokens, official engine, FP8: 54.5 ms</title></path>
+<text x="278.4" y="178.5" font-size="12" fill="#c3c2b7" text-anchor="start" font-weight="400" style="font-variant-numeric: tabular-nums" stroke="#1a1a19" stroke-width="3" stroke-linejoin="round" paint-order="stroke">54.5</text>
+<text x="217.4" y="213.3" font-size="12.5" fill="#ffffff" text-anchor="end" font-weight="400">One question, ~8,192 tokens</text>
+<path d="M229.4,195.0 H571.3 A4.0,4.0 0 0 1 575.3,199.0 V204.0 A4.0,4.0 0 0 1 571.3,208.0 H229.4 Z" fill="#3987e5"><title>One question, ~8,192 tokens, StartLux-Prism int8: 438.5 ms</title></path>
+<text x="581.3" y="205.5" font-size="12" fill="#ffffff" text-anchor="start" font-weight="600" style="font-variant-numeric: tabular-nums" stroke="#1a1a19" stroke-width="3" stroke-linejoin="round" paint-order="stroke">438.5</text>
+<text x="622.9" y="205.5" font-size="12" fill="#c3c2b7" text-anchor="start" font-weight="400" stroke="#1a1a19" stroke-width="3" stroke-linejoin="round" paint-order="stroke">1.2x faster</text>
+<path d="M229.4,210.0 H650.6 A4.0,4.0 0 0 1 654.6,214.0 V219.0 A4.0,4.0 0 0 1 650.6,223.0 H229.4 Z" fill="#62615c"><title>One question, ~8,192 tokens, official engine, FP8: 539.1 ms</title></path>
+<text x="660.6" y="220.5" font-size="12" fill="#c3c2b7" text-anchor="start" font-weight="400" style="font-variant-numeric: tabular-nums" stroke="#1a1a19" stroke-width="3" stroke-linejoin="round" paint-order="stroke">539.1</text>
+<text x="217.4" y="255.3" font-size="12.5" fill="#ffffff" text-anchor="end" font-weight="400">The README's three questions</text>
+<path d="M229.4,237.0 H239.0 A4.0,4.0 0 0 1 243.0,241.0 V246.0 A4.0,4.0 0 0 1 239.0,250.0 H229.4 Z" fill="#3987e5"><title>The README's three questions, StartLux-Prism int8: 17.2 ms</title></path>
+<text x="249.0" y="247.5" font-size="12" fill="#ffffff" text-anchor="start" font-weight="600" style="font-variant-numeric: tabular-nums" stroke="#1a1a19" stroke-width="3" stroke-linejoin="round" paint-order="stroke">17.2</text>
+<text x="283.1" y="247.5" font-size="12" fill="#c3c2b7" text-anchor="start" font-weight="400" stroke="#1a1a19" stroke-width="3" stroke-linejoin="round" paint-order="stroke">5.6x faster</text>
+<path d="M229.4,252.0 H301.5 A4.0,4.0 0 0 1 305.5,256.0 V261.0 A4.0,4.0 0 0 1 301.5,265.0 H229.4 Z" fill="#62615c"><title>The README's three questions, official engine, FP8: 96.4 ms</title></path>
+<text x="311.5" y="262.5" font-size="12" fill="#c3c2b7" text-anchor="start" font-weight="400" style="font-variant-numeric: tabular-nums" stroke="#1a1a19" stroke-width="3" stroke-linejoin="round" paint-order="stroke">96.4</text>
+<text x="22.0" y="320.0" font-size="12.5" fill="#ffffff" text-anchor="start" font-weight="600">JevBench's 231 items: requests per second (higher is better)</text>
+<text x="229.4" y="434.0" font-size="11" fill="#898781" text-anchor="middle" font-weight="400" style="font-variant-numeric: tabular-nums">0</text>
+<line x1="357.4" y1="335.0" x2="357.4" y2="419.0" stroke="#2c2c2a" stroke-width="1" shape-rendering="crispEdges"/>
+<text x="357.4" y="434.0" font-size="11" fill="#898781" text-anchor="middle" font-weight="400" style="font-variant-numeric: tabular-nums">10</text>
+<line x1="485.3" y1="335.0" x2="485.3" y2="419.0" stroke="#2c2c2a" stroke-width="1" shape-rendering="crispEdges"/>
+<text x="485.3" y="434.0" font-size="11" fill="#898781" text-anchor="middle" font-weight="400" style="font-variant-numeric: tabular-nums">20</text>
+<line x1="613.2" y1="335.0" x2="613.2" y2="419.0" stroke="#2c2c2a" stroke-width="1" shape-rendering="crispEdges"/>
+<text x="613.2" y="434.0" font-size="11" fill="#898781" text-anchor="middle" font-weight="400" style="font-variant-numeric: tabular-nums">30</text>
+<line x1="741.1" y1="335.0" x2="741.1" y2="419.0" stroke="#2c2c2a" stroke-width="1" shape-rendering="crispEdges"/>
+<text x="741.1" y="434.0" font-size="11" fill="#898781" text-anchor="middle" font-weight="400" style="font-variant-numeric: tabular-nums">40</text>
+<line x1="229.4" y1="335.0" x2="229.4" y2="419.0" stroke="#383835" stroke-width="1" shape-rendering="crispEdges"/>
+<text x="217.4" y="357.3" font-size="12.5" fill="#ffffff" text-anchor="end" font-weight="400">1 client</text>
+<path d="M229.4,339.0 H536.9 A4.0,4.0 0 0 1 540.9,343.0 V348.0 A4.0,4.0 0 0 1 536.9,352.0 H229.4 Z" fill="#3987e5"><title>1 client, StartLux-Prism int8: 24.4 requests/s</title></path>
+<text x="546.9" y="349.5" font-size="12" fill="#ffffff" text-anchor="start" font-weight="600" style="font-variant-numeric: tabular-nums" stroke="#1a1a19" stroke-width="3" stroke-linejoin="round" paint-order="stroke">24.4</text>
+<text x="581.0" y="349.5" font-size="12" fill="#c3c2b7" text-anchor="start" font-weight="400" stroke="#1a1a19" stroke-width="3" stroke-linejoin="round" paint-order="stroke">2.02x</text>
+<path d="M229.4,354.0 H379.5 A4.0,4.0 0 0 1 383.5,358.0 V363.0 A4.0,4.0 0 0 1 379.5,367.0 H229.4 Z" fill="#62615c"><title>1 client, official engine, FP8: 12.0 requests/s</title></path>
+<text x="389.5" y="364.5" font-size="12" fill="#c3c2b7" text-anchor="start" font-weight="400" style="font-variant-numeric: tabular-nums" stroke="#1a1a19" stroke-width="3" stroke-linejoin="round" paint-order="stroke">12.0</text>
+<text x="217.4" y="399.3" font-size="12.5" fill="#ffffff" text-anchor="end" font-weight="400">64 clients</text>
+<path d="M229.4,381.0 H620.1 A4.0,4.0 0 0 1 624.1,385.0 V390.0 A4.0,4.0 0 0 1 620.1,394.0 H229.4 Z" fill="#3987e5"><title>64 clients, StartLux-Prism int8: 30.9 requests/s</title></path>
+<text x="630.1" y="391.5" font-size="12" fill="#ffffff" text-anchor="start" font-weight="600" style="font-variant-numeric: tabular-nums" stroke="#1a1a19" stroke-width="3" stroke-linejoin="round" paint-order="stroke">30.9</text>
+<text x="664.1" y="391.5" font-size="12" fill="#c3c2b7" text-anchor="start" font-weight="400" stroke="#1a1a19" stroke-width="3" stroke-linejoin="round" paint-order="stroke">1.22x</text>
+<path d="M229.4,396.0 H550.0 A4.0,4.0 0 0 1 554.0,400.0 V405.0 A4.0,4.0 0 0 1 550.0,409.0 H229.4 Z" fill="#62615c"><title>64 clients, official engine, FP8: 25.4 requests/s</title></path>
+<text x="560.0" y="406.5" font-size="12" fill="#c3c2b7" text-anchor="start" font-weight="400" style="font-variant-numeric: tabular-nums" stroke="#1a1a19" stroke-width="3" stroke-linejoin="round" paint-order="stroke">25.4</text>
+<text x="22.0" y="464.0" font-size="11.5" fill="#898781" text-anchor="start" font-weight="400">Official engine: Startlux-decide-inference 1.1.0 (commit b70404d), which serves v1 folders, from the BF16 release (FP8: vLLM's --quantization fp8).</text>
+<text x="22.0" y="480.0" font-size="11.5" fill="#898781" text-anchor="start" font-weight="400">StartLux-Prism int8 from the Q8_0 GGUF release. 2026-10-15.</text>
+</svg>

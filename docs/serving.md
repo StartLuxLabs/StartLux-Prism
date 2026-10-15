@@ -144,7 +144,9 @@ WantedBy=multi-user.target
 
 Measured:
 - **RTX 5090:** the 4B and 9B (Q8_0: int8 and bf16; Q4_K_M: W4A8) and the 27B's Q4_K_M (W4A8); v1.1 AutoThink with
-  thoughts: the 9B (Q8_0: int8).
+  thoughts: the 9B (Q8_0: int8) and the 27B (Q4_K_M: W4A8).
+- **RTX 4090:** v1.1 AutoThink with thoughts, the 9B (Q8_0: int8; Q4_K_M: W4A8).
+- **A800:** v1.1 AutoThink with thoughts, the 27B (Q8_0: int8; Q4_K_M: W4A8).
 - **H200:** the v1 27B (Q8_0: int8 and bf16; Q4_K_M: W4A8 and int8); v1.1 AutoThink with thoughts: the 27B (Q8_0:
   int8 and bf16, int8 on 2 and 4 GPUs; Q4_K_M: W4A8) and the 9B (Q4_K_M: W4A8).
 - **Several GPUs:** data parallelism with any precision (`startlux_prism.dp`); tensor parallelism with int8, 2 or 4 GPUs on

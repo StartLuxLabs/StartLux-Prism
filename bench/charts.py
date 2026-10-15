@@ -561,6 +561,52 @@ def v11_hero(theme):
              "(FP8; 92.97 for the official BF16 server). 2026-10-13/14.")
 
 
+# StartLux-Decision v1 27B against the official engine in FP8 (docs/benchmarks.md): mean ms one request at a time
+# (~256 and ~8,192 tokens, the README's three questions), JevBench requests/s from 1 and 64 clients; (ours, theirs)
+V1_OFFICIAL = dict(lat=[(18.9, 54.5), (438.5, 539.1), (17.2, 96.4)], tput=[(24.35, 12.04), (30.85, 25.37)])
+
+
+@chart
+def v1_hero(theme):
+    lat, tput = V1_OFFICIAL["lat"], V1_OFFICIAL["tput"]
+    return group_chart(
+        theme, "StartLux-Decision v1 27B on one H200",
+        "StartLux-Prism int8 against the official engine (Startlux-decide-inference with its release flags on vLLM "
+        "0.31) in FP8, its faster setting; the same requests to both. v1 answers in one pass.",
+        [],
+        [dict(head="One request at a time: mean ms per request (lower is better)",
+              groups=["One question, ~256 tokens", "One question, ~8,192 tokens", "The README's three questions"],
+              vals=lat, unit="ms", extra=[f"{b / a:.1f}x faster" for a, b in lat]),
+         dict(head="JevBench's 231 items: requests per second (higher is better)",
+              groups=["1 client", "64 clients"], vals=tput, unit="requests/s",
+              extra=[f"{a / b:.2f}x".replace(".00x", "x") for a, b in tput])],
+        legend=[("accent", "StartLux-Prism int8"), ("other", "official engine, FP8")],
+        note="Official engine: Startlux-decide-inference 1.1.0 (commit b70404d), which serves v1 folders, from the BF16 "
+             "release (FP8: vLLM's --quantization fp8). StartLux-Prism int8 from the Q8_0 GGUF release. 2026-10-15.")
+
+
+V11_W4_SUITES, V11_W4_JB = 93.07, 226   # the Q4_K_M file in W4A8 (docs/benchmarks.md)
+
+
+@chart
+def v11_accuracy(theme):
+    rows = [("StartLux-Prism int8", True), ("StartLux-Prism W4A8", True), ("official engine, BF16", False),
+            ("official engine, FP8", False)]
+    suites = [92.94, V11_W4_SUITES, 92.97, 92.83]
+    jb = [224, V11_W4_JB, 226, 225]
+    return bar_chart(
+        theme, "StartLux-Decision v1.1 27B AutoThink: the official engine's accuracy",
+        "With thoughts (think_mode auto, gate 0.9), every item once in file order. StartLux-Prism int8 on the Q8_0 "
+        "file and W4A8 on the Q4_K_M file; the official engine (Startlux-decide-inference on vLLM 0.31) on the BF16 "
+        "release, in BF16 and FP8.",
+        rows,
+        [dict(head="StartLux-Decision v1's seven evaluation suites (12,351 decisions): average accuracy, %",
+              vals=suites, shown=[f"{v:.2f}" for v in suites], unit="%", max=100),
+         dict(head="JevBench public: items right, of 231", vals=jb, shown=[f"{v}" for v in jb], unit="of 231",
+              max=231)],
+        note="Every suite, and the GPU each server ran on: docs/benchmarks.md.")
+
+
 @chart
 def v11_precision(theme):
     return group_chart(
