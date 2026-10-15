@@ -1,4 +1,9 @@
-# StartLux-Prism
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/images/logo-dark.png">
+    <img src="docs/images/logo.png" width="420" alt="StartLux Prism">
+  </picture>
+</p>
 
 **A fast CUDA inference engine for StartLux-Decision models.** It serves StartLux-Decision v1 (4B, 9B, 27B) and v1.1
 AutoThink (4B, 9B, 27B) straight from their GGUF files, behind the TypeSafe `/v1/systemone` API, on NVIDIA's RTX 40
