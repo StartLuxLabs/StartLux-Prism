@@ -5,10 +5,11 @@
   </picture>
 </p>
 
-**A fast CUDA inference engine for StartLux-Decision models.** It serves StartLux-Decision v1 (4B, 9B, 27B) and v1.1
-AutoThink (4B, 9B, 27B) straight from their GGUF files, behind the TypeSafe `/v1/systemone` API, on NVIDIA's RTX 40
-and 50 series and its A and H series (tested on the RTX 4090, RTX 5090, A800 and H200), on one GPU or several. Like a
-prism that splits light into its spectrum, it turns each question into a calibrated probability for every option.
+**A fast CUDA inference engine for [StartLux-Decision models](https://huggingface.co/startlux-models/collections).** It
+serves StartLux-Decision v1 (4B, 9B, 27B) and v1.1 AutoThink (4B, 9B, 27B) straight from their GGUF files, behind the
+TypeSafe `/v1/systemone` API, on NVIDIA's RTX 40 and 50 series and its A and H series (tested on the RTX 4090, RTX 5090,
+A800 and H200), on one GPU or several. Like a prism that splits light into its spectrum, it turns each question into a
+calibrated probability for every option.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/images/v11-hero-dark.svg">
