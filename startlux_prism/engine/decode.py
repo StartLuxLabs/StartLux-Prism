@@ -38,6 +38,7 @@ import numpy as np
 import torch
 
 from .. import gguf_weights
+from .. import progress as P
 from ..gguf import GGUFFile
 from ..kernels import attn as KA
 from ..kernels import decode as KD
@@ -365,11 +366,14 @@ class Decoder:
         if self.tp is not None:
             self.tp.call(self, "warm_up", buckets)    # every rank records them, in the same order
         self._tabs.zero_()
-        for B in buckets or [x for x in DEC_BUCKETS if x <= self.max_B]:
+        sizes = buckets or [x for x in DEC_BUCKETS if x <= self.max_B]
+        bar = P.Bar("decode graphs (thoughts)", len(sizes), "batch sizes")
+        for i, B in enumerate(sizes):
             if self.graphs:
                 self._graph(B)
             else:
                 self._forward(B)
+            bar.update(i + 1)
         torch.cuda.synchronize()
 
     # ------------------------------------------------------------------ public

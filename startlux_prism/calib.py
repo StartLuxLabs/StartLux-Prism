@@ -60,7 +60,9 @@ def ensure(gguf, model_dir, path, gpu):
 
 def main():
     gguf, model_dir, path = sys.argv[1:4]
+    from . import progress as P
     from .engine.model import CALIB_TOKENS, Engine, Options
+    P.on()
     t0 = time.perf_counter()
     Engine(gguf, model_dir, Options(precision="int8", calib=path, max_tokens=CALIB_TOKENS, prefix_cache=0))
     print(f"int8 activation ranges saved in {path} ({time.perf_counter() - t0:.0f} s)", flush=True)

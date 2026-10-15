@@ -56,6 +56,53 @@ with the pip CUDA 13 toolkit as `CUDA_HOME` and writes `~/jev/env.sh`; then
 `MODEL=~/jev/models/StartLux-Decision-4B-Q8_0-GGUF scripts/serve.sh start int8` starts a server on port 8092 and
 `scripts/serve.sh stop` stops it.
 
+## What a start prints
+
+Each loading step on a line of its own with the time; the weights layer by layer and the CUDA graphs batch shape by
+batch shape (on a terminal the count is redrawn in place, in a log there is a line at each quarter); then `Ready`, the
+endpoints and a request to try, which can be pasted as it is. The 9B in int8 on an RTX 4090, its CUDA extension built
+and its activation ranges saved by an earlier start (counts shortened, the ranges file's path too):
+
+```text
+[01:39:25] StartLux-Prism: StartLux-Decision-v1.1-9B-AutoThink-Q8_0.gguf (v1.1 AutoThink) as int8 on NVIDIA GeForce RTX 4090 (sm_89, 24 GiB)
+[01:39:26] reading the model file (9.5 GB)
+[01:39:39] weights to the GPU (bf16): 8/32 layers
+[01:39:40] weights to the GPU (bf16): 32/32 layers (1.0 s)
+[01:39:40] int8 activation ranges: ~/.cache/startlux-prism/calib/...
+[01:39:41] int8 weights (SmoothQuant): 8/32 layers
+[01:39:42] int8 weights (SmoothQuant): 32/32 layers (2.3 s)
+[01:39:43] buffers: batches up to 16,384 tokens, prefix cache 64 entries, 4 thoughts at once; GPU memory 19.1 of 23.6 GiB in use (17.7 s so far)
+[01:39:44] CUDA graphs (a first start also compiles the Triton kernels): 8/31 batch shapes
+[01:39:44] CUDA graphs (a first start also compiles the Triton kernels): 31/31 batch shapes (0.9 s)
+[01:39:46] decode graphs (thoughts): 3/3 batch sizes (0.2 s)
+loaded in 17.7 s, graphs recorded in 3.1 s; max 16384 tokens per batch; GPU memory 20.2 of 23.6 GiB in use
+Ready: http://127.0.0.1:8092/v1/systemone (int8), started in 22.4 s
+  POST http://127.0.0.1:8092/v1/systemone   decisions (the TypeSafe System One API)
+  GET  http://127.0.0.1:8092/health         status and limits
+  GET  http://127.0.0.1:8092/v1/models      the model served
+  AutoThink: think_mode "auto" unless a request sets "think_mode" ("never", "auto" or "always"); "return_details": true adds the thought's details
+Try it:
+  curl -s http://127.0.0.1:8092/v1/systemone -H 'Content-Type: application/json' -d '{
+    "state": {"ticket": "I was charged twice for order #4411 and the app still shows it as unpaid."},
+    "questions": {
+      "team": {"type": "choice", "instructions": "Which team should handle this ticket?",
+               "criteria": {"billing": "Payments and refunds", "shipping": "Delivery", "technical": "App and login"}},
+      "urgent": {"type": "noul", "instructions": "Should this ticket be answered today?"}}}'
+```
+
+- **A first start** also measures the int8 activation ranges (`int8 activation ranges: computing them`, the
+  calibration requests counted, then where they are saved for the next starts) and, the first time on a GPU model or
+  after the CUDA sources change, compiles the CUDA extension: `CUDA kernels: compiling the extension for sm_89 - the
+  first start with this GPU and these sources, a few minutes`, then the time it took and where it is kept (4 minutes
+  on the RTX 4090, 3 on an A800).
+- **`--host 0.0.0.0`**: the endpoints and the example still use 127.0.0.1, and a line says how other machines reach the
+  server and that it has no authentication or TLS.
+- **`startlux_prism.dp`**: the workers' steps go to their logs (`--log-dir`); the router says where they are, shows
+  the last line of a worker still starting every 20 s, says when each is ready, then prints its own `Ready` and the
+  same endpoints and example.
+
+The `loaded in` and `Ready: http://...` lines keep their form for scripts that wait for them.
+
 ## Models, GPUs and precisions
 
 | `--precision` | weights | activations | used for |

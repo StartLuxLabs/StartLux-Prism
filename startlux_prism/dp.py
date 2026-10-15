@@ -29,6 +29,7 @@ import http.client
 import json
 import os
 import queue
+import re
 import signal
 import subprocess
 import sys
@@ -36,6 +37,7 @@ import threading
 import time
 
 from . import calib as CAL
+from . import progress as P
 from .httpserve import more_files, serve
 
 MAX_KEYS = 4096                     # evidence keys remembered (least recently used dropped)
@@ -79,6 +81,7 @@ class Worker:
         self.up = False
         self.served = 0
         self.proc = None
+        self.log = ""                       # its start-up log (main: start)
 
     def conn(self):
         try:
@@ -190,20 +193,36 @@ class Router:
                     w.up = False
 
 
-def wait_health(w, timeout):
-    t0 = time.time()
+def last_line(path):
+    """The last line of a worker's log (its start-up progress), "" if none yet."""
+    try:
+        with open(path, "rb") as f:
+            f.seek(max(0, os.path.getsize(path) - 4096))
+            lines = [x for x in f.read().decode(errors="replace").replace("\r", "\n").split("\n") if x.strip()]
+        return re.sub(r"^\[\d\d:\d\d:\d\d\] ", "", lines[-1]) if lines else ""     # without the worker's own time
+    except OSError:
+        return ""
+
+
+def wait_health(w, timeout, every=20):
+    """Wait for a worker's /health; meanwhile its log's last line every `every` s (where its start is)."""
+    t0 = shown = time.time()
     while time.time() - t0 < timeout:
         if w.proc is not None and w.proc.poll() is not None:
-            raise RuntimeError(f"worker {w.idx} (GPU {w.gpu}) exited with code {w.proc.returncode}")
+            raise RuntimeError(f"worker {w.idx} (GPU {w.gpu}) exited with code {w.proc.returncode}: see {w.log}")
         try:
             status, _ = w.request("GET", "/health")
             if status == 200:
                 w.up = True
+                P.step(f"worker {w.idx} (GPU {w.gpu}) ready")
                 return
         except Exception:                           # noqa: BLE001
             pass
+        if time.time() - shown >= every and w.log:
+            shown = time.time()
+            P.step(f"worker {w.idx} (GPU {w.gpu}): {last_line(w.log) or 'starting'}")
         time.sleep(2)
-    raise RuntimeError(f"worker {w.idx} (GPU {w.gpu}) not healthy after {timeout} s")
+    raise RuntimeError(f"worker {w.idx} (GPU {w.gpu}) not healthy after {timeout} s: see {w.log}")
 
 
 def main():
@@ -221,6 +240,8 @@ def main():
                          "it has cached")
     ap.add_argument("--startup-timeout", type=float, default=1800.0)
     a, rest = ap.parse_known_args()
+    t_start = time.perf_counter()
+    P.on()                                           # start-up progress on stdout (progress.py)
     more_files()                                     # a client's connection and a worker's per request in flight
     for name in ("--port", "--host"):
         if name in rest:
@@ -238,7 +259,8 @@ def main():
     def start(w):
         env = dict(os.environ, CUDA_VISIBLE_DEVICES=w.gpu,          # a --tp server runs on its visible GPUs
                    TRITON_CACHE_DIR=os.path.join(cache, f"dp-worker{w.idx}"))
-        log = open(os.path.join(a.log_dir, f"worker{w.idx}-gpu{w.gpu.replace(',', '-')}.log"), "w")
+        w.log = os.path.join(a.log_dir, f"worker{w.idx}-gpu{w.gpu.replace(',', '-')}.log")
+        log = open(w.log, "w")
         cmd = [sys.executable, "-m", "startlux_prism.server", "--host", w.host, "--port", str(w.port)] + rest
         if a.tp > 1:
             cmd += ["--tp", str(a.tp)]
@@ -261,6 +283,9 @@ def main():
     if precision == "int8" and a.tp > 1:             # tensor-parallel workers read them: computed first, on one GPU
         CAL.ensure(gguf, flag(rest, "--model-dir"), calib, groups[0].split(",")[0])
     first = workers[:1] if precision == "int8" and not os.path.exists(calib) else []   # one worker writes them
+    P.step(f"starting {len(workers)} worker{'s' if len(workers) > 1 else ''} on GPUs {' | '.join(groups)}"
+           + (", the first alone (it computes the int8 activation ranges)" if first else "")
+           + f"; their logs: {a.log_dir}/worker*.log")
     try:
         for w in first:
             start(w)
@@ -299,8 +324,10 @@ def main():
                                         workers=hs)).encode()
         return 404, b'{"error": "not found"}'
 
-    print(f"Ready: http://{a.host}:{a.port}/v1/systemone ({len(workers)} workers on GPUs {' | '.join(groups)})",
-          flush=True)
+    n = len(workers)
+    print(f"Ready: http://{a.host}:{a.port}/v1/systemone ({n} worker{'s' if n > 1 else ''} on GPUs {' | '.join(groups)}), "
+          f"started in {time.perf_counter() - t_start:.1f} s", flush=True)
+    P.ready(a.host, a.port, ["/health: this router's summary and every worker's own; /stats: every worker's"])
     serve(a.host, a.port, handle)
 
 

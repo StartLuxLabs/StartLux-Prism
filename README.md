@@ -37,6 +37,9 @@ G=$M/StartLux-Decision-v1.1-27B-AutoThink-Q8_0.gguf
 python -m startlux_prism.server --gguf $G --model-dir $M --port 8092    # ready when it prints "Ready"
 ```
 
+It prints each loading step as it goes, then `Ready`, its endpoints and a request to try
+([what a start prints](docs/serving.md#what-a-start-prints)).
+
 The first start measures the int8 activation ranges once and keeps them in `~/.cache/startlux-prism/calib`.
 
 ```bash

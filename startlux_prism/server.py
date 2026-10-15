@@ -44,6 +44,7 @@ from concurrent.futures import Future
 import torch
 
 from . import images as I
+from . import progress as P
 from .decide import Decider, request_controls
 from .engine.model import Engine, Options, group
 from .httpserve import serve
@@ -229,6 +230,8 @@ def main():
                          "lower latency (startlux_prism/tp.py)")
     ap.add_argument("--gpus", default="", help="with --tp: the GPUs, e.g. 4,5 (default: the visible ones)")
     a = ap.parse_args()
+    t_start = time.perf_counter()
+    P.on()                                           # start-up progress on stdout (progress.py)
     from .vision import find_mmproj, is_mmproj
     if is_mmproj(a.gguf):
         sys.exit(f"{a.gguf} is a vision projector (mmproj): pass the model's GGUF as --gguf and this one as --mmproj")
@@ -258,6 +261,10 @@ def main():
         sys.exit("this is a StartLux-Decision v1.1 Instant model (its prompt is read bidirectionally): StartLux-Prism runs "
                  "prompts causally and does not serve it yet")
     sys.setswitchinterval(a.switch_interval)
+    gpu = torch.cuda.get_device_properties(0)
+    P.step(f"StartLux-Prism: {os.path.basename(a.gguf)} ({'v1.1 AutoThink' if kind == 'auto_think' else kind}) as "
+           f"{a.precision} on {gpu.name} (sm_{gpu.major}{gpu.minor}, {gpu.total_memory / 2**30:.0f} GiB)"
+           + (f" and {a.tp - 1} more (tensor parallel)" if a.tp > 1 else ""))
     thinks = kind == "auto_think" and a.precision in ("int8", "bf16", "w4a8")       # thoughts: engine/decode.py, think.py
     if thinks:
         from . import think as TH
@@ -358,7 +365,15 @@ def main():
             traceback.print_exc()
             return 500, json.dumps({"error": repr(e)}).encode()
 
-    print(f"Ready: http://{a.host}:{a.port}/v1/systemone ({a.precision})", flush=True)
+    print(f"Ready: http://{a.host}:{a.port}/v1/systemone ({a.precision}), started in "
+          f"{time.perf_counter() - t_start:.1f} s", flush=True)
+    notes = []
+    if thinks:
+        notes.append(f'AutoThink: think_mode "{defaults.think_mode}" unless a request sets "think_mode" ("never", '
+                     f'"auto" or "always"); "return_details": true adds the thought\'s details')
+    if engine.vision is not None:
+        notes.append(f'images: "images": [base64 or data URI, ...] in a request, up to {a.max_images}')
+    P.ready(a.host, a.port, notes)
     serve(a.host, a.port, handle)
 
 

@@ -1,9 +1,13 @@
 """StartLux-Prism's CUDA C++ kernels (startlux_prism/csrc), compiled on first use with the toolkit in CUDA_HOME and registered
 as torch ops (graph-capturable: they launch on the current stream)."""
 import functools
+import glob
 import os
+import time
 
 import torch
+
+from .. import progress as P
 
 # the canonical path: the build command holds it, and processes that imported startlux_prism by different paths (a script's
 # sys.path entry, a tensor-parallel follower's PYTHONPATH) otherwise rebuilt the extension in turn, each waiting for
@@ -53,12 +57,34 @@ def load():
     base = arch.rstrip("a")                     # "90a" -> TORCH_CUDA_ARCH_LIST "9.0a", "120" -> "12.0"
     os.environ.setdefault("TORCH_CUDA_ARCH_LIST", f"{base[:-1]}.{base[-1]}{arch[len(base):]}")
     sources = ("w8a8_gemm.cu", "w8a8_wgmma.cu", "w4a8_gemm.cu", "l2_prefetch.cu")
+    built = _built("startlux_prism_ext", [os.path.join(CSRC, f) for f in sources])
+    P.step(f"CUDA kernels: {'loading the extension built before' if built else 'compiling the extension'} for "
+           f"sm_{arch}" + ("" if built else " - the first start with this GPU and these sources, a few minutes"))
+    t0 = time.perf_counter()
     _load(name="startlux_prism_ext", sources=[os.path.join(CSRC, f) for f in sources],
           is_python_module=False,
           extra_cuda_cflags=["-O3", f"-gencode=arch=compute_{arch},code=sm_{arch}", "-lineinfo"]
           + (["-DSTARTLUX_PRISM_SM90A"] if arch == "90a" else []),
           extra_cflags=["-O3"], verbose=False)
+    if not built:
+        P.step(f"CUDA kernels: compiled in {time.perf_counter() - t0:.0f} s (kept in "
+               f"{_build_dir('startlux_prism_ext')})")
     return torch.ops.startlux_prism
+
+
+def _build_dir(name):
+    try:
+        from torch.utils.cpp_extension import _get_build_directory
+        return _get_build_directory(name, False)
+    except Exception:                                # noqa: BLE001  a private helper of torch: only for messages
+        return "the torch extensions cache"
+
+
+def _built(name, sources):
+    """An extension library newer than every source in torch's build directory: probably loaded, not compiled (for the
+    start-up message only; torch decides)."""
+    libs = glob.glob(os.path.join(_build_dir(name), f"{name}*.so"))
+    return bool(libs) and max(map(os.path.getmtime, libs)) > max(map(os.path.getmtime, sources))
 
 
 # cfg id -> (BM, BN, TMA pipeline) of csrc/w8a8_wgmma.cu
