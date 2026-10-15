@@ -10,6 +10,11 @@ prism that splits light into its spectrum, it turns each question into a calibra
   <img src="docs/images/v11-hero.svg" width="840" alt="StartLux-Decision v1.1 27B AutoThink on one H200, StartLux-Prism int8 against the official engine in FP8. Mean ms per request, one at a time: one question of about 256 tokens 19.0 against 53.1; about 8,192 tokens 439.8 against 531.2; the README's three questions 17.4 against 92.9; the same with thoughts 785.1 against 1,296.0. JevBench requests per second: read-outs from 1 client 24.2 against 12.1; from 64 clients 30.7 against 26.3; with thoughts from 64 clients 7.6 against 6.5.">
 </picture>
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/v1-hero-dark.svg">
+  <img src="docs/images/v1-hero.svg" width="840" alt="StartLux-Decision v1 27B on one H200, StartLux-Prism int8 against the official engine in FP8. Mean ms per request, one at a time: one question of about 256 tokens 18.9 against 54.5; about 8,192 tokens 438.5 against 539.1; the README's three questions 17.2 against 96.4. JevBench requests per second: from 1 client 24.4 against 12.0; from 64 clients 30.9 against 25.4.">
+</picture>
+
 ## Why StartLux-Prism
 
 - **Faster than the official engine.** The 27B on one H200, against StartLux-Decision's own engine on vLLM 0.31 in FP8:
@@ -152,16 +157,18 @@ StartLux-Decision v1.1 27B AutoThink, one H200 per server, the same requests:
 | JevBench read-outs, requests/s from 64 clients | 18.3 | 26.3 | **30.7** |
 | JevBench with thoughts, requests/s from 64 clients | 5.89 | 6.52 | **7.61** |
 
+StartLux-Decision v1 27B, one H200 per server, the same requests (v1 answers in one pass):
+
+| | official, FP8 | **StartLux-Prism int8** |
+|---|---|---|
+| one short question, ms | 54.5 | **18.9** |
+| three questions, ms | 96.4 | **17.2** |
+| one question of 8,192 tokens, ms | 539.1 | **438.5** |
+| JevBench read-outs, requests/s from 64 clients | 25.4 | **30.9** |
+
 Under load both engines are bound by the tensor cores, which run int8 and FP8 at the same rate, so the lead narrows to
-17%. On several H200s, read-outs per second: one GPU 30.9, four 121.1, eight 237.8 (the official engine on eight:
-137.5).
-
-StartLux-Decision v1 27B, against the same official engine in FP8:
-
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/images/v1-hero-dark.svg">
-  <img src="docs/images/v1-hero.svg" width="840" alt="StartLux-Decision v1 27B on one H200, StartLux-Prism int8 against the official engine in FP8. Mean ms per request, one at a time: one question of about 256 tokens 18.9 against 54.5; about 8,192 tokens 438.5 against 539.1; the README's three questions 17.2 against 96.4. JevBench requests per second: from 1 client 24.4 against 12.0; from 64 clients 30.9 against 25.4.">
-</picture>
+17% on v1.1 and 22% on v1. On several H200s, v1.1's read-outs per second: one GPU 30.9, four 121.1, eight 237.8 (the
+official engine on eight: 137.5).
 
 Against every other engine compared on v1 (SGLang, vLLM, llama.cpp, StartLux-Decision's PyTorch server, decider and
 JevK5), StartLux-Prism has the lowest latency (1.6-2.3x below the next) and 1.6-2.4x their throughput.
