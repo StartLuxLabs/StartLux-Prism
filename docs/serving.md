@@ -103,6 +103,37 @@ Try it:
 
 The `loaded in` and `Ready: http://...` lines keep their form for scripts that wait for them.
 
+## Running as a service
+
+Installed as in the README ([Install](../README.md#install)):
+
+- **Address.** The server listens on `127.0.0.1:8092`; `--host 0.0.0.0` (and `--port`) serve other machines. It has no
+  authentication or TLS of its own: put it behind your gateway.
+- **Ready.** `GET /health` answers once the model is loaded and its graphs recorded.
+- **Caches.** The first start compiles the CUDA kernels (into `TORCH_EXTENSIONS_DIR`, by default
+  `~/.cache/torch_extensions`) and the Triton kernels (`TRITON_CACHE_DIR`, by default `~/.triton/cache`), and measures
+  the int8 activation ranges (`~/.cache/startlux-prism/calib`, a file per model). Keep the three on a persistent disk
+  (in a container: volumes), and later starts skip that work.
+- **Several GPUs.** `python -m startlux_prism.dp --gpus ...` runs a server per GPU behind one port (above);
+  `CUDA_DEVICE_ORDER=PCI_BUS_ID` makes the GPU numbers nvidia-smi's.
+- **systemd**, the repository in `/opt/StartLux-Prism` and a model in `/models/M` (installed from
+  `requirements-cu12.txt`: `Environment=CUDA_HOME=/usr/local/cuda` in place of `source scripts/cuda_env.sh`):
+
+```ini
+[Unit]
+Description=StartLux-Prism
+After=network-online.target
+
+[Service]
+WorkingDirectory=/opt/StartLux-Prism
+Environment=CUDA_DEVICE_ORDER=PCI_BUS_ID
+ExecStart=/bin/bash -c 'source .venv/bin/activate && source scripts/cuda_env.sh && exec python -m startlux_prism.server --gguf /models/M/model.gguf --model-dir /models/M --host 0.0.0.0 --port 8092'
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target
+```
+
 ## Models, GPUs and precisions
 
 | `--precision` | weights | activations | used for |
