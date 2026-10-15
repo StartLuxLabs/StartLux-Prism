@@ -1,80 +1,80 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="840" height="552" viewBox="0 0 840 552" role="img" aria-labelledby="title desc" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif">
+<svg xmlns="http://www.w3.org/2000/svg" width="840" height="563" viewBox="0 0 840 563" role="img" aria-labelledby="title desc" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif">
 <title id="title">StartLux-Prism int8 against bf16: StartLux-Decision v1.1 27B on one H200</title>
 <desc id="desc">The same Q8_0 weights: int8 (W8A8) or dequantized to bf16 (cuBLAS); the engine alone, no HTTP.</desc>
-<rect x="0.5" y="0.5" width="839" height="551" rx="8" fill="#1a1a19" stroke="#2c2c2a"/>
-<text x="22.0" y="38.0" font-size="16" fill="#ffffff" text-anchor="start" font-weight="600">StartLux-Prism int8 against bf16: StartLux-Decision v1.1 27B on one H200</text>
-<text x="22.0" y="62.0" font-size="12.5" fill="#c3c2b7" text-anchor="start" font-weight="400">The same Q8_0 weights: int8 (W8A8) or dequantized to bf16 (cuBLAS); the engine alone, no HTTP.</text>
-<rect x="22.0" y="76.0" width="11" height="11" rx="2" fill="#3987e5"/>
-<text x="39.0" y="86.0" font-size="12.5" fill="#c3c2b7" text-anchor="start" font-weight="400">StartLux-Prism int8</text>
-<rect x="175.6" y="76.0" width="11" height="11" rx="2" fill="#62615c"/>
-<text x="192.6" y="86.0" font-size="12.5" fill="#c3c2b7" text-anchor="start" font-weight="400">StartLux-Prism bf16</text>
-<text x="22.0" y="116.0" font-size="12.5" fill="#ffffff" text-anchor="start" font-weight="600">Prefill: prompt tokens per second (higher is better)</text>
-<text x="287.0" y="314.0" font-size="11" fill="#898781" text-anchor="middle" font-weight="400" style="font-variant-numeric: tabular-nums">0</text>
-<line x1="374.8" y1="131.0" x2="374.8" y2="299.0" stroke="#2c2c2a" stroke-width="1" shape-rendering="crispEdges"/>
-<text x="374.8" y="314.0" font-size="11" fill="#898781" text-anchor="middle" font-weight="400" style="font-variant-numeric: tabular-nums">5,000</text>
-<line x1="462.7" y1="131.0" x2="462.7" y2="299.0" stroke="#2c2c2a" stroke-width="1" shape-rendering="crispEdges"/>
-<text x="462.7" y="314.0" font-size="11" fill="#898781" text-anchor="middle" font-weight="400" style="font-variant-numeric: tabular-nums">10,000</text>
-<line x1="550.6" y1="131.0" x2="550.6" y2="299.0" stroke="#2c2c2a" stroke-width="1" shape-rendering="crispEdges"/>
-<text x="550.6" y="314.0" font-size="11" fill="#898781" text-anchor="middle" font-weight="400" style="font-variant-numeric: tabular-nums">15,000</text>
-<line x1="638.5" y1="131.0" x2="638.5" y2="299.0" stroke="#2c2c2a" stroke-width="1" shape-rendering="crispEdges"/>
-<text x="638.5" y="314.0" font-size="11" fill="#898781" text-anchor="middle" font-weight="400" style="font-variant-numeric: tabular-nums">20,000</text>
-<line x1="726.3" y1="131.0" x2="726.3" y2="299.0" stroke="#2c2c2a" stroke-width="1" shape-rendering="crispEdges"/>
-<text x="726.3" y="314.0" font-size="11" fill="#898781" text-anchor="middle" font-weight="400" style="font-variant-numeric: tabular-nums">25,000</text>
-<line x1="287.0" y1="131.0" x2="287.0" y2="299.0" stroke="#383835" stroke-width="1" shape-rendering="crispEdges"/>
-<text x="275.0" y="153.3" font-size="12.5" fill="#ffffff" text-anchor="end" font-weight="400">One prompt of 1,024 tokens</text>
-<path d="M287.0,135.0 H614.5 A4.0,4.0 0 0 1 618.5,139.0 V144.0 A4.0,4.0 0 0 1 614.5,148.0 H287.0 Z" fill="#3987e5"><title>One prompt of 1,024 tokens, StartLux-Prism int8: 18,865 tokens/s</title></path>
-<text x="624.5" y="145.5" font-size="12" fill="#ffffff" text-anchor="start" font-weight="600" style="font-variant-numeric: tabular-nums" stroke="#1a1a19" stroke-width="3" stroke-linejoin="round" paint-order="stroke">18,865</text>
-<text x="673.6" y="145.5" font-size="12" fill="#c3c2b7" text-anchor="start" font-weight="400" stroke="#1a1a19" stroke-width="3" stroke-linejoin="round" paint-order="stroke">1.63x</text>
-<path d="M287.0,150.0 H486.3 A4.0,4.0 0 0 1 490.3,154.0 V159.0 A4.0,4.0 0 0 1 486.3,163.0 H287.0 Z" fill="#62615c"><title>One prompt of 1,024 tokens, StartLux-Prism bf16: 11,571 tokens/s</title></path>
-<text x="496.3" y="160.5" font-size="12" fill="#c3c2b7" text-anchor="start" font-weight="400" style="font-variant-numeric: tabular-nums" stroke="#1a1a19" stroke-width="3" stroke-linejoin="round" paint-order="stroke">11,571</text>
-<text x="275.0" y="195.3" font-size="12.5" fill="#ffffff" text-anchor="end" font-weight="400">One prompt of 8,192 tokens</text>
-<path d="M287.0,177.0 H620.7 A4.0,4.0 0 0 1 624.7,181.0 V186.0 A4.0,4.0 0 0 1 620.7,190.0 H287.0 Z" fill="#3987e5"><title>One prompt of 8,192 tokens, StartLux-Prism int8: 19,219 tokens/s</title></path>
-<text x="630.7" y="187.5" font-size="12" fill="#ffffff" text-anchor="start" font-weight="600" style="font-variant-numeric: tabular-nums" stroke="#1a1a19" stroke-width="3" stroke-linejoin="round" paint-order="stroke">19,219</text>
-<text x="679.8" y="187.5" font-size="12" fill="#c3c2b7" text-anchor="start" font-weight="400" stroke="#1a1a19" stroke-width="3" stroke-linejoin="round" paint-order="stroke">1.68x</text>
-<path d="M287.0,192.0 H483.7 A4.0,4.0 0 0 1 487.7,196.0 V201.0 A4.0,4.0 0 0 1 483.7,205.0 H287.0 Z" fill="#62615c"><title>One prompt of 8,192 tokens, StartLux-Prism bf16: 11,424 tokens/s</title></path>
-<text x="493.7" y="202.5" font-size="12" fill="#c3c2b7" text-anchor="start" font-weight="400" style="font-variant-numeric: tabular-nums" stroke="#1a1a19" stroke-width="3" stroke-linejoin="round" paint-order="stroke">11,424</text>
-<text x="275.0" y="237.3" font-size="12.5" fill="#ffffff" text-anchor="end" font-weight="400">One prompt of 32,768 tokens</text>
-<path d="M287.0,219.0 H560.8 A4.0,4.0 0 0 1 564.8,223.0 V228.0 A4.0,4.0 0 0 1 560.8,232.0 H287.0 Z" fill="#3987e5"><title>One prompt of 32,768 tokens, StartLux-Prism int8: 15,810 tokens/s</title></path>
-<text x="570.8" y="229.5" font-size="12" fill="#ffffff" text-anchor="start" font-weight="600" style="font-variant-numeric: tabular-nums" stroke="#1a1a19" stroke-width="3" stroke-linejoin="round" paint-order="stroke">15,810</text>
-<text x="619.9" y="229.5" font-size="12" fill="#c3c2b7" text-anchor="start" font-weight="400" stroke="#1a1a19" stroke-width="3" stroke-linejoin="round" paint-order="stroke">1.56x</text>
-<path d="M287.0,234.0 H461.4 A4.0,4.0 0 0 1 465.4,238.0 V243.0 A4.0,4.0 0 0 1 461.4,247.0 H287.0 Z" fill="#62615c"><title>One prompt of 32,768 tokens, StartLux-Prism bf16: 10,155 tokens/s</title></path>
-<text x="471.4" y="244.5" font-size="12" fill="#c3c2b7" text-anchor="start" font-weight="400" style="font-variant-numeric: tabular-nums" stroke="#1a1a19" stroke-width="3" stroke-linejoin="round" paint-order="stroke">10,155</text>
-<text x="275.0" y="279.3" font-size="12.5" fill="#ffffff" text-anchor="end" font-weight="400">Passes of 8,192 tokens of short prompts</text>
-<path d="M287.0,261.0 H649.5 A4.0,4.0 0 0 1 653.5,265.0 V270.0 A4.0,4.0 0 0 1 649.5,274.0 H287.0 Z" fill="#3987e5"><title>Passes of 8,192 tokens of short prompts, StartLux-Prism int8: 20,855 tokens/s</title></path>
-<text x="659.5" y="271.5" font-size="12" fill="#ffffff" text-anchor="start" font-weight="600" style="font-variant-numeric: tabular-nums" stroke="#1a1a19" stroke-width="3" stroke-linejoin="round" paint-order="stroke">20,855</text>
-<text x="708.6" y="271.5" font-size="12" fill="#c3c2b7" text-anchor="start" font-weight="400" stroke="#1a1a19" stroke-width="3" stroke-linejoin="round" paint-order="stroke">1.74x</text>
-<path d="M287.0,276.0 H493.1 A4.0,4.0 0 0 1 497.1,280.0 V285.0 A4.0,4.0 0 0 1 493.1,289.0 H287.0 Z" fill="#62615c"><title>Passes of 8,192 tokens of short prompts, StartLux-Prism bf16: 11,958 tokens/s</title></path>
-<text x="503.1" y="286.5" font-size="12" fill="#c3c2b7" text-anchor="start" font-weight="400" style="font-variant-numeric: tabular-nums" stroke="#1a1a19" stroke-width="3" stroke-linejoin="round" paint-order="stroke">11,958</text>
-<text x="22.0" y="344.0" font-size="12.5" fill="#ffffff" text-anchor="start" font-weight="600">Decode: ms per step (lower is better)</text>
-<text x="287.0" y="500.0" font-size="11" fill="#898781" text-anchor="middle" font-weight="400" style="font-variant-numeric: tabular-nums">0</text>
-<line x1="376.3" y1="359.0" x2="376.3" y2="485.0" stroke="#2c2c2a" stroke-width="1" shape-rendering="crispEdges"/>
-<text x="376.3" y="500.0" font-size="11" fill="#898781" text-anchor="middle" font-weight="400" style="font-variant-numeric: tabular-nums">5</text>
-<line x1="465.7" y1="359.0" x2="465.7" y2="485.0" stroke="#2c2c2a" stroke-width="1" shape-rendering="crispEdges"/>
-<text x="465.7" y="500.0" font-size="11" fill="#898781" text-anchor="middle" font-weight="400" style="font-variant-numeric: tabular-nums">10</text>
-<line x1="555.0" y1="359.0" x2="555.0" y2="485.0" stroke="#2c2c2a" stroke-width="1" shape-rendering="crispEdges"/>
-<text x="555.0" y="500.0" font-size="11" fill="#898781" text-anchor="middle" font-weight="400" style="font-variant-numeric: tabular-nums">15</text>
-<line x1="644.4" y1="359.0" x2="644.4" y2="485.0" stroke="#2c2c2a" stroke-width="1" shape-rendering="crispEdges"/>
-<text x="644.4" y="500.0" font-size="11" fill="#898781" text-anchor="middle" font-weight="400" style="font-variant-numeric: tabular-nums">20</text>
-<line x1="733.7" y1="359.0" x2="733.7" y2="485.0" stroke="#2c2c2a" stroke-width="1" shape-rendering="crispEdges"/>
-<text x="733.7" y="500.0" font-size="11" fill="#898781" text-anchor="middle" font-weight="400" style="font-variant-numeric: tabular-nums">25</text>
-<line x1="287.0" y1="359.0" x2="287.0" y2="485.0" stroke="#383835" stroke-width="1" shape-rendering="crispEdges"/>
-<text x="275.0" y="381.3" font-size="12.5" fill="#ffffff" text-anchor="end" font-weight="400">1 sequence</text>
-<path d="M287.0,363.0 H470.1 A4.0,4.0 0 0 1 474.1,367.0 V372.0 A4.0,4.0 0 0 1 470.1,376.0 H287.0 Z" fill="#3987e5"><title>1 sequence, StartLux-Prism int8: 10.47 ms</title></path>
-<text x="480.1" y="373.5" font-size="12" fill="#ffffff" text-anchor="start" font-weight="600" style="font-variant-numeric: tabular-nums" stroke="#1a1a19" stroke-width="3" stroke-linejoin="round" paint-order="stroke">10.47</text>
-<text x="521.6" y="373.5" font-size="12" fill="#c3c2b7" text-anchor="start" font-weight="400" stroke="#1a1a19" stroke-width="3" stroke-linejoin="round" paint-order="stroke">1.42x</text>
-<path d="M287.0,378.0 H549.0 A4.0,4.0 0 0 1 553.0,382.0 V387.0 A4.0,4.0 0 0 1 549.0,391.0 H287.0 Z" fill="#62615c"><title>1 sequence, StartLux-Prism bf16: 14.89 ms</title></path>
-<text x="559.0" y="388.5" font-size="12" fill="#c3c2b7" text-anchor="start" font-weight="400" style="font-variant-numeric: tabular-nums" stroke="#1a1a19" stroke-width="3" stroke-linejoin="round" paint-order="stroke">14.89</text>
-<text x="275.0" y="423.3" font-size="12.5" fill="#ffffff" text-anchor="end" font-weight="400">8 sequences</text>
-<path d="M287.0,405.0 H480.6 A4.0,4.0 0 0 1 484.6,409.0 V414.0 A4.0,4.0 0 0 1 480.6,418.0 H287.0 Z" fill="#3987e5"><title>8 sequences, StartLux-Prism int8: 11.06 ms</title></path>
-<text x="490.6" y="415.5" font-size="12" fill="#ffffff" text-anchor="start" font-weight="600" style="font-variant-numeric: tabular-nums" stroke="#1a1a19" stroke-width="3" stroke-linejoin="round" paint-order="stroke">11.06</text>
-<text x="532.2" y="415.5" font-size="12" fill="#c3c2b7" text-anchor="start" font-weight="400" stroke="#1a1a19" stroke-width="3" stroke-linejoin="round" paint-order="stroke">1.44x</text>
-<path d="M287.0,420.0 H567.1 A4.0,4.0 0 0 1 571.1,424.0 V429.0 A4.0,4.0 0 0 1 567.1,433.0 H287.0 Z" fill="#62615c"><title>8 sequences, StartLux-Prism bf16: 15.90 ms</title></path>
-<text x="577.1" y="430.5" font-size="12" fill="#c3c2b7" text-anchor="start" font-weight="400" style="font-variant-numeric: tabular-nums" stroke="#1a1a19" stroke-width="3" stroke-linejoin="round" paint-order="stroke">15.90</text>
-<text x="275.0" y="465.3" font-size="12.5" fill="#ffffff" text-anchor="end" font-weight="400">64 sequences</text>
-<path d="M287.0,447.0 H581.4 A4.0,4.0 0 0 1 585.4,451.0 V456.0 A4.0,4.0 0 0 1 581.4,460.0 H287.0 Z" fill="#3987e5"><title>64 sequences, StartLux-Prism int8: 16.70 ms</title></path>
-<text x="591.4" y="457.5" font-size="12" fill="#ffffff" text-anchor="start" font-weight="600" style="font-variant-numeric: tabular-nums" stroke="#1a1a19" stroke-width="3" stroke-linejoin="round" paint-order="stroke">16.70</text>
-<text x="633.0" y="457.5" font-size="12" fill="#c3c2b7" text-anchor="start" font-weight="400" stroke="#1a1a19" stroke-width="3" stroke-linejoin="round" paint-order="stroke">1.30x</text>
-<path d="M287.0,462.0 H671.5 A4.0,4.0 0 0 1 675.5,466.0 V471.0 A4.0,4.0 0 0 1 671.5,475.0 H287.0 Z" fill="#62615c"><title>64 sequences, StartLux-Prism bf16: 21.74 ms</title></path>
-<text x="681.5" y="472.5" font-size="12" fill="#c3c2b7" text-anchor="start" font-weight="400" style="font-variant-numeric: tabular-nums" stroke="#1a1a19" stroke-width="3" stroke-linejoin="round" paint-order="stroke">21.74</text>
-<text x="22.0" y="530.0" font-size="11.5" fill="#898781" text-anchor="start" font-weight="400">Decode at a 512-token context. Thoughts written by int8 are slightly less accurate on hard items (docs/benchmarks.md).</text>
+<rect x="0.5" y="0.5" width="839" height="562" rx="14" fill="#0d1117" stroke="#232a35"/>
+<text x="26.0" y="44.0" font-size="19" fill="#f1f5f9" text-anchor="start" font-weight="700">StartLux-Prism int8 against bf16: StartLux-Decision v1.1 27B on one H200</text>
+<text x="26.0" y="69.0" font-size="13" fill="#cbd5e1" text-anchor="start" font-weight="400">The same Q8_0 weights: int8 (W8A8) or dequantized to bf16 (cuBLAS); the engine alone, no HTTP.</text>
+<rect x="26.0" y="83.0" width="22" height="10" rx="5" fill="#2dd4bf"/>
+<text x="56.0" y="93.0" font-size="12.5" fill="#cbd5e1" text-anchor="start" font-weight="400">StartLux-Prism int8</text>
+<rect x="192.6" y="83.0" width="22" height="10" rx="5" fill="#2b3443"/>
+<text x="222.6" y="93.0" font-size="12.5" fill="#cbd5e1" text-anchor="start" font-weight="400">StartLux-Prism bf16</text>
+<text x="26.0" y="123.0" font-size="12.5" fill="#f1f5f9" text-anchor="start" font-weight="600">Prefill: prompt tokens per second (higher is better)</text>
+<text x="291.0" y="321.0" font-size="11" fill="#7d8899" text-anchor="middle" font-weight="400" style="font-variant-numeric: tabular-nums">0</text>
+<line x1="377.2" y1="138.0" x2="377.2" y2="306.0" stroke="#1b222c" stroke-width="1" shape-rendering="crispEdges"/>
+<text x="377.2" y="321.0" font-size="11" fill="#7d8899" text-anchor="middle" font-weight="400" style="font-variant-numeric: tabular-nums">5,000</text>
+<line x1="463.5" y1="138.0" x2="463.5" y2="306.0" stroke="#1b222c" stroke-width="1" shape-rendering="crispEdges"/>
+<text x="463.5" y="321.0" font-size="11" fill="#7d8899" text-anchor="middle" font-weight="400" style="font-variant-numeric: tabular-nums">10,000</text>
+<line x1="549.8" y1="138.0" x2="549.8" y2="306.0" stroke="#1b222c" stroke-width="1" shape-rendering="crispEdges"/>
+<text x="549.8" y="321.0" font-size="11" fill="#7d8899" text-anchor="middle" font-weight="400" style="font-variant-numeric: tabular-nums">15,000</text>
+<line x1="636.1" y1="138.0" x2="636.1" y2="306.0" stroke="#1b222c" stroke-width="1" shape-rendering="crispEdges"/>
+<text x="636.1" y="321.0" font-size="11" fill="#7d8899" text-anchor="middle" font-weight="400" style="font-variant-numeric: tabular-nums">20,000</text>
+<line x1="722.3" y1="138.0" x2="722.3" y2="306.0" stroke="#1b222c" stroke-width="1" shape-rendering="crispEdges"/>
+<text x="722.3" y="321.0" font-size="11" fill="#7d8899" text-anchor="middle" font-weight="400" style="font-variant-numeric: tabular-nums">25,000</text>
+<line x1="291.0" y1="138.0" x2="291.0" y2="306.0" stroke="#2b3443" stroke-width="1" shape-rendering="crispEdges"/>
+<text x="279.0" y="160.3" font-size="12.5" fill="#f1f5f9" text-anchor="end" font-weight="400">One prompt of 1,024 tokens</text>
+<path d="M291.0,142.0 H612.5 A4.0,4.0 0 0 1 616.5,146.0 V151.0 A4.0,4.0 0 0 1 612.5,155.0 H291.0 Z" fill="#2dd4bf"><title>One prompt of 1,024 tokens, StartLux-Prism int8: 18,865 tokens/s</title></path>
+<text x="622.5" y="152.5" font-size="12" fill="#f1f5f9" text-anchor="start" font-weight="600" style="font-variant-numeric: tabular-nums" stroke="#0d1117" stroke-width="3" stroke-linejoin="round" paint-order="stroke">18,865</text>
+<text x="671.6" y="152.5" font-size="12" fill="#cbd5e1" text-anchor="start" font-weight="400" stroke="#0d1117" stroke-width="3" stroke-linejoin="round" paint-order="stroke">1.63x</text>
+<path d="M291.0,157.0 H486.6 A4.0,4.0 0 0 1 490.6,161.0 V166.0 A4.0,4.0 0 0 1 486.6,170.0 H291.0 Z" fill="#2b3443"><title>One prompt of 1,024 tokens, StartLux-Prism bf16: 11,571 tokens/s</title></path>
+<text x="496.6" y="167.5" font-size="12" fill="#cbd5e1" text-anchor="start" font-weight="400" style="font-variant-numeric: tabular-nums" stroke="#0d1117" stroke-width="3" stroke-linejoin="round" paint-order="stroke">11,571</text>
+<text x="279.0" y="202.3" font-size="12.5" fill="#f1f5f9" text-anchor="end" font-weight="400">One prompt of 8,192 tokens</text>
+<path d="M291.0,184.0 H618.6 A4.0,4.0 0 0 1 622.6,188.0 V193.0 A4.0,4.0 0 0 1 618.6,197.0 H291.0 Z" fill="#2dd4bf"><title>One prompt of 8,192 tokens, StartLux-Prism int8: 19,219 tokens/s</title></path>
+<text x="628.6" y="194.5" font-size="12" fill="#f1f5f9" text-anchor="start" font-weight="600" style="font-variant-numeric: tabular-nums" stroke="#0d1117" stroke-width="3" stroke-linejoin="round" paint-order="stroke">19,219</text>
+<text x="677.7" y="194.5" font-size="12" fill="#cbd5e1" text-anchor="start" font-weight="400" stroke="#0d1117" stroke-width="3" stroke-linejoin="round" paint-order="stroke">1.68x</text>
+<path d="M291.0,199.0 H484.1 A4.0,4.0 0 0 1 488.1,203.0 V208.0 A4.0,4.0 0 0 1 484.1,212.0 H291.0 Z" fill="#2b3443"><title>One prompt of 8,192 tokens, StartLux-Prism bf16: 11,424 tokens/s</title></path>
+<text x="494.1" y="209.5" font-size="12" fill="#cbd5e1" text-anchor="start" font-weight="400" style="font-variant-numeric: tabular-nums" stroke="#0d1117" stroke-width="3" stroke-linejoin="round" paint-order="stroke">11,424</text>
+<text x="279.0" y="244.3" font-size="12.5" fill="#f1f5f9" text-anchor="end" font-weight="400">One prompt of 32,768 tokens</text>
+<path d="M291.0,226.0 H559.8 A4.0,4.0 0 0 1 563.8,230.0 V235.0 A4.0,4.0 0 0 1 559.8,239.0 H291.0 Z" fill="#2dd4bf"><title>One prompt of 32,768 tokens, StartLux-Prism int8: 15,810 tokens/s</title></path>
+<text x="569.8" y="236.5" font-size="12" fill="#f1f5f9" text-anchor="start" font-weight="600" style="font-variant-numeric: tabular-nums" stroke="#0d1117" stroke-width="3" stroke-linejoin="round" paint-order="stroke">15,810</text>
+<text x="618.8" y="236.5" font-size="12" fill="#cbd5e1" text-anchor="start" font-weight="400" stroke="#0d1117" stroke-width="3" stroke-linejoin="round" paint-order="stroke">1.56x</text>
+<path d="M291.0,241.0 H462.2 A4.0,4.0 0 0 1 466.2,245.0 V250.0 A4.0,4.0 0 0 1 462.2,254.0 H291.0 Z" fill="#2b3443"><title>One prompt of 32,768 tokens, StartLux-Prism bf16: 10,155 tokens/s</title></path>
+<text x="472.2" y="251.5" font-size="12" fill="#cbd5e1" text-anchor="start" font-weight="400" style="font-variant-numeric: tabular-nums" stroke="#0d1117" stroke-width="3" stroke-linejoin="round" paint-order="stroke">10,155</text>
+<text x="279.0" y="286.3" font-size="12.5" fill="#f1f5f9" text-anchor="end" font-weight="400">Passes of 8,192 tokens of short prompts</text>
+<path d="M291.0,268.0 H646.8 A4.0,4.0 0 0 1 650.8,272.0 V277.0 A4.0,4.0 0 0 1 646.8,281.0 H291.0 Z" fill="#2dd4bf"><title>Passes of 8,192 tokens of short prompts, StartLux-Prism int8: 20,855 tokens/s</title></path>
+<text x="656.8" y="278.5" font-size="12" fill="#f1f5f9" text-anchor="start" font-weight="600" style="font-variant-numeric: tabular-nums" stroke="#0d1117" stroke-width="3" stroke-linejoin="round" paint-order="stroke">20,855</text>
+<text x="705.9" y="278.5" font-size="12" fill="#cbd5e1" text-anchor="start" font-weight="400" stroke="#0d1117" stroke-width="3" stroke-linejoin="round" paint-order="stroke">1.74x</text>
+<path d="M291.0,283.0 H493.3 A4.0,4.0 0 0 1 497.3,287.0 V292.0 A4.0,4.0 0 0 1 493.3,296.0 H291.0 Z" fill="#2b3443"><title>Passes of 8,192 tokens of short prompts, StartLux-Prism bf16: 11,958 tokens/s</title></path>
+<text x="503.3" y="293.5" font-size="12" fill="#cbd5e1" text-anchor="start" font-weight="400" style="font-variant-numeric: tabular-nums" stroke="#0d1117" stroke-width="3" stroke-linejoin="round" paint-order="stroke">11,958</text>
+<text x="26.0" y="351.0" font-size="12.5" fill="#f1f5f9" text-anchor="start" font-weight="600">Decode: ms per step (lower is better)</text>
+<text x="291.0" y="507.0" font-size="11" fill="#7d8899" text-anchor="middle" font-weight="400" style="font-variant-numeric: tabular-nums">0</text>
+<line x1="378.7" y1="366.0" x2="378.7" y2="492.0" stroke="#1b222c" stroke-width="1" shape-rendering="crispEdges"/>
+<text x="378.7" y="507.0" font-size="11" fill="#7d8899" text-anchor="middle" font-weight="400" style="font-variant-numeric: tabular-nums">5</text>
+<line x1="466.5" y1="366.0" x2="466.5" y2="492.0" stroke="#1b222c" stroke-width="1" shape-rendering="crispEdges"/>
+<text x="466.5" y="507.0" font-size="11" fill="#7d8899" text-anchor="middle" font-weight="400" style="font-variant-numeric: tabular-nums">10</text>
+<line x1="554.2" y1="366.0" x2="554.2" y2="492.0" stroke="#1b222c" stroke-width="1" shape-rendering="crispEdges"/>
+<text x="554.2" y="507.0" font-size="11" fill="#7d8899" text-anchor="middle" font-weight="400" style="font-variant-numeric: tabular-nums">15</text>
+<line x1="642.0" y1="366.0" x2="642.0" y2="492.0" stroke="#1b222c" stroke-width="1" shape-rendering="crispEdges"/>
+<text x="642.0" y="507.0" font-size="11" fill="#7d8899" text-anchor="middle" font-weight="400" style="font-variant-numeric: tabular-nums">20</text>
+<line x1="729.7" y1="366.0" x2="729.7" y2="492.0" stroke="#1b222c" stroke-width="1" shape-rendering="crispEdges"/>
+<text x="729.7" y="507.0" font-size="11" fill="#7d8899" text-anchor="middle" font-weight="400" style="font-variant-numeric: tabular-nums">25</text>
+<line x1="291.0" y1="366.0" x2="291.0" y2="492.0" stroke="#2b3443" stroke-width="1" shape-rendering="crispEdges"/>
+<text x="279.0" y="388.3" font-size="12.5" fill="#f1f5f9" text-anchor="end" font-weight="400">1 sequence</text>
+<path d="M291.0,370.0 H470.7 A4.0,4.0 0 0 1 474.7,374.0 V379.0 A4.0,4.0 0 0 1 470.7,383.0 H291.0 Z" fill="#2dd4bf"><title>1 sequence, StartLux-Prism int8: 10.47 ms</title></path>
+<text x="480.7" y="380.5" font-size="12" fill="#f1f5f9" text-anchor="start" font-weight="600" style="font-variant-numeric: tabular-nums" stroke="#0d1117" stroke-width="3" stroke-linejoin="round" paint-order="stroke">10.47</text>
+<text x="522.3" y="380.5" font-size="12" fill="#cbd5e1" text-anchor="start" font-weight="400" stroke="#0d1117" stroke-width="3" stroke-linejoin="round" paint-order="stroke">1.42x</text>
+<path d="M291.0,385.0 H548.3 A4.0,4.0 0 0 1 552.3,389.0 V394.0 A4.0,4.0 0 0 1 548.3,398.0 H291.0 Z" fill="#2b3443"><title>1 sequence, StartLux-Prism bf16: 14.89 ms</title></path>
+<text x="558.3" y="395.5" font-size="12" fill="#cbd5e1" text-anchor="start" font-weight="400" style="font-variant-numeric: tabular-nums" stroke="#0d1117" stroke-width="3" stroke-linejoin="round" paint-order="stroke">14.89</text>
+<text x="279.0" y="430.3" font-size="12.5" fill="#f1f5f9" text-anchor="end" font-weight="400">8 sequences</text>
+<path d="M291.0,412.0 H481.1 A4.0,4.0 0 0 1 485.1,416.0 V421.0 A4.0,4.0 0 0 1 481.1,425.0 H291.0 Z" fill="#2dd4bf"><title>8 sequences, StartLux-Prism int8: 11.06 ms</title></path>
+<text x="491.1" y="422.5" font-size="12" fill="#f1f5f9" text-anchor="start" font-weight="600" style="font-variant-numeric: tabular-nums" stroke="#0d1117" stroke-width="3" stroke-linejoin="round" paint-order="stroke">11.06</text>
+<text x="532.6" y="422.5" font-size="12" fill="#cbd5e1" text-anchor="start" font-weight="400" stroke="#0d1117" stroke-width="3" stroke-linejoin="round" paint-order="stroke">1.44x</text>
+<path d="M291.0,427.0 H566.0 A4.0,4.0 0 0 1 570.0,431.0 V436.0 A4.0,4.0 0 0 1 566.0,440.0 H291.0 Z" fill="#2b3443"><title>8 sequences, StartLux-Prism bf16: 15.90 ms</title></path>
+<text x="576.0" y="437.5" font-size="12" fill="#cbd5e1" text-anchor="start" font-weight="400" style="font-variant-numeric: tabular-nums" stroke="#0d1117" stroke-width="3" stroke-linejoin="round" paint-order="stroke">15.90</text>
+<text x="279.0" y="472.3" font-size="12.5" fill="#f1f5f9" text-anchor="end" font-weight="400">64 sequences</text>
+<path d="M291.0,454.0 H580.0 A4.0,4.0 0 0 1 584.0,458.0 V463.0 A4.0,4.0 0 0 1 580.0,467.0 H291.0 Z" fill="#2dd4bf"><title>64 sequences, StartLux-Prism int8: 16.70 ms</title></path>
+<text x="590.0" y="464.5" font-size="12" fill="#f1f5f9" text-anchor="start" font-weight="600" style="font-variant-numeric: tabular-nums" stroke="#0d1117" stroke-width="3" stroke-linejoin="round" paint-order="stroke">16.70</text>
+<text x="631.6" y="464.5" font-size="12" fill="#cbd5e1" text-anchor="start" font-weight="400" stroke="#0d1117" stroke-width="3" stroke-linejoin="round" paint-order="stroke">1.30x</text>
+<path d="M291.0,469.0 H668.5 A4.0,4.0 0 0 1 672.5,473.0 V478.0 A4.0,4.0 0 0 1 668.5,482.0 H291.0 Z" fill="#2b3443"><title>64 sequences, StartLux-Prism bf16: 21.74 ms</title></path>
+<text x="678.5" y="479.5" font-size="12" fill="#cbd5e1" text-anchor="start" font-weight="400" style="font-variant-numeric: tabular-nums" stroke="#0d1117" stroke-width="3" stroke-linejoin="round" paint-order="stroke">21.74</text>
+<text x="26.0" y="537.0" font-size="11.5" fill="#7d8899" text-anchor="start" font-weight="400">Decode at a 512-token context. Thoughts written by int8 are slightly less accurate on hard items (docs/benchmarks.md).</text>
 </svg>

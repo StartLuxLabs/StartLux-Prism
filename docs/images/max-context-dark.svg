@@ -1,75 +1,75 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="840" height="451" viewBox="0 0 840 451" role="img" aria-labelledby="title desc" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif">
+<svg xmlns="http://www.w3.org/2000/svg" width="840" height="463" viewBox="0 0 840 463" role="img" aria-labelledby="title desc" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif">
 <title id="title">The longest request in one pass (no chunked prefill)</title>
 <desc id="desc">One request at a time, the whole prompt in one forward pass; seconds per request. vLLM does not start without chunked prefill on this model.</desc>
-<rect x="0.5" y="0.5" width="839" height="450" rx="8" fill="#1a1a19" stroke="#2c2c2a"/>
-<text x="22.0" y="38.0" font-size="16" fill="#ffffff" text-anchor="start" font-weight="600">The longest request in one pass (no chunked prefill)</text>
-<text x="22.0" y="62.0" font-size="12.5" fill="#c3c2b7" text-anchor="start" font-weight="400">One request at a time, the whole prompt in one forward pass; seconds per request. vLLM does not start without chunked prefill on this</text>
-<text x="22.0" y="80.0" font-size="12.5" fill="#c3c2b7" text-anchor="start" font-weight="400">model.</text>
-<line x1="22.0" y1="100.0" x2="40.0" y2="100.0" stroke="#3987e5" stroke-width="2" stroke-linecap="round"/>
-<circle cx="31.0" cy="100.0" r="4" fill="#3987e5" stroke="#1a1a19" stroke-width="2"/>
-<text x="46.0" y="104.0" font-size="12.5" fill="#c3c2b7" text-anchor="start" font-weight="400">StartLux-Prism int8</text>
-<line x1="182.6" y1="100.0" x2="200.6" y2="100.0" stroke="#898781" stroke-width="2" stroke-linecap="round"/>
-<circle cx="191.6" cy="100.0" r="4" fill="#898781" stroke="#1a1a19" stroke-width="2"/>
-<text x="206.6" y="104.0" font-size="12.5" fill="#c3c2b7" text-anchor="start" font-weight="400">SGLang 0.5.21, --chunked-prefill-size -1</text>
-<text x="22.0" y="133.0" font-size="12.5" fill="#ffffff" text-anchor="start" font-weight="600">StartLux-Decision-v1-4B (Q8_0), RTX 5090</text>
-<text x="49.0" y="351.0" font-size="11" fill="#898781" text-anchor="end" font-weight="400" style="font-variant-numeric: tabular-nums">0 s</text>
-<line x1="56.0" y1="280.3" x2="359.0" y2="280.3" stroke="#2c2c2a" stroke-width="1" shape-rendering="crispEdges"/>
-<text x="49.0" y="284.3" font-size="11" fill="#898781" text-anchor="end" font-weight="400" style="font-variant-numeric: tabular-nums">2 s</text>
-<line x1="56.0" y1="213.7" x2="359.0" y2="213.7" stroke="#2c2c2a" stroke-width="1" shape-rendering="crispEdges"/>
-<text x="49.0" y="217.7" font-size="11" fill="#898781" text-anchor="end" font-weight="400" style="font-variant-numeric: tabular-nums">4 s</text>
-<line x1="56.0" y1="147.0" x2="359.0" y2="147.0" stroke="#2c2c2a" stroke-width="1" shape-rendering="crispEdges"/>
-<text x="49.0" y="151.0" font-size="11" fill="#898781" text-anchor="end" font-weight="400" style="font-variant-numeric: tabular-nums">6 s</text>
-<line x1="56.0" y1="347.0" x2="359.0" y2="347.0" stroke="#383835" stroke-width="1" shape-rendering="crispEdges"/>
-<text x="104.5" y="363.0" font-size="11" fill="#898781" text-anchor="middle" font-weight="400" style="font-variant-numeric: tabular-nums">16k</text>
-<text x="153.0" y="363.0" font-size="11" fill="#898781" text-anchor="middle" font-weight="400" style="font-variant-numeric: tabular-nums">32k</text>
-<text x="201.4" y="363.0" font-size="11" fill="#898781" text-anchor="middle" font-weight="400" style="font-variant-numeric: tabular-nums">48k</text>
-<text x="249.9" y="363.0" font-size="11" fill="#898781" text-anchor="middle" font-weight="400" style="font-variant-numeric: tabular-nums">64k</text>
-<text x="346.9" y="363.0" font-size="11" fill="#898781" text-anchor="middle" font-weight="400" style="font-variant-numeric: tabular-nums">96k</text>
-<path d="M104.5,334.4 L153.0,314.4 L201.4,286.5 L249.9,251.6 L346.9,161.4" fill="none" stroke="#3987e5" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
-<circle cx="104.5" cy="334.4" r="4" fill="#3987e5" stroke="#1a1a19" stroke-width="2"><title>StartLux-Prism int8, 16k tokens: 0.377 s</title></circle>
-<circle cx="153.0" cy="314.4" r="4" fill="#3987e5" stroke="#1a1a19" stroke-width="2"><title>StartLux-Prism int8, 32k tokens: 0.978 s</title></circle>
-<circle cx="201.4" cy="286.5" r="4" fill="#3987e5" stroke="#1a1a19" stroke-width="2"><title>StartLux-Prism int8, 48k tokens: 1.814 s</title></circle>
-<circle cx="249.9" cy="251.6" r="4" fill="#3987e5" stroke="#1a1a19" stroke-width="2"><title>StartLux-Prism int8, 64k tokens: 2.861 s</title></circle>
-<circle cx="346.9" cy="161.4" r="4" fill="#3987e5" stroke="#1a1a19" stroke-width="2"><title>StartLux-Prism int8, 96k tokens: 5.567 s</title></circle>
-<path d="M104.5,323.9 L153.0,294.9 L201.4,261.7 L249.9,222.3" fill="none" stroke="#898781" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
-<circle cx="104.5" cy="323.9" r="4" fill="#898781" stroke="#1a1a19" stroke-width="2"><title>SGLang 0.5.21, --chunked-prefill-size -1, 16k tokens: 0.692 s</title></circle>
-<circle cx="153.0" cy="294.9" r="4" fill="#898781" stroke="#1a1a19" stroke-width="2"><title>SGLang 0.5.21, --chunked-prefill-size -1, 32k tokens: 1.562 s</title></circle>
-<circle cx="201.4" cy="261.7" r="4" fill="#898781" stroke="#1a1a19" stroke-width="2"><title>SGLang 0.5.21, --chunked-prefill-size -1, 48k tokens: 2.559 s</title></circle>
-<circle cx="249.9" cy="222.3" r="4" fill="#898781" stroke="#1a1a19" stroke-width="2"><title>SGLang 0.5.21, --chunked-prefill-size -1, 64k tokens: 3.741 s</title></circle>
-<text x="354.9" y="165.4" font-size="12" fill="#ffffff" text-anchor="start" font-weight="600" style="font-variant-numeric: tabular-nums" stroke="#1a1a19" stroke-width="3" stroke-linejoin="round" paint-order="stroke">5.6 s</text>
-<text x="249.9" y="212.3" font-size="12" fill="#c3c2b7" text-anchor="middle" font-weight="400" style="font-variant-numeric: tabular-nums" stroke="#1a1a19" stroke-width="3" stroke-linejoin="round" paint-order="stroke">3.7 s</text>
-<text x="435.0" y="133.0" font-size="12.5" fill="#ffffff" text-anchor="start" font-weight="600">StartLux-Decision-v1-27B (Q8_0), H200</text>
-<text x="462.0" y="351.0" font-size="11" fill="#898781" text-anchor="end" font-weight="400" style="font-variant-numeric: tabular-nums">0 s</text>
-<line x1="469.0" y1="284.5" x2="772.0" y2="284.5" stroke="#2c2c2a" stroke-width="1" shape-rendering="crispEdges"/>
-<text x="462.0" y="288.5" font-size="11" fill="#898781" text-anchor="end" font-weight="400" style="font-variant-numeric: tabular-nums">5 s</text>
-<line x1="469.0" y1="222.0" x2="772.0" y2="222.0" stroke="#2c2c2a" stroke-width="1" shape-rendering="crispEdges"/>
-<text x="462.0" y="226.0" font-size="11" fill="#898781" text-anchor="end" font-weight="400" style="font-variant-numeric: tabular-nums">10 s</text>
-<line x1="469.0" y1="159.5" x2="772.0" y2="159.5" stroke="#2c2c2a" stroke-width="1" shape-rendering="crispEdges"/>
-<text x="462.0" y="163.5" font-size="11" fill="#898781" text-anchor="end" font-weight="400" style="font-variant-numeric: tabular-nums">15 s</text>
-<line x1="469.0" y1="347.0" x2="772.0" y2="347.0" stroke="#383835" stroke-width="1" shape-rendering="crispEdges"/>
-<text x="505.7" y="363.0" font-size="11" fill="#898781" text-anchor="middle" font-weight="400" style="font-variant-numeric: tabular-nums">16k</text>
-<text x="542.5" y="363.0" font-size="11" fill="#898781" text-anchor="middle" font-weight="400" style="font-variant-numeric: tabular-nums">32k</text>
-<text x="579.2" y="363.0" font-size="11" fill="#898781" text-anchor="middle" font-weight="400" style="font-variant-numeric: tabular-nums">48k</text>
-<text x="615.9" y="363.0" font-size="11" fill="#898781" text-anchor="middle" font-weight="400" style="font-variant-numeric: tabular-nums">64k</text>
-<text x="689.4" y="363.0" font-size="11" fill="#898781" text-anchor="middle" font-weight="400" style="font-variant-numeric: tabular-nums">96k</text>
-<text x="762.8" y="363.0" font-size="11" fill="#898781" text-anchor="middle" font-weight="400" style="font-variant-numeric: tabular-nums">128k</text>
-<path d="M505.7,335.6 L542.5,321.4 L579.2,303.8 L615.9,283.0 L689.4,231.6 L762.8,169.4" fill="none" stroke="#3987e5" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
-<circle cx="505.7" cy="335.6" r="4" fill="#3987e5" stroke="#1a1a19" stroke-width="2"><title>StartLux-Prism int8, 16k tokens: 0.910 s</title></circle>
-<circle cx="542.5" cy="321.4" r="4" fill="#3987e5" stroke="#1a1a19" stroke-width="2"><title>StartLux-Prism int8, 32k tokens: 2.047 s</title></circle>
-<circle cx="579.2" cy="303.8" r="4" fill="#3987e5" stroke="#1a1a19" stroke-width="2"><title>StartLux-Prism int8, 48k tokens: 3.460 s</title></circle>
-<circle cx="615.9" cy="283.0" r="4" fill="#3987e5" stroke="#1a1a19" stroke-width="2"><title>StartLux-Prism int8, 64k tokens: 5.120 s</title></circle>
-<circle cx="689.4" cy="231.6" r="4" fill="#3987e5" stroke="#1a1a19" stroke-width="2"><title>StartLux-Prism int8, 96k tokens: 9.234 s</title></circle>
-<circle cx="762.8" cy="169.4" r="4" fill="#3987e5" stroke="#1a1a19" stroke-width="2"><title>StartLux-Prism int8, 128k tokens: 14.205 s</title></circle>
-<path d="M505.7,329.2 L542.5,309.7 L579.2,288.3 L615.9,264.4 L689.4,211.7 L762.8,150.7" fill="none" stroke="#898781" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
-<circle cx="505.7" cy="329.2" r="4" fill="#898781" stroke="#1a1a19" stroke-width="2"><title>SGLang 0.5.21, --chunked-prefill-size -1, 16k tokens: 1.424 s</title></circle>
-<circle cx="542.5" cy="309.7" r="4" fill="#898781" stroke="#1a1a19" stroke-width="2"><title>SGLang 0.5.21, --chunked-prefill-size -1, 32k tokens: 2.984 s</title></circle>
-<circle cx="579.2" cy="288.3" r="4" fill="#898781" stroke="#1a1a19" stroke-width="2"><title>SGLang 0.5.21, --chunked-prefill-size -1, 48k tokens: 4.697 s</title></circle>
-<circle cx="615.9" cy="264.4" r="4" fill="#898781" stroke="#1a1a19" stroke-width="2"><title>SGLang 0.5.21, --chunked-prefill-size -1, 64k tokens: 6.605 s</title></circle>
-<circle cx="689.4" cy="211.7" r="4" fill="#898781" stroke="#1a1a19" stroke-width="2"><title>SGLang 0.5.21, --chunked-prefill-size -1, 96k tokens: 10.821 s</title></circle>
-<circle cx="762.8" cy="150.7" r="4" fill="#898781" stroke="#1a1a19" stroke-width="2"><title>SGLang 0.5.21, --chunked-prefill-size -1, 128k tokens: 15.705 s</title></circle>
-<text x="770.8" y="173.4" font-size="12" fill="#ffffff" text-anchor="start" font-weight="600" style="font-variant-numeric: tabular-nums" stroke="#1a1a19" stroke-width="3" stroke-linejoin="round" paint-order="stroke">14.2 s</text>
-<text x="770.8" y="154.7" font-size="12" fill="#c3c2b7" text-anchor="start" font-weight="400" style="font-variant-numeric: tabular-nums" stroke="#1a1a19" stroke-width="3" stroke-linejoin="round" paint-order="stroke">15.7 s</text>
-<text x="22.0" y="397.0" font-size="11.5" fill="#898781" text-anchor="start" font-weight="400">Prompt length in thousands of tokens. On the RTX 5090 StartLux-Prism runs with --prefix-cache 0 (its largest batch then 98,304 tokens) and</text>
-<text x="22.0" y="413.0" font-size="11.5" fill="#898781" text-anchor="start" font-weight="400">SGLang with --mem-fraction-static 0.6 (it does not start otherwise); SGLang ran out of memory at 96k there, and between 128k and 192k on the</text>
-<text x="22.0" y="429.0" font-size="11.5" fill="#898781" text-anchor="start" font-weight="400">H200. StartLux-Prism refuses a request beyond its largest batch (HTTP 422); it never cuts one.</text>
+<rect x="0.5" y="0.5" width="839" height="462" rx="14" fill="#0d1117" stroke="#232a35"/>
+<text x="26.0" y="44.0" font-size="19" fill="#f1f5f9" text-anchor="start" font-weight="700">The longest request in one pass (no chunked prefill)</text>
+<text x="26.0" y="69.0" font-size="13" fill="#cbd5e1" text-anchor="start" font-weight="400">One request at a time, the whole prompt in one forward pass; seconds per request. vLLM does not start without chunked prefill on</text>
+<text x="26.0" y="88.0" font-size="13" fill="#cbd5e1" text-anchor="start" font-weight="400">this model.</text>
+<line x1="26.0" y1="108.0" x2="44.0" y2="108.0" stroke="#2dd4bf" stroke-width="2" stroke-linecap="round"/>
+<circle cx="35.0" cy="108.0" r="4" fill="#2dd4bf" stroke="#0d1117" stroke-width="2"/>
+<text x="50.0" y="112.0" font-size="12.5" fill="#cbd5e1" text-anchor="start" font-weight="400">StartLux-Prism int8</text>
+<line x1="186.6" y1="108.0" x2="204.6" y2="108.0" stroke="#7d8899" stroke-width="2" stroke-linecap="round"/>
+<circle cx="195.6" cy="108.0" r="4" fill="#7d8899" stroke="#0d1117" stroke-width="2"/>
+<text x="210.6" y="112.0" font-size="12.5" fill="#cbd5e1" text-anchor="start" font-weight="400">SGLang 0.5.21, --chunked-prefill-size -1</text>
+<text x="26.0" y="141.0" font-size="12.5" fill="#f1f5f9" text-anchor="start" font-weight="600">StartLux-Decision-v1-4B (Q8_0), RTX 5090</text>
+<text x="53.0" y="359.0" font-size="11" fill="#7d8899" text-anchor="end" font-weight="400" style="font-variant-numeric: tabular-nums">0 s</text>
+<line x1="60.0" y1="288.3" x2="359.0" y2="288.3" stroke="#1b222c" stroke-width="1" shape-rendering="crispEdges"/>
+<text x="53.0" y="292.3" font-size="11" fill="#7d8899" text-anchor="end" font-weight="400" style="font-variant-numeric: tabular-nums">2 s</text>
+<line x1="60.0" y1="221.7" x2="359.0" y2="221.7" stroke="#1b222c" stroke-width="1" shape-rendering="crispEdges"/>
+<text x="53.0" y="225.7" font-size="11" fill="#7d8899" text-anchor="end" font-weight="400" style="font-variant-numeric: tabular-nums">4 s</text>
+<line x1="60.0" y1="155.0" x2="359.0" y2="155.0" stroke="#1b222c" stroke-width="1" shape-rendering="crispEdges"/>
+<text x="53.0" y="159.0" font-size="11" fill="#7d8899" text-anchor="end" font-weight="400" style="font-variant-numeric: tabular-nums">6 s</text>
+<line x1="60.0" y1="355.0" x2="359.0" y2="355.0" stroke="#2b3443" stroke-width="1" shape-rendering="crispEdges"/>
+<text x="107.8" y="371.0" font-size="11" fill="#7d8899" text-anchor="middle" font-weight="400" style="font-variant-numeric: tabular-nums">16k</text>
+<text x="155.7" y="371.0" font-size="11" fill="#7d8899" text-anchor="middle" font-weight="400" style="font-variant-numeric: tabular-nums">32k</text>
+<text x="203.5" y="371.0" font-size="11" fill="#7d8899" text-anchor="middle" font-weight="400" style="font-variant-numeric: tabular-nums">48k</text>
+<text x="251.4" y="371.0" font-size="11" fill="#7d8899" text-anchor="middle" font-weight="400" style="font-variant-numeric: tabular-nums">64k</text>
+<text x="347.0" y="371.0" font-size="11" fill="#7d8899" text-anchor="middle" font-weight="400" style="font-variant-numeric: tabular-nums">96k</text>
+<path d="M107.8,342.4 L155.7,322.4 L203.5,294.5 L251.4,259.6 L347.0,169.4" fill="none" stroke="#2dd4bf" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+<circle cx="107.8" cy="342.4" r="4" fill="#2dd4bf" stroke="#0d1117" stroke-width="2"><title>StartLux-Prism int8, 16k tokens: 0.377 s</title></circle>
+<circle cx="155.7" cy="322.4" r="4" fill="#2dd4bf" stroke="#0d1117" stroke-width="2"><title>StartLux-Prism int8, 32k tokens: 0.978 s</title></circle>
+<circle cx="203.5" cy="294.5" r="4" fill="#2dd4bf" stroke="#0d1117" stroke-width="2"><title>StartLux-Prism int8, 48k tokens: 1.814 s</title></circle>
+<circle cx="251.4" cy="259.6" r="4" fill="#2dd4bf" stroke="#0d1117" stroke-width="2"><title>StartLux-Prism int8, 64k tokens: 2.861 s</title></circle>
+<circle cx="347.0" cy="169.4" r="4" fill="#2dd4bf" stroke="#0d1117" stroke-width="2"><title>StartLux-Prism int8, 96k tokens: 5.567 s</title></circle>
+<path d="M107.8,331.9 L155.7,302.9 L203.5,269.7 L251.4,230.3" fill="none" stroke="#7d8899" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+<circle cx="107.8" cy="331.9" r="4" fill="#7d8899" stroke="#0d1117" stroke-width="2"><title>SGLang 0.5.21, --chunked-prefill-size -1, 16k tokens: 0.692 s</title></circle>
+<circle cx="155.7" cy="302.9" r="4" fill="#7d8899" stroke="#0d1117" stroke-width="2"><title>SGLang 0.5.21, --chunked-prefill-size -1, 32k tokens: 1.562 s</title></circle>
+<circle cx="203.5" cy="269.7" r="4" fill="#7d8899" stroke="#0d1117" stroke-width="2"><title>SGLang 0.5.21, --chunked-prefill-size -1, 48k tokens: 2.559 s</title></circle>
+<circle cx="251.4" cy="230.3" r="4" fill="#7d8899" stroke="#0d1117" stroke-width="2"><title>SGLang 0.5.21, --chunked-prefill-size -1, 64k tokens: 3.741 s</title></circle>
+<text x="355.0" y="173.4" font-size="12" fill="#f1f5f9" text-anchor="start" font-weight="600" style="font-variant-numeric: tabular-nums" stroke="#0d1117" stroke-width="3" stroke-linejoin="round" paint-order="stroke">5.6 s</text>
+<text x="251.4" y="220.3" font-size="12" fill="#cbd5e1" text-anchor="middle" font-weight="400" style="font-variant-numeric: tabular-nums" stroke="#0d1117" stroke-width="3" stroke-linejoin="round" paint-order="stroke">3.7 s</text>
+<text x="435.0" y="141.0" font-size="12.5" fill="#f1f5f9" text-anchor="start" font-weight="600">StartLux-Decision-v1-27B (Q8_0), H200</text>
+<text x="462.0" y="359.0" font-size="11" fill="#7d8899" text-anchor="end" font-weight="400" style="font-variant-numeric: tabular-nums">0 s</text>
+<line x1="469.0" y1="292.5" x2="768.0" y2="292.5" stroke="#1b222c" stroke-width="1" shape-rendering="crispEdges"/>
+<text x="462.0" y="296.5" font-size="11" fill="#7d8899" text-anchor="end" font-weight="400" style="font-variant-numeric: tabular-nums">5 s</text>
+<line x1="469.0" y1="230.0" x2="768.0" y2="230.0" stroke="#1b222c" stroke-width="1" shape-rendering="crispEdges"/>
+<text x="462.0" y="234.0" font-size="11" fill="#7d8899" text-anchor="end" font-weight="400" style="font-variant-numeric: tabular-nums">10 s</text>
+<line x1="469.0" y1="167.5" x2="768.0" y2="167.5" stroke="#1b222c" stroke-width="1" shape-rendering="crispEdges"/>
+<text x="462.0" y="171.5" font-size="11" fill="#7d8899" text-anchor="end" font-weight="400" style="font-variant-numeric: tabular-nums">15 s</text>
+<line x1="469.0" y1="355.0" x2="768.0" y2="355.0" stroke="#2b3443" stroke-width="1" shape-rendering="crispEdges"/>
+<text x="505.2" y="371.0" font-size="11" fill="#7d8899" text-anchor="middle" font-weight="400" style="font-variant-numeric: tabular-nums">16k</text>
+<text x="541.5" y="371.0" font-size="11" fill="#7d8899" text-anchor="middle" font-weight="400" style="font-variant-numeric: tabular-nums">32k</text>
+<text x="577.7" y="371.0" font-size="11" fill="#7d8899" text-anchor="middle" font-weight="400" style="font-variant-numeric: tabular-nums">48k</text>
+<text x="614.0" y="371.0" font-size="11" fill="#7d8899" text-anchor="middle" font-weight="400" style="font-variant-numeric: tabular-nums">64k</text>
+<text x="686.5" y="371.0" font-size="11" fill="#7d8899" text-anchor="middle" font-weight="400" style="font-variant-numeric: tabular-nums">96k</text>
+<text x="758.9" y="371.0" font-size="11" fill="#7d8899" text-anchor="middle" font-weight="400" style="font-variant-numeric: tabular-nums">128k</text>
+<path d="M505.2,343.6 L541.5,329.4 L577.7,311.8 L614.0,291.0 L686.5,239.6 L758.9,177.4" fill="none" stroke="#2dd4bf" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+<circle cx="505.2" cy="343.6" r="4" fill="#2dd4bf" stroke="#0d1117" stroke-width="2"><title>StartLux-Prism int8, 16k tokens: 0.910 s</title></circle>
+<circle cx="541.5" cy="329.4" r="4" fill="#2dd4bf" stroke="#0d1117" stroke-width="2"><title>StartLux-Prism int8, 32k tokens: 2.047 s</title></circle>
+<circle cx="577.7" cy="311.8" r="4" fill="#2dd4bf" stroke="#0d1117" stroke-width="2"><title>StartLux-Prism int8, 48k tokens: 3.460 s</title></circle>
+<circle cx="614.0" cy="291.0" r="4" fill="#2dd4bf" stroke="#0d1117" stroke-width="2"><title>StartLux-Prism int8, 64k tokens: 5.120 s</title></circle>
+<circle cx="686.5" cy="239.6" r="4" fill="#2dd4bf" stroke="#0d1117" stroke-width="2"><title>StartLux-Prism int8, 96k tokens: 9.234 s</title></circle>
+<circle cx="758.9" cy="177.4" r="4" fill="#2dd4bf" stroke="#0d1117" stroke-width="2"><title>StartLux-Prism int8, 128k tokens: 14.205 s</title></circle>
+<path d="M505.2,337.2 L541.5,317.7 L577.7,296.3 L614.0,272.4 L686.5,219.7 L758.9,158.7" fill="none" stroke="#7d8899" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+<circle cx="505.2" cy="337.2" r="4" fill="#7d8899" stroke="#0d1117" stroke-width="2"><title>SGLang 0.5.21, --chunked-prefill-size -1, 16k tokens: 1.424 s</title></circle>
+<circle cx="541.5" cy="317.7" r="4" fill="#7d8899" stroke="#0d1117" stroke-width="2"><title>SGLang 0.5.21, --chunked-prefill-size -1, 32k tokens: 2.984 s</title></circle>
+<circle cx="577.7" cy="296.3" r="4" fill="#7d8899" stroke="#0d1117" stroke-width="2"><title>SGLang 0.5.21, --chunked-prefill-size -1, 48k tokens: 4.697 s</title></circle>
+<circle cx="614.0" cy="272.4" r="4" fill="#7d8899" stroke="#0d1117" stroke-width="2"><title>SGLang 0.5.21, --chunked-prefill-size -1, 64k tokens: 6.605 s</title></circle>
+<circle cx="686.5" cy="219.7" r="4" fill="#7d8899" stroke="#0d1117" stroke-width="2"><title>SGLang 0.5.21, --chunked-prefill-size -1, 96k tokens: 10.821 s</title></circle>
+<circle cx="758.9" cy="158.7" r="4" fill="#7d8899" stroke="#0d1117" stroke-width="2"><title>SGLang 0.5.21, --chunked-prefill-size -1, 128k tokens: 15.705 s</title></circle>
+<text x="766.9" y="181.4" font-size="12" fill="#f1f5f9" text-anchor="start" font-weight="600" style="font-variant-numeric: tabular-nums" stroke="#0d1117" stroke-width="3" stroke-linejoin="round" paint-order="stroke">14.2 s</text>
+<text x="766.9" y="162.7" font-size="12" fill="#cbd5e1" text-anchor="start" font-weight="400" style="font-variant-numeric: tabular-nums" stroke="#0d1117" stroke-width="3" stroke-linejoin="round" paint-order="stroke">15.7 s</text>
+<text x="26.0" y="405.0" font-size="11.5" fill="#7d8899" text-anchor="start" font-weight="400">Prompt length in thousands of tokens. On the RTX 5090 StartLux-Prism runs with --prefix-cache 0 (its largest batch then 98,304 tokens) and</text>
+<text x="26.0" y="421.0" font-size="11.5" fill="#7d8899" text-anchor="start" font-weight="400">SGLang with --mem-fraction-static 0.6 (it does not start otherwise); SGLang ran out of memory at 96k there, and between 128k and 192k on the</text>
+<text x="26.0" y="437.0" font-size="11.5" fill="#7d8899" text-anchor="start" font-weight="400">H200. StartLux-Prism refuses a request beyond its largest batch (HTTP 422); it never cuts one.</text>
 </svg>

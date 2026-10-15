@@ -1,61 +1,61 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="840" height="343" viewBox="0 0 840 343" role="img" aria-labelledby="title desc" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif">
+<svg xmlns="http://www.w3.org/2000/svg" width="840" height="355" viewBox="0 0 840 355" role="img" aria-labelledby="title desc" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif">
 <title id="title">Follow-up questions about evidence already sent</title>
 <desc id="desc">StartLux-Decision-v1-4B (Q8_0) on an RTX 5090: the 20 public JevBench items with the longest evidence (2,000-3,700 tokens), each asked, then two more questions about the same evidence. p50 ms.</desc>
-<rect x="0.5" y="0.5" width="839" height="342" rx="8" fill="#1a1a19" stroke="#2c2c2a"/>
-<text x="22.0" y="38.0" font-size="16" fill="#ffffff" text-anchor="start" font-weight="600">Follow-up questions about evidence already sent</text>
-<text x="22.0" y="62.0" font-size="12.5" fill="#c3c2b7" text-anchor="start" font-weight="400">StartLux-Decision-v1-4B (Q8_0) on an RTX 5090: the 20 public JevBench items with the longest evidence (2,000-3,700 tokens), each</text>
-<text x="22.0" y="80.0" font-size="12.5" fill="#c3c2b7" text-anchor="start" font-weight="400">asked, then two more questions about the same evidence. p50 ms.</text>
-<text x="240.4" y="107.0" font-size="12.5" fill="#ffffff" text-anchor="start" font-weight="600">First request (new evidence)</text>
-<text x="240.4" y="290.0" font-size="11" fill="#898781" text-anchor="middle" font-weight="400" style="font-variant-numeric: tabular-nums">0</text>
-<line x1="298.5" y1="115.0" x2="298.5" y2="275.0" stroke="#2c2c2a" stroke-width="1" shape-rendering="crispEdges"/>
-<text x="298.5" y="290.0" font-size="11" fill="#898781" text-anchor="middle" font-weight="400" style="font-variant-numeric: tabular-nums">50</text>
-<line x1="356.6" y1="115.0" x2="356.6" y2="275.0" stroke="#2c2c2a" stroke-width="1" shape-rendering="crispEdges"/>
-<text x="356.6" y="290.0" font-size="11" fill="#898781" text-anchor="middle" font-weight="400" style="font-variant-numeric: tabular-nums">100</text>
-<line x1="414.6" y1="115.0" x2="414.6" y2="275.0" stroke="#2c2c2a" stroke-width="1" shape-rendering="crispEdges"/>
-<text x="414.6" y="290.0" font-size="11" fill="#898781" text-anchor="middle" font-weight="400" style="font-variant-numeric: tabular-nums">150</text>
-<line x1="472.7" y1="115.0" x2="472.7" y2="275.0" stroke="#2c2c2a" stroke-width="1" shape-rendering="crispEdges"/>
-<text x="472.7" y="290.0" font-size="11" fill="#898781" text-anchor="middle" font-weight="400" style="font-variant-numeric: tabular-nums">200</text>
-<line x1="240.4" y1="115.0" x2="240.4" y2="275.0" stroke="#383835" stroke-width="1" shape-rendering="crispEdges"/>
-<path d="M240.4,125.0 H299.3 A4.0,4.0 0 0 1 303.3,129.0 V135.0 A4.0,4.0 0 0 1 299.3,139.0 H240.4 Z" fill="#3987e5"><title>StartLux-Prism int8, prefix cache: 54.1 ms</title></path>
-<text x="309.3" y="136.3" font-size="12" fill="#ffffff" text-anchor="start" font-weight="600" style="font-variant-numeric: tabular-nums" stroke="#1a1a19" stroke-width="3" stroke-linejoin="round" paint-order="stroke">54.1</text>
-<path d="M240.4,151.0 H424.5 A4.0,4.0 0 0 1 428.5,155.0 V161.0 A4.0,4.0 0 0 1 424.5,165.0 H240.4 Z" fill="#62615c"><title>vLLM, automatic prefix caching: 162.0 ms</title></path>
-<text x="434.5" y="162.3" font-size="12" fill="#c3c2b7" text-anchor="start" font-weight="400" style="font-variant-numeric: tabular-nums" stroke="#1a1a19" stroke-width="3" stroke-linejoin="round" paint-order="stroke">162.0</text>
-<path d="M240.4,177.0 H295.3 A4.0,4.0 0 0 1 299.3,181.0 V187.0 A4.0,4.0 0 0 1 295.3,191.0 H240.4 Z" fill="#62615c"><title>StartLux-Prism int8, cache off: 50.7 ms</title></path>
-<text x="305.3" y="188.3" font-size="12" fill="#c3c2b7" text-anchor="start" font-weight="400" style="font-variant-numeric: tabular-nums" stroke="#1a1a19" stroke-width="3" stroke-linejoin="round" paint-order="stroke">50.7</text>
-<path d="M240.4,203.0 H387.3 A4.0,4.0 0 0 1 391.3,207.0 V213.0 A4.0,4.0 0 0 1 387.3,217.0 H240.4 Z" fill="#62615c"><title>SGLang, radix cache: 129.9 ms</title></path>
-<text x="397.3" y="214.3" font-size="12" fill="#c3c2b7" text-anchor="start" font-weight="400" style="font-variant-numeric: tabular-nums" stroke="#1a1a19" stroke-width="3" stroke-linejoin="round" paint-order="stroke">129.9</text>
-<path d="M240.4,229.0 H357.9 A4.0,4.0 0 0 1 361.9,233.0 V239.0 A4.0,4.0 0 0 1 357.9,243.0 H240.4 Z" fill="#62615c"><title>decider, compile + FP8: 104.6 ms</title></path>
-<text x="367.9" y="240.3" font-size="12" fill="#c3c2b7" text-anchor="start" font-weight="400" style="font-variant-numeric: tabular-nums" stroke="#1a1a19" stroke-width="3" stroke-linejoin="round" paint-order="stroke">104.6</text>
-<path d="M240.4,255.0 H438.4 A4.0,4.0 0 0 1 442.4,259.0 V265.0 A4.0,4.0 0 0 1 438.4,269.0 H240.4 Z" fill="#62615c"><title>StartLux-Decision server: 173.9 ms</title></path>
-<text x="448.4" y="266.3" font-size="12" fill="#c3c2b7" text-anchor="start" font-weight="400" style="font-variant-numeric: tabular-nums" stroke="#1a1a19" stroke-width="3" stroke-linejoin="round" paint-order="stroke">173.9</text>
-<text x="544.2" y="107.0" font-size="12.5" fill="#ffffff" text-anchor="start" font-weight="600">Follow-up requests (same evidence)</text>
-<text x="544.2" y="290.0" font-size="11" fill="#898781" text-anchor="middle" font-weight="400" style="font-variant-numeric: tabular-nums">0</text>
-<line x1="602.3" y1="115.0" x2="602.3" y2="275.0" stroke="#2c2c2a" stroke-width="1" shape-rendering="crispEdges"/>
-<text x="602.3" y="290.0" font-size="11" fill="#898781" text-anchor="middle" font-weight="400" style="font-variant-numeric: tabular-nums">50</text>
-<line x1="660.3" y1="115.0" x2="660.3" y2="275.0" stroke="#2c2c2a" stroke-width="1" shape-rendering="crispEdges"/>
-<text x="660.3" y="290.0" font-size="11" fill="#898781" text-anchor="middle" font-weight="400" style="font-variant-numeric: tabular-nums">100</text>
-<line x1="718.4" y1="115.0" x2="718.4" y2="275.0" stroke="#2c2c2a" stroke-width="1" shape-rendering="crispEdges"/>
-<text x="718.4" y="290.0" font-size="11" fill="#898781" text-anchor="middle" font-weight="400" style="font-variant-numeric: tabular-nums">150</text>
-<line x1="776.4" y1="115.0" x2="776.4" y2="275.0" stroke="#2c2c2a" stroke-width="1" shape-rendering="crispEdges"/>
-<text x="776.4" y="290.0" font-size="11" fill="#898781" text-anchor="middle" font-weight="400" style="font-variant-numeric: tabular-nums">200</text>
-<line x1="544.2" y1="115.0" x2="544.2" y2="275.0" stroke="#383835" stroke-width="1" shape-rendering="crispEdges"/>
-<path d="M544.2,125.0 H547.4 A3.1348329750000006,3.1348329750000006 0 0 1 550.5,128.1 V135.9 A3.1348329750000006,3.1348329750000006 0 0 1 547.4,139.0 H544.2 Z" fill="#3987e5"><title>StartLux-Prism int8, prefix cache: 5.4 ms</title></path>
-<text x="556.5" y="136.3" font-size="12" fill="#ffffff" text-anchor="start" font-weight="600" style="font-variant-numeric: tabular-nums" stroke="#1a1a19" stroke-width="3" stroke-linejoin="round" paint-order="stroke">5.4</text>
-<path d="M544.2,151.0 H589.7 A4.0,4.0 0 0 1 593.7,155.0 V161.0 A4.0,4.0 0 0 1 589.7,165.0 H544.2 Z" fill="#62615c"><title>vLLM, automatic prefix caching: 42.6 ms</title></path>
-<text x="599.7" y="162.3" font-size="12" fill="#c3c2b7" text-anchor="start" font-weight="400" style="font-variant-numeric: tabular-nums" stroke="#1a1a19" stroke-width="3" stroke-linejoin="round" paint-order="stroke">42.6</text>
-<path d="M544.2,177.0 H596.0 A4.0,4.0 0 0 1 600.0,181.0 V187.0 A4.0,4.0 0 0 1 596.0,191.0 H544.2 Z" fill="#62615c"><title>StartLux-Prism int8, cache off: 48.0 ms</title></path>
-<text x="606.0" y="188.3" font-size="12" fill="#c3c2b7" text-anchor="start" font-weight="400" style="font-variant-numeric: tabular-nums" stroke="#1a1a19" stroke-width="3" stroke-linejoin="round" paint-order="stroke">48.0</text>
-<path d="M544.2,203.0 H671.8 A4.0,4.0 0 0 1 675.8,207.0 V213.0 A4.0,4.0 0 0 1 671.8,217.0 H544.2 Z" fill="#62615c"><title>SGLang, radix cache: 113.3 ms</title></path>
-<text x="681.8" y="214.3" font-size="12" fill="#c3c2b7" text-anchor="start" font-weight="400" style="font-variant-numeric: tabular-nums" stroke="#1a1a19" stroke-width="3" stroke-linejoin="round" paint-order="stroke">113.3</text>
-<path d="M544.2,229.0 H723.4 A4.0,4.0 0 0 1 727.4,233.0 V239.0 A4.0,4.0 0 0 1 723.4,243.0 H544.2 Z" fill="#62615c"><title>decider, compile + FP8: 157.8 ms</title></path>
-<text x="733.4" y="240.3" font-size="12" fill="#c3c2b7" text-anchor="start" font-weight="400" style="font-variant-numeric: tabular-nums" stroke="#1a1a19" stroke-width="3" stroke-linejoin="round" paint-order="stroke">157.8</text>
-<path d="M544.2,255.0 H741.8 A4.0,4.0 0 0 1 745.8,259.0 V265.0 A4.0,4.0 0 0 1 741.8,269.0 H544.2 Z" fill="#62615c"><title>StartLux-Decision server: 173.6 ms</title></path>
-<text x="751.8" y="266.3" font-size="12" fill="#c3c2b7" text-anchor="start" font-weight="400" style="font-variant-numeric: tabular-nums" stroke="#1a1a19" stroke-width="3" stroke-linejoin="round" paint-order="stroke">173.6</text>
-<text x="228.4" y="136.3" font-size="12.5" fill="#ffffff" text-anchor="end" font-weight="600">StartLux-Prism int8, prefix cache</text>
-<text x="228.4" y="162.3" font-size="12.5" fill="#c3c2b7" text-anchor="end" font-weight="400">vLLM, automatic prefix caching</text>
-<text x="228.4" y="188.3" font-size="12.5" fill="#c3c2b7" text-anchor="end" font-weight="400">StartLux-Prism int8, cache off</text>
-<text x="228.4" y="214.3" font-size="12.5" fill="#c3c2b7" text-anchor="end" font-weight="400">SGLang, radix cache</text>
-<text x="228.4" y="240.3" font-size="12.5" fill="#c3c2b7" text-anchor="end" font-weight="400">decider, compile + FP8</text>
-<text x="228.4" y="266.3" font-size="12.5" fill="#c3c2b7" text-anchor="end" font-weight="400">StartLux-Decision server</text>
-<text x="22.0" y="321.0" font-size="11.5" fill="#898781" text-anchor="start" font-weight="400">2026-10-10. StartLux-Prism answers a follow-up from the evidence's cached state, bit-identical to recomputing it.</text>
+<rect x="0.5" y="0.5" width="839" height="354" rx="14" fill="#0d1117" stroke="#232a35"/>
+<text x="26.0" y="44.0" font-size="19" fill="#f1f5f9" text-anchor="start" font-weight="700">Follow-up questions about evidence already sent</text>
+<text x="26.0" y="69.0" font-size="13" fill="#cbd5e1" text-anchor="start" font-weight="400">StartLux-Decision-v1-4B (Q8_0) on an RTX 5090: the 20 public JevBench items with the longest evidence (2,000-3,700 tokens),</text>
+<text x="26.0" y="88.0" font-size="13" fill="#cbd5e1" text-anchor="start" font-weight="400">each asked, then two more questions about the same evidence. p50 ms.</text>
+<text x="244.4" y="115.0" font-size="12.5" fill="#f1f5f9" text-anchor="start" font-weight="600">First request (new evidence)</text>
+<text x="244.4" y="298.0" font-size="11" fill="#7d8899" text-anchor="middle" font-weight="400" style="font-variant-numeric: tabular-nums">0</text>
+<line x1="301.5" y1="123.0" x2="301.5" y2="283.0" stroke="#1b222c" stroke-width="1" shape-rendering="crispEdges"/>
+<text x="301.5" y="298.0" font-size="11" fill="#7d8899" text-anchor="middle" font-weight="400" style="font-variant-numeric: tabular-nums">50</text>
+<line x1="358.6" y1="123.0" x2="358.6" y2="283.0" stroke="#1b222c" stroke-width="1" shape-rendering="crispEdges"/>
+<text x="358.6" y="298.0" font-size="11" fill="#7d8899" text-anchor="middle" font-weight="400" style="font-variant-numeric: tabular-nums">100</text>
+<line x1="415.6" y1="123.0" x2="415.6" y2="283.0" stroke="#1b222c" stroke-width="1" shape-rendering="crispEdges"/>
+<text x="415.6" y="298.0" font-size="11" fill="#7d8899" text-anchor="middle" font-weight="400" style="font-variant-numeric: tabular-nums">150</text>
+<line x1="472.7" y1="123.0" x2="472.7" y2="283.0" stroke="#1b222c" stroke-width="1" shape-rendering="crispEdges"/>
+<text x="472.7" y="298.0" font-size="11" fill="#7d8899" text-anchor="middle" font-weight="400" style="font-variant-numeric: tabular-nums">200</text>
+<line x1="244.4" y1="123.0" x2="244.4" y2="283.0" stroke="#2b3443" stroke-width="1" shape-rendering="crispEdges"/>
+<path d="M244.4,133.0 H302.2 A4.0,4.0 0 0 1 306.2,137.0 V143.0 A4.0,4.0 0 0 1 302.2,147.0 H244.4 Z" fill="#2dd4bf"><title>StartLux-Prism int8, prefix cache: 54.1 ms</title></path>
+<text x="312.2" y="144.3" font-size="12" fill="#f1f5f9" text-anchor="start" font-weight="600" style="font-variant-numeric: tabular-nums" stroke="#0d1117" stroke-width="3" stroke-linejoin="round" paint-order="stroke">54.1</text>
+<path d="M244.4,159.0 H425.3 A4.0,4.0 0 0 1 429.3,163.0 V169.0 A4.0,4.0 0 0 1 425.3,173.0 H244.4 Z" fill="#2b3443"><title>vLLM, automatic prefix caching: 162.0 ms</title></path>
+<text x="435.3" y="170.3" font-size="12" fill="#cbd5e1" text-anchor="start" font-weight="400" style="font-variant-numeric: tabular-nums" stroke="#0d1117" stroke-width="3" stroke-linejoin="round" paint-order="stroke">162.0</text>
+<path d="M244.4,185.0 H298.3 A4.0,4.0 0 0 1 302.3,189.0 V195.0 A4.0,4.0 0 0 1 298.3,199.0 H244.4 Z" fill="#2b3443"><title>StartLux-Prism int8, cache off: 50.7 ms</title></path>
+<text x="308.3" y="196.3" font-size="12" fill="#cbd5e1" text-anchor="start" font-weight="400" style="font-variant-numeric: tabular-nums" stroke="#0d1117" stroke-width="3" stroke-linejoin="round" paint-order="stroke">50.7</text>
+<path d="M244.4,211.0 H388.7 A4.0,4.0 0 0 1 392.7,215.0 V221.0 A4.0,4.0 0 0 1 388.7,225.0 H244.4 Z" fill="#2b3443"><title>SGLang, radix cache: 129.9 ms</title></path>
+<text x="398.7" y="222.3" font-size="12" fill="#cbd5e1" text-anchor="start" font-weight="400" style="font-variant-numeric: tabular-nums" stroke="#0d1117" stroke-width="3" stroke-linejoin="round" paint-order="stroke">129.9</text>
+<path d="M244.4,237.0 H359.8 A4.0,4.0 0 0 1 363.8,241.0 V247.0 A4.0,4.0 0 0 1 359.8,251.0 H244.4 Z" fill="#2b3443"><title>decider, compile + FP8: 104.6 ms</title></path>
+<text x="369.8" y="248.3" font-size="12" fill="#cbd5e1" text-anchor="start" font-weight="400" style="font-variant-numeric: tabular-nums" stroke="#0d1117" stroke-width="3" stroke-linejoin="round" paint-order="stroke">104.6</text>
+<path d="M244.4,263.0 H438.9 A4.0,4.0 0 0 1 442.9,267.0 V273.0 A4.0,4.0 0 0 1 438.9,277.0 H244.4 Z" fill="#2b3443"><title>StartLux-Decision server: 173.9 ms</title></path>
+<text x="448.9" y="274.3" font-size="12" fill="#cbd5e1" text-anchor="start" font-weight="400" style="font-variant-numeric: tabular-nums" stroke="#0d1117" stroke-width="3" stroke-linejoin="round" paint-order="stroke">173.9</text>
+<text x="544.2" y="115.0" font-size="12.5" fill="#f1f5f9" text-anchor="start" font-weight="600">Follow-up requests (same evidence)</text>
+<text x="544.2" y="298.0" font-size="11" fill="#7d8899" text-anchor="middle" font-weight="400" style="font-variant-numeric: tabular-nums">0</text>
+<line x1="601.3" y1="123.0" x2="601.3" y2="283.0" stroke="#1b222c" stroke-width="1" shape-rendering="crispEdges"/>
+<text x="601.3" y="298.0" font-size="11" fill="#7d8899" text-anchor="middle" font-weight="400" style="font-variant-numeric: tabular-nums">50</text>
+<line x1="658.3" y1="123.0" x2="658.3" y2="283.0" stroke="#1b222c" stroke-width="1" shape-rendering="crispEdges"/>
+<text x="658.3" y="298.0" font-size="11" fill="#7d8899" text-anchor="middle" font-weight="400" style="font-variant-numeric: tabular-nums">100</text>
+<line x1="715.4" y1="123.0" x2="715.4" y2="283.0" stroke="#1b222c" stroke-width="1" shape-rendering="crispEdges"/>
+<text x="715.4" y="298.0" font-size="11" fill="#7d8899" text-anchor="middle" font-weight="400" style="font-variant-numeric: tabular-nums">150</text>
+<line x1="772.4" y1="123.0" x2="772.4" y2="283.0" stroke="#1b222c" stroke-width="1" shape-rendering="crispEdges"/>
+<text x="772.4" y="298.0" font-size="11" fill="#7d8899" text-anchor="middle" font-weight="400" style="font-variant-numeric: tabular-nums">200</text>
+<line x1="544.2" y1="123.0" x2="544.2" y2="283.0" stroke="#2b3443" stroke-width="1" shape-rendering="crispEdges"/>
+<path d="M544.2,133.0 H547.3 A3.0808329750000008,3.0808329750000008 0 0 1 550.4,136.1 V143.9 A3.0808329750000008,3.0808329750000008 0 0 1 547.3,147.0 H544.2 Z" fill="#2dd4bf"><title>StartLux-Prism int8, prefix cache: 5.4 ms</title></path>
+<text x="556.4" y="144.3" font-size="12" fill="#f1f5f9" text-anchor="start" font-weight="600" style="font-variant-numeric: tabular-nums" stroke="#0d1117" stroke-width="3" stroke-linejoin="round" paint-order="stroke">5.4</text>
+<path d="M544.2,159.0 H588.8 A4.0,4.0 0 0 1 592.8,163.0 V169.0 A4.0,4.0 0 0 1 588.8,173.0 H544.2 Z" fill="#2b3443"><title>vLLM, automatic prefix caching: 42.6 ms</title></path>
+<text x="598.8" y="170.3" font-size="12" fill="#cbd5e1" text-anchor="start" font-weight="400" style="font-variant-numeric: tabular-nums" stroke="#0d1117" stroke-width="3" stroke-linejoin="round" paint-order="stroke">42.6</text>
+<path d="M544.2,185.0 H595.0 A4.0,4.0 0 0 1 599.0,189.0 V195.0 A4.0,4.0 0 0 1 595.0,199.0 H544.2 Z" fill="#2b3443"><title>StartLux-Prism int8, cache off: 48.0 ms</title></path>
+<text x="605.0" y="196.3" font-size="12" fill="#cbd5e1" text-anchor="start" font-weight="400" style="font-variant-numeric: tabular-nums" stroke="#0d1117" stroke-width="3" stroke-linejoin="round" paint-order="stroke">48.0</text>
+<path d="M544.2,211.0 H669.5 A4.0,4.0 0 0 1 673.5,215.0 V221.0 A4.0,4.0 0 0 1 669.5,225.0 H544.2 Z" fill="#2b3443"><title>SGLang, radix cache: 113.3 ms</title></path>
+<text x="679.5" y="222.3" font-size="12" fill="#cbd5e1" text-anchor="start" font-weight="400" style="font-variant-numeric: tabular-nums" stroke="#0d1117" stroke-width="3" stroke-linejoin="round" paint-order="stroke">113.3</text>
+<path d="M544.2,237.0 H720.3 A4.0,4.0 0 0 1 724.3,241.0 V247.0 A4.0,4.0 0 0 1 720.3,251.0 H544.2 Z" fill="#2b3443"><title>decider, compile + FP8: 157.8 ms</title></path>
+<text x="730.3" y="248.3" font-size="12" fill="#cbd5e1" text-anchor="start" font-weight="400" style="font-variant-numeric: tabular-nums" stroke="#0d1117" stroke-width="3" stroke-linejoin="round" paint-order="stroke">157.8</text>
+<path d="M544.2,263.0 H738.3 A4.0,4.0 0 0 1 742.3,267.0 V273.0 A4.0,4.0 0 0 1 738.3,277.0 H544.2 Z" fill="#2b3443"><title>StartLux-Decision server: 173.6 ms</title></path>
+<text x="748.3" y="274.3" font-size="12" fill="#cbd5e1" text-anchor="start" font-weight="400" style="font-variant-numeric: tabular-nums" stroke="#0d1117" stroke-width="3" stroke-linejoin="round" paint-order="stroke">173.6</text>
+<text x="232.4" y="144.3" font-size="12.5" fill="#f1f5f9" text-anchor="end" font-weight="600">StartLux-Prism int8, prefix cache</text>
+<text x="232.4" y="170.3" font-size="12.5" fill="#cbd5e1" text-anchor="end" font-weight="400">vLLM, automatic prefix caching</text>
+<text x="232.4" y="196.3" font-size="12.5" fill="#cbd5e1" text-anchor="end" font-weight="400">StartLux-Prism int8, cache off</text>
+<text x="232.4" y="222.3" font-size="12.5" fill="#cbd5e1" text-anchor="end" font-weight="400">SGLang, radix cache</text>
+<text x="232.4" y="248.3" font-size="12.5" fill="#cbd5e1" text-anchor="end" font-weight="400">decider, compile + FP8</text>
+<text x="232.4" y="274.3" font-size="12.5" fill="#cbd5e1" text-anchor="end" font-weight="400">StartLux-Decision server</text>
+<text x="26.0" y="329.0" font-size="11.5" fill="#7d8899" text-anchor="start" font-weight="400">2026-10-10. StartLux-Prism answers a follow-up from the evidence's cached state, bit-identical to recomputing it.</text>
 </svg>
