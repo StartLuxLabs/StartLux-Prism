@@ -1,81 +1,81 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="840" height="462" viewBox="0 0 840 462" role="img" aria-labelledby="title desc" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif">
+<svg xmlns="http://www.w3.org/2000/svg" width="840" height="473" viewBox="0 0 840 473" role="img" aria-labelledby="title desc" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif">
 <title id="title">StartLux-Decision-v1-9B (Q8_0) on an RTX 5090</title>
 <desc id="desc">The 231 public JevBench items; every engine alone on the GPU, through the same HTTP client.</desc>
-<rect x="0.5" y="0.5" width="839" height="461" rx="8" fill="#1a1a19" stroke="#2c2c2a"/>
-<text x="22.0" y="38.0" font-size="16" fill="#ffffff" text-anchor="start" font-weight="600">StartLux-Decision-v1-9B (Q8_0) on an RTX 5090</text>
-<text x="22.0" y="62.0" font-size="12.5" fill="#c3c2b7" text-anchor="start" font-weight="400">The 231 public JevBench items; every engine alone on the GPU, through the same HTTP client.</text>
-<text x="188.5" y="89.0" font-size="12.5" fill="#ffffff" text-anchor="start" font-weight="600">One request at a time: mean ms per item (lower is</text>
-<text x="188.5" y="106.0" font-size="12.5" fill="#ffffff" text-anchor="start" font-weight="600">better)</text>
-<text x="188.5" y="393.0" font-size="11" fill="#898781" text-anchor="middle" font-weight="400" style="font-variant-numeric: tabular-nums">0</text>
-<line x1="253.1" y1="114.0" x2="253.1" y2="378.0" stroke="#2c2c2a" stroke-width="1" shape-rendering="crispEdges"/>
-<text x="253.1" y="393.0" font-size="11" fill="#898781" text-anchor="middle" font-weight="400" style="font-variant-numeric: tabular-nums">50</text>
-<line x1="317.6" y1="114.0" x2="317.6" y2="378.0" stroke="#2c2c2a" stroke-width="1" shape-rendering="crispEdges"/>
-<text x="317.6" y="393.0" font-size="11" fill="#898781" text-anchor="middle" font-weight="400" style="font-variant-numeric: tabular-nums">100</text>
-<line x1="382.1" y1="114.0" x2="382.1" y2="378.0" stroke="#2c2c2a" stroke-width="1" shape-rendering="crispEdges"/>
-<text x="382.1" y="393.0" font-size="11" fill="#898781" text-anchor="middle" font-weight="400" style="font-variant-numeric: tabular-nums">150</text>
-<line x1="446.7" y1="114.0" x2="446.7" y2="378.0" stroke="#2c2c2a" stroke-width="1" shape-rendering="crispEdges"/>
-<text x="446.7" y="393.0" font-size="11" fill="#898781" text-anchor="middle" font-weight="400" style="font-variant-numeric: tabular-nums">200</text>
-<line x1="188.5" y1="114.0" x2="188.5" y2="378.0" stroke="#383835" stroke-width="1" shape-rendering="crispEdges"/>
-<path d="M188.5,124.0 H212.4 A4.0,4.0 0 0 1 216.4,128.0 V134.0 A4.0,4.0 0 0 1 212.4,138.0 H188.5 Z" fill="#3987e5"><title>StartLux-Prism int8: 21.6 ms</title></path>
-<text x="222.4" y="135.3" font-size="12" fill="#ffffff" text-anchor="start" font-weight="600" style="font-variant-numeric: tabular-nums" stroke="#1a1a19" stroke-width="3" stroke-linejoin="round" paint-order="stroke">21.6</text>
-<path d="M188.5,150.0 H249.4 A4.0,4.0 0 0 1 253.4,154.0 V160.0 A4.0,4.0 0 0 1 249.4,164.0 H188.5 Z" fill="#62615c"><title>decider, compile + FP8: 50.3 ms</title></path>
-<text x="259.4" y="161.3" font-size="12" fill="#c3c2b7" text-anchor="start" font-weight="400" style="font-variant-numeric: tabular-nums" stroke="#1a1a19" stroke-width="3" stroke-linejoin="round" paint-order="stroke">50.3</text>
-<path d="M188.5,176.0 H251.8 A4.0,4.0 0 0 1 255.8,180.0 V186.0 A4.0,4.0 0 0 1 251.8,190.0 H188.5 Z" fill="#62615c"><title>StartLux-Prism bf16: 52.1 ms</title></path>
-<text x="261.8" y="187.3" font-size="12" fill="#c3c2b7" text-anchor="start" font-weight="400" style="font-variant-numeric: tabular-nums" stroke="#1a1a19" stroke-width="3" stroke-linejoin="round" paint-order="stroke">52.1</text>
-<path d="M188.5,202.0 H261.7 A4.0,4.0 0 0 1 265.7,206.0 V212.0 A4.0,4.0 0 0 1 261.7,216.0 H188.5 Z" fill="#62615c"><title>SGLang native: 59.8 ms</title></path>
-<text x="271.7" y="213.3" font-size="12" fill="#c3c2b7" text-anchor="start" font-weight="400" style="font-variant-numeric: tabular-nums" stroke="#1a1a19" stroke-width="3" stroke-linejoin="round" paint-order="stroke">59.8</text>
-<path d="M188.5,228.0 H264.7 A4.0,4.0 0 0 1 268.7,232.0 V238.0 A4.0,4.0 0 0 1 264.7,242.0 H188.5 Z" fill="#62615c"><title>SGLang via adapter: 62.1 ms</title></path>
-<text x="274.7" y="239.3" font-size="12" fill="#c3c2b7" text-anchor="start" font-weight="400" style="font-variant-numeric: tabular-nums" stroke="#1a1a19" stroke-width="3" stroke-linejoin="round" paint-order="stroke">62.1</text>
-<path d="M188.5,254.0 H276.4 A4.0,4.0 0 0 1 280.4,258.0 V264.0 A4.0,4.0 0 0 1 276.4,268.0 H188.5 Z" fill="#62615c"><title>StartLux-Decision server: 71.2 ms</title></path>
-<text x="286.4" y="265.3" font-size="12" fill="#c3c2b7" text-anchor="start" font-weight="400" style="font-variant-numeric: tabular-nums" stroke="#1a1a19" stroke-width="3" stroke-linejoin="round" paint-order="stroke">71.2</text>
-<path d="M188.5,280.0 H280.6 A4.0,4.0 0 0 1 284.6,284.0 V290.0 A4.0,4.0 0 0 1 280.6,294.0 H188.5 Z" fill="#62615c"><title>JevK5: 74.4 ms</title></path>
-<text x="290.6" y="291.3" font-size="12" fill="#c3c2b7" text-anchor="start" font-weight="400" style="font-variant-numeric: tabular-nums" stroke="#1a1a19" stroke-width="3" stroke-linejoin="round" paint-order="stroke">74.4</text>
-<path d="M188.5,306.0 H282.7 A4.0,4.0 0 0 1 286.7,310.0 V316.0 A4.0,4.0 0 0 1 282.7,320.0 H188.5 Z" fill="#62615c"><title>decider, default: 76.1 ms</title></path>
-<text x="292.7" y="317.3" font-size="12" fill="#c3c2b7" text-anchor="start" font-weight="400" style="font-variant-numeric: tabular-nums" stroke="#1a1a19" stroke-width="3" stroke-linejoin="round" paint-order="stroke">76.1</text>
-<path d="M188.5,332.0 H294.1 A4.0,4.0 0 0 1 298.1,336.0 V342.0 A4.0,4.0 0 0 1 294.1,346.0 H188.5 Z" fill="#62615c"><title>vLLM via adapter: 84.9 ms</title></path>
-<text x="304.1" y="343.3" font-size="12" fill="#c3c2b7" text-anchor="start" font-weight="400" style="font-variant-numeric: tabular-nums" stroke="#1a1a19" stroke-width="3" stroke-linejoin="round" paint-order="stroke">84.9</text>
-<path d="M188.5,358.0 H394.5 A4.0,4.0 0 0 1 398.5,362.0 V368.0 A4.0,4.0 0 0 1 394.5,372.0 H188.5 Z" fill="#62615c"><title>llama.cpp (Q8_0): 162.7 ms</title></path>
-<text x="404.5" y="369.3" font-size="12" fill="#c3c2b7" text-anchor="start" font-weight="400" style="font-variant-numeric: tabular-nums" stroke="#1a1a19" stroke-width="3" stroke-linejoin="round" paint-order="stroke">162.7</text>
-<text x="518.3" y="89.0" font-size="12.5" fill="#ffffff" text-anchor="start" font-weight="600">From 32 clients: requests per second (higher is</text>
-<text x="518.3" y="106.0" font-size="12.5" fill="#ffffff" text-anchor="start" font-weight="600">better)</text>
-<text x="518.3" y="393.0" font-size="11" fill="#898781" text-anchor="middle" font-weight="400" style="font-variant-numeric: tabular-nums">0</text>
-<line x1="606.8" y1="114.0" x2="606.8" y2="378.0" stroke="#2c2c2a" stroke-width="1" shape-rendering="crispEdges"/>
-<text x="606.8" y="393.0" font-size="11" fill="#898781" text-anchor="middle" font-weight="400" style="font-variant-numeric: tabular-nums">20</text>
-<line x1="695.4" y1="114.0" x2="695.4" y2="378.0" stroke="#2c2c2a" stroke-width="1" shape-rendering="crispEdges"/>
-<text x="695.4" y="393.0" font-size="11" fill="#898781" text-anchor="middle" font-weight="400" style="font-variant-numeric: tabular-nums">40</text>
-<line x1="784.0" y1="114.0" x2="784.0" y2="378.0" stroke="#2c2c2a" stroke-width="1" shape-rendering="crispEdges"/>
-<text x="784.0" y="393.0" font-size="11" fill="#898781" text-anchor="middle" font-weight="400" style="font-variant-numeric: tabular-nums">60</text>
-<line x1="518.3" y1="114.0" x2="518.3" y2="378.0" stroke="#383835" stroke-width="1" shape-rendering="crispEdges"/>
-<path d="M518.3,124.0 H750.3 A4.0,4.0 0 0 1 754.3,128.0 V134.0 A4.0,4.0 0 0 1 750.3,138.0 H518.3 Z" fill="#3987e5"><title>StartLux-Prism int8: 53.3 requests/s</title></path>
-<text x="760.3" y="135.3" font-size="12" fill="#ffffff" text-anchor="start" font-weight="600" style="font-variant-numeric: tabular-nums" stroke="#1a1a19" stroke-width="3" stroke-linejoin="round" paint-order="stroke">53.3</text>
-<path d="M518.3,150.0 H614.3 A4.0,4.0 0 0 1 618.3,154.0 V160.0 A4.0,4.0 0 0 1 614.3,164.0 H518.3 Z" fill="#62615c"><title>decider, compile + FP8: 22.6 requests/s</title></path>
-<text x="624.3" y="161.3" font-size="12" fill="#c3c2b7" text-anchor="start" font-weight="400" style="font-variant-numeric: tabular-nums" stroke="#1a1a19" stroke-width="3" stroke-linejoin="round" paint-order="stroke">22.6</text>
-<path d="M518.3,176.0 H602.4 A4.0,4.0 0 0 1 606.4,180.0 V186.0 A4.0,4.0 0 0 1 602.4,190.0 H518.3 Z" fill="#62615c"><title>StartLux-Prism bf16: 19.9 requests/s</title></path>
-<text x="612.4" y="187.3" font-size="12" fill="#c3c2b7" text-anchor="start" font-weight="400" style="font-variant-numeric: tabular-nums" stroke="#1a1a19" stroke-width="3" stroke-linejoin="round" paint-order="stroke">19.9</text>
-<path d="M518.3,202.0 H610.3 A4.0,4.0 0 0 1 614.3,206.0 V212.0 A4.0,4.0 0 0 1 610.3,216.0 H518.3 Z" fill="#62615c"><title>SGLang native: 21.7 requests/s</title></path>
-<text x="620.3" y="213.3" font-size="12" fill="#c3c2b7" text-anchor="start" font-weight="400" style="font-variant-numeric: tabular-nums" stroke="#1a1a19" stroke-width="3" stroke-linejoin="round" paint-order="stroke">21.7</text>
-<path d="M518.3,228.0 H605.0 A4.0,4.0 0 0 1 609.0,232.0 V238.0 A4.0,4.0 0 0 1 605.0,242.0 H518.3 Z" fill="#62615c"><title>SGLang via adapter: 20.5 requests/s</title></path>
-<text x="615.0" y="239.3" font-size="12" fill="#c3c2b7" text-anchor="start" font-weight="400" style="font-variant-numeric: tabular-nums" stroke="#1a1a19" stroke-width="3" stroke-linejoin="round" paint-order="stroke">20.5</text>
-<path d="M518.3,254.0 H577.1 A4.0,4.0 0 0 1 581.1,258.0 V264.0 A4.0,4.0 0 0 1 577.1,268.0 H518.3 Z" fill="#62615c"><title>StartLux-Decision server: 14.2 requests/s</title></path>
-<text x="587.1" y="265.3" font-size="12" fill="#c3c2b7" text-anchor="start" font-weight="400" style="font-variant-numeric: tabular-nums" stroke="#1a1a19" stroke-width="3" stroke-linejoin="round" paint-order="stroke">14.2</text>
-<path d="M518.3,280.0 H574.5 A4.0,4.0 0 0 1 578.5,284.0 V290.0 A4.0,4.0 0 0 1 574.5,294.0 H518.3 Z" fill="#62615c"><title>JevK5: 13.6 requests/s</title></path>
-<text x="584.5" y="291.3" font-size="12" fill="#c3c2b7" text-anchor="start" font-weight="400" style="font-variant-numeric: tabular-nums" stroke="#1a1a19" stroke-width="3" stroke-linejoin="round" paint-order="stroke">13.6</text>
-<path d="M518.3,306.0 H570.1 A4.0,4.0 0 0 1 574.1,310.0 V316.0 A4.0,4.0 0 0 1 570.1,320.0 H518.3 Z" fill="#62615c"><title>decider, default: 12.6 requests/s</title></path>
-<text x="580.1" y="317.3" font-size="12" fill="#c3c2b7" text-anchor="start" font-weight="400" style="font-variant-numeric: tabular-nums" stroke="#1a1a19" stroke-width="3" stroke-linejoin="round" paint-order="stroke">12.6</text>
-<path d="M518.3,332.0 H597.9 A4.0,4.0 0 0 1 601.9,336.0 V342.0 A4.0,4.0 0 0 1 597.9,346.0 H518.3 Z" fill="#62615c"><title>vLLM via adapter: 18.9 requests/s</title></path>
-<text x="607.9" y="343.3" font-size="12" fill="#c3c2b7" text-anchor="start" font-weight="400" style="font-variant-numeric: tabular-nums" stroke="#1a1a19" stroke-width="3" stroke-linejoin="round" paint-order="stroke">18.9</text>
-<path d="M518.3,358.0 H539.5 A4.0,4.0 0 0 1 543.5,362.0 V368.0 A4.0,4.0 0 0 1 539.5,372.0 H518.3 Z" fill="#62615c"><title>llama.cpp (Q8_0): 5.7 requests/s</title></path>
-<text x="549.5" y="369.3" font-size="12" fill="#c3c2b7" text-anchor="start" font-weight="400" style="font-variant-numeric: tabular-nums" stroke="#1a1a19" stroke-width="3" stroke-linejoin="round" paint-order="stroke">5.7</text>
-<text x="176.5" y="135.3" font-size="12.5" fill="#ffffff" text-anchor="end" font-weight="600">StartLux-Prism int8</text>
-<text x="176.5" y="161.3" font-size="12.5" fill="#c3c2b7" text-anchor="end" font-weight="400">decider, compile + FP8</text>
-<text x="176.5" y="187.3" font-size="12.5" fill="#c3c2b7" text-anchor="end" font-weight="400">StartLux-Prism bf16</text>
-<text x="176.5" y="213.3" font-size="12.5" fill="#c3c2b7" text-anchor="end" font-weight="400">SGLang native</text>
-<text x="176.5" y="239.3" font-size="12.5" fill="#c3c2b7" text-anchor="end" font-weight="400">SGLang via adapter</text>
-<text x="176.5" y="265.3" font-size="12.5" fill="#c3c2b7" text-anchor="end" font-weight="400">StartLux-Decision server</text>
-<text x="176.5" y="291.3" font-size="12.5" fill="#c3c2b7" text-anchor="end" font-weight="400">JevK5</text>
-<text x="176.5" y="317.3" font-size="12.5" fill="#c3c2b7" text-anchor="end" font-weight="400">decider, default</text>
-<text x="176.5" y="343.3" font-size="12.5" fill="#c3c2b7" text-anchor="end" font-weight="400">vLLM via adapter</text>
-<text x="176.5" y="369.3" font-size="12.5" fill="#c3c2b7" text-anchor="end" font-weight="400">llama.cpp (Q8_0)</text>
-<text x="22.0" y="424.0" font-size="11.5" fill="#898781" text-anchor="start" font-weight="400">Q8_0 weights for every engine (bf16 conversions of them for the PyTorch engines); 2026-10-10. decider and JevK5 run StartLux's weights as</text>
-<text x="22.0" y="440.0" font-size="11.5" fill="#898781" text-anchor="start" font-weight="400">same-shape stand-ins (they ship no StartLux checkpoint).</text>
+<rect x="0.5" y="0.5" width="839" height="472" rx="14" fill="#0d1117" stroke="#232a35"/>
+<text x="26.0" y="44.0" font-size="19" fill="#f1f5f9" text-anchor="start" font-weight="700">StartLux-Decision-v1-9B (Q8_0) on an RTX 5090</text>
+<text x="26.0" y="69.0" font-size="13" fill="#cbd5e1" text-anchor="start" font-weight="400">The 231 public JevBench items; every engine alone on the GPU, through the same HTTP client.</text>
+<text x="192.5" y="96.0" font-size="12.5" fill="#f1f5f9" text-anchor="start" font-weight="600">One request at a time: mean ms per item (lower is</text>
+<text x="192.5" y="113.0" font-size="12.5" fill="#f1f5f9" text-anchor="start" font-weight="600">better)</text>
+<text x="192.5" y="400.0" font-size="11" fill="#7d8899" text-anchor="middle" font-weight="400" style="font-variant-numeric: tabular-nums">0</text>
+<line x1="256.1" y1="121.0" x2="256.1" y2="385.0" stroke="#1b222c" stroke-width="1" shape-rendering="crispEdges"/>
+<text x="256.1" y="400.0" font-size="11" fill="#7d8899" text-anchor="middle" font-weight="400" style="font-variant-numeric: tabular-nums">50</text>
+<line x1="319.6" y1="121.0" x2="319.6" y2="385.0" stroke="#1b222c" stroke-width="1" shape-rendering="crispEdges"/>
+<text x="319.6" y="400.0" font-size="11" fill="#7d8899" text-anchor="middle" font-weight="400" style="font-variant-numeric: tabular-nums">100</text>
+<line x1="383.1" y1="121.0" x2="383.1" y2="385.0" stroke="#1b222c" stroke-width="1" shape-rendering="crispEdges"/>
+<text x="383.1" y="400.0" font-size="11" fill="#7d8899" text-anchor="middle" font-weight="400" style="font-variant-numeric: tabular-nums">150</text>
+<line x1="446.7" y1="121.0" x2="446.7" y2="385.0" stroke="#1b222c" stroke-width="1" shape-rendering="crispEdges"/>
+<text x="446.7" y="400.0" font-size="11" fill="#7d8899" text-anchor="middle" font-weight="400" style="font-variant-numeric: tabular-nums">200</text>
+<line x1="192.5" y1="121.0" x2="192.5" y2="385.0" stroke="#2b3443" stroke-width="1" shape-rendering="crispEdges"/>
+<path d="M192.5,131.0 H216.0 A4.0,4.0 0 0 1 220.0,135.0 V141.0 A4.0,4.0 0 0 1 216.0,145.0 H192.5 Z" fill="#2dd4bf"><title>StartLux-Prism int8: 21.6 ms</title></path>
+<text x="226.0" y="142.3" font-size="12" fill="#f1f5f9" text-anchor="start" font-weight="600" style="font-variant-numeric: tabular-nums" stroke="#0d1117" stroke-width="3" stroke-linejoin="round" paint-order="stroke">21.6</text>
+<path d="M192.5,157.0 H252.4 A4.0,4.0 0 0 1 256.4,161.0 V167.0 A4.0,4.0 0 0 1 252.4,171.0 H192.5 Z" fill="#2b3443"><title>decider, compile + FP8: 50.3 ms</title></path>
+<text x="262.4" y="168.3" font-size="12" fill="#cbd5e1" text-anchor="start" font-weight="400" style="font-variant-numeric: tabular-nums" stroke="#0d1117" stroke-width="3" stroke-linejoin="round" paint-order="stroke">50.3</text>
+<path d="M192.5,183.0 H254.7 A4.0,4.0 0 0 1 258.7,187.0 V193.0 A4.0,4.0 0 0 1 254.7,197.0 H192.5 Z" fill="#2b3443"><title>StartLux-Prism bf16: 52.1 ms</title></path>
+<text x="264.7" y="194.3" font-size="12" fill="#cbd5e1" text-anchor="start" font-weight="400" style="font-variant-numeric: tabular-nums" stroke="#0d1117" stroke-width="3" stroke-linejoin="round" paint-order="stroke">52.1</text>
+<path d="M192.5,209.0 H264.5 A4.0,4.0 0 0 1 268.5,213.0 V219.0 A4.0,4.0 0 0 1 264.5,223.0 H192.5 Z" fill="#2b3443"><title>SGLang native: 59.8 ms</title></path>
+<text x="274.5" y="220.3" font-size="12" fill="#cbd5e1" text-anchor="start" font-weight="400" style="font-variant-numeric: tabular-nums" stroke="#0d1117" stroke-width="3" stroke-linejoin="round" paint-order="stroke">59.8</text>
+<path d="M192.5,235.0 H267.4 A4.0,4.0 0 0 1 271.4,239.0 V245.0 A4.0,4.0 0 0 1 267.4,249.0 H192.5 Z" fill="#2b3443"><title>SGLang via adapter: 62.1 ms</title></path>
+<text x="277.4" y="246.3" font-size="12" fill="#cbd5e1" text-anchor="start" font-weight="400" style="font-variant-numeric: tabular-nums" stroke="#0d1117" stroke-width="3" stroke-linejoin="round" paint-order="stroke">62.1</text>
+<path d="M192.5,261.0 H279.0 A4.0,4.0 0 0 1 283.0,265.0 V271.0 A4.0,4.0 0 0 1 279.0,275.0 H192.5 Z" fill="#2b3443"><title>StartLux-Decision server: 71.2 ms</title></path>
+<text x="289.0" y="272.3" font-size="12" fill="#cbd5e1" text-anchor="start" font-weight="400" style="font-variant-numeric: tabular-nums" stroke="#0d1117" stroke-width="3" stroke-linejoin="round" paint-order="stroke">71.2</text>
+<path d="M192.5,287.0 H283.1 A4.0,4.0 0 0 1 287.1,291.0 V297.0 A4.0,4.0 0 0 1 283.1,301.0 H192.5 Z" fill="#2b3443"><title>JevK5: 74.4 ms</title></path>
+<text x="293.1" y="298.3" font-size="12" fill="#cbd5e1" text-anchor="start" font-weight="400" style="font-variant-numeric: tabular-nums" stroke="#0d1117" stroke-width="3" stroke-linejoin="round" paint-order="stroke">74.4</text>
+<path d="M192.5,313.0 H285.2 A4.0,4.0 0 0 1 289.2,317.0 V323.0 A4.0,4.0 0 0 1 285.2,327.0 H192.5 Z" fill="#2b3443"><title>decider, default: 76.1 ms</title></path>
+<text x="295.2" y="324.3" font-size="12" fill="#cbd5e1" text-anchor="start" font-weight="400" style="font-variant-numeric: tabular-nums" stroke="#0d1117" stroke-width="3" stroke-linejoin="round" paint-order="stroke">76.1</text>
+<path d="M192.5,339.0 H296.4 A4.0,4.0 0 0 1 300.4,343.0 V349.0 A4.0,4.0 0 0 1 296.4,353.0 H192.5 Z" fill="#2b3443"><title>vLLM via adapter: 84.9 ms</title></path>
+<text x="306.4" y="350.3" font-size="12" fill="#cbd5e1" text-anchor="start" font-weight="400" style="font-variant-numeric: tabular-nums" stroke="#0d1117" stroke-width="3" stroke-linejoin="round" paint-order="stroke">84.9</text>
+<path d="M192.5,365.0 H395.3 A4.0,4.0 0 0 1 399.3,369.0 V375.0 A4.0,4.0 0 0 1 395.3,379.0 H192.5 Z" fill="#2b3443"><title>llama.cpp (Q8_0): 162.7 ms</title></path>
+<text x="405.3" y="376.3" font-size="12" fill="#cbd5e1" text-anchor="start" font-weight="400" style="font-variant-numeric: tabular-nums" stroke="#0d1117" stroke-width="3" stroke-linejoin="round" paint-order="stroke">162.7</text>
+<text x="518.3" y="96.0" font-size="12.5" fill="#f1f5f9" text-anchor="start" font-weight="600">From 32 clients: requests per second (higher is</text>
+<text x="518.3" y="113.0" font-size="12.5" fill="#f1f5f9" text-anchor="start" font-weight="600">better)</text>
+<text x="518.3" y="400.0" font-size="11" fill="#7d8899" text-anchor="middle" font-weight="400" style="font-variant-numeric: tabular-nums">0</text>
+<line x1="605.5" y1="121.0" x2="605.5" y2="385.0" stroke="#1b222c" stroke-width="1" shape-rendering="crispEdges"/>
+<text x="605.5" y="400.0" font-size="11" fill="#7d8899" text-anchor="middle" font-weight="400" style="font-variant-numeric: tabular-nums">20</text>
+<line x1="692.7" y1="121.0" x2="692.7" y2="385.0" stroke="#1b222c" stroke-width="1" shape-rendering="crispEdges"/>
+<text x="692.7" y="400.0" font-size="11" fill="#7d8899" text-anchor="middle" font-weight="400" style="font-variant-numeric: tabular-nums">40</text>
+<line x1="780.0" y1="121.0" x2="780.0" y2="385.0" stroke="#1b222c" stroke-width="1" shape-rendering="crispEdges"/>
+<text x="780.0" y="400.0" font-size="11" fill="#7d8899" text-anchor="middle" font-weight="400" style="font-variant-numeric: tabular-nums">60</text>
+<line x1="518.3" y1="121.0" x2="518.3" y2="385.0" stroke="#2b3443" stroke-width="1" shape-rendering="crispEdges"/>
+<path d="M518.3,131.0 H746.7 A4.0,4.0 0 0 1 750.7,135.0 V141.0 A4.0,4.0 0 0 1 746.7,145.0 H518.3 Z" fill="#2dd4bf"><title>StartLux-Prism int8: 53.3 requests/s</title></path>
+<text x="756.7" y="142.3" font-size="12" fill="#f1f5f9" text-anchor="start" font-weight="600" style="font-variant-numeric: tabular-nums" stroke="#0d1117" stroke-width="3" stroke-linejoin="round" paint-order="stroke">53.3</text>
+<path d="M518.3,157.0 H612.8 A4.0,4.0 0 0 1 616.8,161.0 V167.0 A4.0,4.0 0 0 1 612.8,171.0 H518.3 Z" fill="#2b3443"><title>decider, compile + FP8: 22.6 requests/s</title></path>
+<text x="622.8" y="168.3" font-size="12" fill="#cbd5e1" text-anchor="start" font-weight="400" style="font-variant-numeric: tabular-nums" stroke="#0d1117" stroke-width="3" stroke-linejoin="round" paint-order="stroke">22.6</text>
+<path d="M518.3,183.0 H601.0 A4.0,4.0 0 0 1 605.0,187.0 V193.0 A4.0,4.0 0 0 1 601.0,197.0 H518.3 Z" fill="#2b3443"><title>StartLux-Prism bf16: 19.9 requests/s</title></path>
+<text x="611.0" y="194.3" font-size="12" fill="#cbd5e1" text-anchor="start" font-weight="400" style="font-variant-numeric: tabular-nums" stroke="#0d1117" stroke-width="3" stroke-linejoin="round" paint-order="stroke">19.9</text>
+<path d="M518.3,209.0 H608.9 A4.0,4.0 0 0 1 612.9,213.0 V219.0 A4.0,4.0 0 0 1 608.9,223.0 H518.3 Z" fill="#2b3443"><title>SGLang native: 21.7 requests/s</title></path>
+<text x="618.9" y="220.3" font-size="12" fill="#cbd5e1" text-anchor="start" font-weight="400" style="font-variant-numeric: tabular-nums" stroke="#0d1117" stroke-width="3" stroke-linejoin="round" paint-order="stroke">21.7</text>
+<path d="M518.3,235.0 H603.7 A4.0,4.0 0 0 1 607.7,239.0 V245.0 A4.0,4.0 0 0 1 603.7,249.0 H518.3 Z" fill="#2b3443"><title>SGLang via adapter: 20.5 requests/s</title></path>
+<text x="613.7" y="246.3" font-size="12" fill="#cbd5e1" text-anchor="start" font-weight="400" style="font-variant-numeric: tabular-nums" stroke="#0d1117" stroke-width="3" stroke-linejoin="round" paint-order="stroke">20.5</text>
+<path d="M518.3,261.0 H576.2 A4.0,4.0 0 0 1 580.2,265.0 V271.0 A4.0,4.0 0 0 1 576.2,275.0 H518.3 Z" fill="#2b3443"><title>StartLux-Decision server: 14.2 requests/s</title></path>
+<text x="586.2" y="272.3" font-size="12" fill="#cbd5e1" text-anchor="start" font-weight="400" style="font-variant-numeric: tabular-nums" stroke="#0d1117" stroke-width="3" stroke-linejoin="round" paint-order="stroke">14.2</text>
+<path d="M518.3,287.0 H573.6 A4.0,4.0 0 0 1 577.6,291.0 V297.0 A4.0,4.0 0 0 1 573.6,301.0 H518.3 Z" fill="#2b3443"><title>JevK5: 13.6 requests/s</title></path>
+<text x="583.6" y="298.3" font-size="12" fill="#cbd5e1" text-anchor="start" font-weight="400" style="font-variant-numeric: tabular-nums" stroke="#0d1117" stroke-width="3" stroke-linejoin="round" paint-order="stroke">13.6</text>
+<path d="M518.3,313.0 H569.2 A4.0,4.0 0 0 1 573.2,317.0 V323.0 A4.0,4.0 0 0 1 569.2,327.0 H518.3 Z" fill="#2b3443"><title>decider, default: 12.6 requests/s</title></path>
+<text x="579.2" y="324.3" font-size="12" fill="#cbd5e1" text-anchor="start" font-weight="400" style="font-variant-numeric: tabular-nums" stroke="#0d1117" stroke-width="3" stroke-linejoin="round" paint-order="stroke">12.6</text>
+<path d="M518.3,339.0 H596.7 A4.0,4.0 0 0 1 600.7,343.0 V349.0 A4.0,4.0 0 0 1 596.7,353.0 H518.3 Z" fill="#2b3443"><title>vLLM via adapter: 18.9 requests/s</title></path>
+<text x="606.7" y="350.3" font-size="12" fill="#cbd5e1" text-anchor="start" font-weight="400" style="font-variant-numeric: tabular-nums" stroke="#0d1117" stroke-width="3" stroke-linejoin="round" paint-order="stroke">18.9</text>
+<path d="M518.3,365.0 H539.1 A4.0,4.0 0 0 1 543.1,369.0 V375.0 A4.0,4.0 0 0 1 539.1,379.0 H518.3 Z" fill="#2b3443"><title>llama.cpp (Q8_0): 5.7 requests/s</title></path>
+<text x="549.1" y="376.3" font-size="12" fill="#cbd5e1" text-anchor="start" font-weight="400" style="font-variant-numeric: tabular-nums" stroke="#0d1117" stroke-width="3" stroke-linejoin="round" paint-order="stroke">5.7</text>
+<text x="180.5" y="142.3" font-size="12.5" fill="#f1f5f9" text-anchor="end" font-weight="600">StartLux-Prism int8</text>
+<text x="180.5" y="168.3" font-size="12.5" fill="#cbd5e1" text-anchor="end" font-weight="400">decider, compile + FP8</text>
+<text x="180.5" y="194.3" font-size="12.5" fill="#cbd5e1" text-anchor="end" font-weight="400">StartLux-Prism bf16</text>
+<text x="180.5" y="220.3" font-size="12.5" fill="#cbd5e1" text-anchor="end" font-weight="400">SGLang native</text>
+<text x="180.5" y="246.3" font-size="12.5" fill="#cbd5e1" text-anchor="end" font-weight="400">SGLang via adapter</text>
+<text x="180.5" y="272.3" font-size="12.5" fill="#cbd5e1" text-anchor="end" font-weight="400">StartLux-Decision server</text>
+<text x="180.5" y="298.3" font-size="12.5" fill="#cbd5e1" text-anchor="end" font-weight="400">JevK5</text>
+<text x="180.5" y="324.3" font-size="12.5" fill="#cbd5e1" text-anchor="end" font-weight="400">decider, default</text>
+<text x="180.5" y="350.3" font-size="12.5" fill="#cbd5e1" text-anchor="end" font-weight="400">vLLM via adapter</text>
+<text x="180.5" y="376.3" font-size="12.5" fill="#cbd5e1" text-anchor="end" font-weight="400">llama.cpp (Q8_0)</text>
+<text x="26.0" y="431.0" font-size="11.5" fill="#7d8899" text-anchor="start" font-weight="400">Q8_0 weights for every engine (bf16 conversions of them for the PyTorch engines); 2026-10-10. decider and JevK5 run StartLux's weights as</text>
+<text x="26.0" y="447.0" font-size="11.5" fill="#7d8899" text-anchor="start" font-weight="400">same-shape stand-ins (they ship no StartLux checkpoint).</text>
 </svg>

@@ -4,23 +4,25 @@
     python bench/charts.py
 
 The numbers are those of docs/benchmarks.md's tables (from results/, as bench/report.py prints them), and every chart
-has its table next to it there. One style throughout: StartLux-Prism in the accent blue, every other engine in gray, the
-value at each bar's tip, hairline grid; the colors are the light and dark tokens below (the accent and the line gray
-checked with the dataviz palette validator against both surfaces).
+has its table next to it there. One style throughout: StartLux-Prism in teal, every other engine in soft slate, the
+value at each bar's tip; the README's top charts lead with the speed-ups as big numbers (`hero_chart`). The colors are
+the light and dark tokens below (the teal marks at 3:1 or more against both surfaces).
 """
 import os
 
 OUT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "docs", "images")
 
 THEMES = {
-    "light": dict(surface="#fcfcfb", ink="#0b0b0b", ink2="#52514e", muted="#898781", grid="#e1e0d9", axis="#c3c2b7",
-                  accent="#2a78d6", other="#b4b2aa", line2="#898781", border="#e9e8e2"),
-    "dark": dict(surface="#1a1a19", ink="#ffffff", ink2="#c3c2b7", muted="#898781", grid="#2c2c2a", axis="#383835",
-                 accent="#3987e5", other="#62615c", line2="#898781", border="#2c2c2a"),
+    "light": dict(surface="#ffffff", ink="#0f172a", ink2="#475569", muted="#94a3b8", grid="#edf1f5", axis="#cbd5e1",
+                  accent="#0d9488", other="#d5dce6", line2="#94a3b8", border="#e6ece9", pill="#f0fdfa",
+                  pill_ink="#0f766e", kpi="#0d9488", kpi_bg="#f0fdfa"),
+    "dark": dict(surface="#0d1117", ink="#f1f5f9", ink2="#cbd5e1", muted="#7d8899", grid="#1b222c", axis="#2b3443",
+                 accent="#2dd4bf", other="#2b3443", line2="#7d8899", border="#232a35", pill="#042f2e",
+                 pill_ink="#99f6e4", kpi="#2dd4bf", kpi_bg="#0b2a28"),
 }
 FONT = "system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif"
 W = 840              # chart width, px (the docs show every chart at this width)
-PAD = 22             # outer padding
+PAD = 26             # outer padding
 ROW = 26             # one bar's row
 BAR = 14             # bar thickness (<= 24)
 GROUP_BAR = 13       # bars in a group: 2 px apart
@@ -134,18 +136,18 @@ class Svg:
         return (f'<svg xmlns="http://www.w3.org/2000/svg" width="{self.w}" height="{height:.0f}" '
                 f'viewBox="0 0 {self.w} {height:.0f}" role="img" aria-labelledby="title desc" font-family="{FONT}">\n'
                 f'<title id="title">{esc(title)}</title>\n<desc id="desc">{esc(desc)}</desc>\n'
-                f'<rect x="0.5" y="0.5" width="{self.w - 1}" height="{height - 1:.0f}" rx="8" fill="{c["surface"]}"'
+                f'<rect x="0.5" y="0.5" width="{self.w - 1}" height="{height - 1:.0f}" rx="14" fill="{c["surface"]}"'
                 f' stroke="{c["border"]}"/>\n' + "\n".join(self.parts) + "\n</svg>\n")
 
 
 def header(g, title, subtitle, legend=None, line_legend=False):
     """Title, subtitle and legend; returns the y below them."""
-    y = PAD + 16
-    g.text(PAD, y, title, size=16, weight=600)
+    y = PAD + 18
+    g.text(PAD, y, title, size=19, weight=700)
     y += 6
-    for ln in wrap(subtitle, 12.5, g.w - 2 * PAD):
-        y += 18
-        g.text(PAD, y, ln, size=12.5, color="ink2")
+    for ln in wrap(subtitle, 13, g.w - 2 * PAD):
+        y += 19
+        g.text(PAD, y, ln, size=13, color="ink2")
     if legend:
         y += 24
         x = PAD
@@ -157,8 +159,8 @@ def header(g, title, subtitle, legend=None, line_legend=False):
                       f' stroke-width="2"/>')
                 x += 24
             else:
-                g.add(f'<rect x="{x:.1f}" y="{y - 10:.1f}" width="11" height="11" rx="2" fill="{g.c[color]}"/>')
-                x += 17
+                g.add(f'<rect x="{x:.1f}" y="{y - 10:.1f}" width="22" height="10" rx="5" fill="{g.c[color]}"/>')
+                x += 30
             g.text(x, y, label, size=12.5, color="ink2")
             x += text_w(label, 12.5) + 22
     return y
@@ -323,6 +325,61 @@ def line_chart(theme, title, subtitle, panels, legend, note=None, desc=""):
                    color="ink" if s == 0 else "ink2", weight=600 if s == 0 else 400,
                    anchor="start" if last else "middle", num=True, halo=True)
     y = footer(g, y0 + ph + 26, note)
+    return g.doc(y, title, desc or subtitle)
+
+
+def ratio(ours, theirs, kind):
+    """The pill's text: how many times faster ("lat": lower is better) or how many times the requests/s."""
+    r = theirs / ours if kind == "lat" else ours / theirs
+    return f"{r:.1f}× faster" if kind == "lat" else (f"{r:.2f}× more" if r < 1.95 else f"{r:.1f}× more")
+
+
+def hero_chart(theme, title, subtitle, kpis, panels, legend, note=None, desc=""):
+    """The README's top charts: the speed-ups as big numbers, then one row per measurement with StartLux-Prism's bar
+    over the other engine's, on the row's own scale (the slower engine's bar spans it), the values at the bar ends and
+    the ratio in a pill. kpis: [(big number, caption)]; a panel: dict(head, kind ("lat": lower is better, or "tput"),
+    rows: [(label, ours, theirs)])."""
+    g = Svg(theme)
+    c = g.c
+    y = header(g, title, subtitle, legend)
+    if kpis:
+        y += 20
+        gap = 12
+        tw = (g.w - 2 * PAD - gap * (len(kpis) - 1)) / len(kpis)
+        for i, (big, cap) in enumerate(kpis):
+            tx = PAD + i * (tw + gap)
+            g.add(f'<rect x="{tx:.1f}" y="{y:.1f}" width="{tw:.1f}" height="74" rx="12" fill="{c["kpi_bg"]}"/>')
+            g.text(tx + 16, y + 40, big, size=30, color="kpi", weight=700, num=True)
+            g.text(tx + 16, y + 61, cap, size=12, color="ink2")
+        y += 74
+    lw = max(text_w(lbl, 13.5) for p in panels for lbl, _, _ in p["rows"]) + 28
+    pill_w, vw, bh, gap2, step = 96, 64, 13, 3, 50
+    x0 = PAD + lw
+    plot = g.w - PAD - pill_w - 16 - vw - x0
+    fmt = lambda v: f"{v:,.1f}" if v >= 10 else f"{v:.2f}"              # noqa: E731
+    for p in panels:
+        y += 36
+        g.add(f'<text x="{PAD}" y="{y:.1f}" font-size="11.5" fill="{c["muted"]}" font-weight="600" '
+              f'letter-spacing="0.06em">{esc(p["head"].upper())}</text>')
+        y += 14
+        for label, ours, theirs in p["rows"]:
+            cy = y + bh + gap2 / 2
+            g.text(PAD, cy + 4.5, label, size=13.5, weight=500)
+            m = max(ours, theirs)
+            for k, (v, color, ink, weight) in enumerate(((ours, "accent", "ink", 700), (theirs, "other", "ink2", 400))):
+                by = y + k * (bh + gap2)
+                w = max(v / m * plot, bh)
+                name = legend[k][1]
+                g.add(f'<rect x="{x0:.1f}" y="{by:.1f}" width="{w:.1f}" height="{bh}" rx="{bh / 2}" '
+                      f'fill="{c[color]}"><title>{esc(label)}, {esc(name)}: {fmt(v)}</title></rect>')
+                g.text(x0 + w + 8, by + 10.5, fmt(v), size=12.5, color=ink, weight=weight, num=True)
+            px = g.w - PAD - pill_w
+            g.add(f'<rect x="{px:.1f}" y="{cy - 11:.1f}" width="{pill_w}" height="22" rx="11" fill="{c["pill"]}"/>')
+            g.text(px + pill_w / 2, cy + 4.3, ratio(ours, theirs, p["kind"]), size=12, color="pill_ink",
+                   anchor="middle", weight=700)
+            y += step
+        y -= step - (2 * bh + gap2)
+    y = footer(g, y + 14, note)
     return g.doc(y, title, desc or subtitle)
 
 
@@ -542,23 +599,19 @@ def v11_official_throughput(theme):
 
 @chart
 def v11_hero(theme):
-    return group_chart(
+    return hero_chart(
         theme, "StartLux-Decision v1.1 27B AutoThink on one H200",
-        "StartLux-Prism int8 against the model's official engine (Startlux-decide-inference with its release flags on vLLM "
-        "0.31) in FP8, its faster setting; the same requests to both.",
-        [],
-        [dict(head="One request at a time: mean ms per request (lower is better)",
-              groups=["One question, ~256 tokens", "One question, ~8,192 tokens", "The README's three questions",
-                      "The same, with thoughts"],
-              vals=[(19.0, 53.1), (439.8, 531.2), (17.4, 92.9), (785.1, 1296.0)], unit="ms",
-              extra=["2.8x faster", "1.2x faster", "5.3x faster", "1.7x faster"]),
-         dict(head="JevBench's 231 items from many clients: requests per second (higher is better)",
-              groups=["Read-outs, 1 client", "Read-outs, 64 clients", "With thoughts, 64 clients"],
-              vals=[(24.2, 12.1), (30.7, 26.3), (7.61, 6.52)], unit="requests/s",
-              extra=["2.0x", "1.17x", "1.17x"])],
+        "StartLux-Prism int8 against the official engine (vLLM 0.31, FP8), the same requests to both.",
+        [("2.8×", "faster on a short question"), ("5.3×", "faster on three questions"), ("1.7×", "faster with thoughts"),
+         ("1.17×", "the throughput, 64 clients")],
+        [dict(head="One request at a time  ·  ms, lower is better", kind="lat",
+              rows=[("Short question, ~256 tokens", 19.0, 53.1), ("Long question, ~8,192 tokens", 439.8, 531.2),
+                    ("The README's three questions", 17.4, 92.9), ("Three questions, with thoughts", 785.1, 1296.0)]),
+         dict(head="JevBench, 231 items  ·  requests/s, higher is better", kind="tput",
+              rows=[("1 client", 24.2, 12.1), ("64 clients", 30.7, 26.3), ("64 clients, with thoughts", 7.61, 6.52)])],
         legend=[("accent", "StartLux-Prism int8"), ("other", "official engine, FP8")],
-        note="Same accuracy on StartLux-Decision v1's evaluation suites with thoughts: 92.94 (StartLux-Prism) and 92.83 "
-             "(FP8; 92.97 for the official BF16 server). 2026-10-13/14.")
+        note="Each row's bars share one scale. The official engine: Startlux-decide-inference with its release flags. "
+             "Methods and every run: docs/benchmarks.md.")
 
 
 # StartLux-Decision v1 27B against the official engine in FP8 (docs/benchmarks.md): mean ms one request at a time
@@ -568,21 +621,24 @@ V1_OFFICIAL = dict(lat=[(18.9, 54.5), (438.5, 539.1), (17.2, 96.4)], tput=[(24.3
 
 @chart
 def v1_hero(theme):
-    lat, tput = V1_OFFICIAL["lat"], V1_OFFICIAL["tput"]
-    return group_chart(
+    (s, s2), (l8, l82), (t3, t32) = V1_OFFICIAL["lat"]
+    (c1, c12), (c64, c642) = V1_OFFICIAL["tput"]
+    return hero_chart(
         theme, "StartLux-Decision v1 27B on one H200",
-        "StartLux-Prism int8 against the official engine (Startlux-decide-inference with its release flags on vLLM "
-        "0.31) in FP8, its faster setting; the same requests to both. v1 answers in one pass.",
-        [],
-        [dict(head="One request at a time: mean ms per request (lower is better)",
-              groups=["One question, ~256 tokens", "One question, ~8,192 tokens", "The README's three questions"],
-              vals=lat, unit="ms", extra=[f"{b / a:.1f}x faster" for a, b in lat]),
-         dict(head="JevBench's 231 items: requests per second (higher is better)",
-              groups=["1 client", "64 clients"], vals=tput, unit="requests/s",
-              extra=[f"{a / b:.2f}x".replace(".00x", "x") for a, b in tput])],
+        "StartLux-Prism int8 against the official engine (vLLM 0.31, FP8), the same requests to both. v1 answers in one "
+        "pass.",
+        [(ratio(s, s2, "lat").split()[0], "faster on a short question"),
+         (ratio(t3, t32, "lat").split()[0], "faster on three questions"),
+         (ratio(c1, c12, "tput").split()[0], "the throughput, 1 client"),
+         (ratio(c64, c642, "tput").split()[0], "the throughput, 64 clients")],
+        [dict(head="One request at a time  ·  ms, lower is better", kind="lat",
+              rows=[("Short question, ~256 tokens", s, s2), ("Long question, ~8,192 tokens", l8, l82),
+                    ("The README's three questions", t3, t32)]),
+         dict(head="JevBench, 231 items  ·  requests/s, higher is better", kind="tput",
+              rows=[("1 client", c1, c12), ("64 clients", c64, c642)])],
         legend=[("accent", "StartLux-Prism int8"), ("other", "official engine, FP8")],
-        note="Official engine: Startlux-decide-inference 1.1.0 (commit b70404d), which serves v1 folders, from the BF16 "
-             "release (FP8: vLLM's --quantization fp8). StartLux-Prism int8 from the Q8_0 GGUF release. 2026-10-15.")
+        note="Each row's bars share one scale. The official engine: Startlux-decide-inference with its release flags, "
+             "from the BF16 release. Methods and every run: docs/benchmarks.md.")
 
 
 V11_W4_SUITES, V11_W4_JB = 93.07, 226   # the Q4_K_M file in W4A8 (docs/benchmarks.md)

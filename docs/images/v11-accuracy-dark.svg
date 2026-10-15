@@ -1,54 +1,54 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="840" height="308" viewBox="0 0 840 308" role="img" aria-labelledby="title desc" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif">
+<svg xmlns="http://www.w3.org/2000/svg" width="840" height="320" viewBox="0 0 840 320" role="img" aria-labelledby="title desc" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif">
 <title id="title">StartLux-Decision v1.1 27B AutoThink: the official engine's accuracy</title>
 <desc id="desc">With thoughts (think_mode auto, gate 0.9), every item once in file order. StartLux-Prism int8 on the Q8_0 file and W4A8 on the Q4_K_M file; the official engine (Startlux-decide-inference on vLLM 0.31) on the BF16 release, in BF16 and FP8.</desc>
-<rect x="0.5" y="0.5" width="839" height="307" rx="8" fill="#1a1a19" stroke="#2c2c2a"/>
-<text x="22.0" y="38.0" font-size="16" fill="#ffffff" text-anchor="start" font-weight="600">StartLux-Decision v1.1 27B AutoThink: the official engine's accuracy</text>
-<text x="22.0" y="62.0" font-size="12.5" fill="#c3c2b7" text-anchor="start" font-weight="400">With thoughts (think_mode auto, gate 0.9), every item once in file order. StartLux-Prism int8 on the Q8_0 file and W4A8 on the Q4_K_M</text>
-<text x="22.0" y="80.0" font-size="12.5" fill="#c3c2b7" text-anchor="start" font-weight="400">file; the official engine (Startlux-decide-inference on vLLM 0.31) on the BF16 release, in BF16 and FP8.</text>
-<text x="170.2" y="107.0" font-size="12.5" fill="#ffffff" text-anchor="start" font-weight="600">StartLux-Decision v1's seven evaluation suites</text>
-<text x="170.2" y="124.0" font-size="12.5" fill="#ffffff" text-anchor="start" font-weight="600">(12,351 decisions): average accuracy, %</text>
-<text x="170.2" y="255.0" font-size="11" fill="#898781" text-anchor="middle" font-weight="400" style="font-variant-numeric: tabular-nums">0</text>
-<line x1="223.7" y1="132.0" x2="223.7" y2="240.0" stroke="#2c2c2a" stroke-width="1" shape-rendering="crispEdges"/>
-<text x="223.7" y="255.0" font-size="11" fill="#898781" text-anchor="middle" font-weight="400" style="font-variant-numeric: tabular-nums">20</text>
-<line x1="277.2" y1="132.0" x2="277.2" y2="240.0" stroke="#2c2c2a" stroke-width="1" shape-rendering="crispEdges"/>
-<text x="277.2" y="255.0" font-size="11" fill="#898781" text-anchor="middle" font-weight="400" style="font-variant-numeric: tabular-nums">40</text>
-<line x1="330.6" y1="132.0" x2="330.6" y2="240.0" stroke="#2c2c2a" stroke-width="1" shape-rendering="crispEdges"/>
-<text x="330.6" y="255.0" font-size="11" fill="#898781" text-anchor="middle" font-weight="400" style="font-variant-numeric: tabular-nums">60</text>
-<line x1="384.1" y1="132.0" x2="384.1" y2="240.0" stroke="#2c2c2a" stroke-width="1" shape-rendering="crispEdges"/>
-<text x="384.1" y="255.0" font-size="11" fill="#898781" text-anchor="middle" font-weight="400" style="font-variant-numeric: tabular-nums">80</text>
-<line x1="437.5" y1="132.0" x2="437.5" y2="240.0" stroke="#2c2c2a" stroke-width="1" shape-rendering="crispEdges"/>
-<text x="437.5" y="255.0" font-size="11" fill="#898781" text-anchor="middle" font-weight="400" style="font-variant-numeric: tabular-nums">100</text>
-<line x1="170.2" y1="132.0" x2="170.2" y2="240.0" stroke="#383835" stroke-width="1" shape-rendering="crispEdges"/>
-<path d="M170.2,142.0 H414.7 A4.0,4.0 0 0 1 418.7,146.0 V152.0 A4.0,4.0 0 0 1 414.7,156.0 H170.2 Z" fill="#3987e5"><title>StartLux-Prism int8: 92.94 %</title></path>
-<text x="424.7" y="153.3" font-size="12" fill="#ffffff" text-anchor="start" font-weight="600" style="font-variant-numeric: tabular-nums" stroke="#1a1a19" stroke-width="3" stroke-linejoin="round" paint-order="stroke">92.94</text>
-<path d="M170.2,168.0 H415.0 A4.0,4.0 0 0 1 419.0,172.0 V178.0 A4.0,4.0 0 0 1 415.0,182.0 H170.2 Z" fill="#3987e5"><title>StartLux-Prism W4A8: 93.07 %</title></path>
-<text x="425.0" y="179.3" font-size="12" fill="#ffffff" text-anchor="start" font-weight="600" style="font-variant-numeric: tabular-nums" stroke="#1a1a19" stroke-width="3" stroke-linejoin="round" paint-order="stroke">93.07</text>
-<path d="M170.2,194.0 H414.8 A4.0,4.0 0 0 1 418.8,198.0 V204.0 A4.0,4.0 0 0 1 414.8,208.0 H170.2 Z" fill="#62615c"><title>official engine, BF16: 92.97 %</title></path>
-<text x="424.8" y="205.3" font-size="12" fill="#c3c2b7" text-anchor="start" font-weight="400" style="font-variant-numeric: tabular-nums" stroke="#1a1a19" stroke-width="3" stroke-linejoin="round" paint-order="stroke">92.97</text>
-<path d="M170.2,220.0 H414.4 A4.0,4.0 0 0 1 418.4,224.0 V230.0 A4.0,4.0 0 0 1 414.4,234.0 H170.2 Z" fill="#62615c"><title>official engine, FP8: 92.83 %</title></path>
-<text x="424.4" y="231.3" font-size="12" fill="#c3c2b7" text-anchor="start" font-weight="400" style="font-variant-numeric: tabular-nums" stroke="#1a1a19" stroke-width="3" stroke-linejoin="round" paint-order="stroke">92.83</text>
-<text x="509.1" y="124.0" font-size="12.5" fill="#ffffff" text-anchor="start" font-weight="600">JevBench public: items right, of 231</text>
-<text x="509.1" y="255.0" font-size="11" fill="#898781" text-anchor="middle" font-weight="400" style="font-variant-numeric: tabular-nums">0</text>
-<line x1="569.4" y1="132.0" x2="569.4" y2="240.0" stroke="#2c2c2a" stroke-width="1" shape-rendering="crispEdges"/>
-<text x="569.4" y="255.0" font-size="11" fill="#898781" text-anchor="middle" font-weight="400" style="font-variant-numeric: tabular-nums">50</text>
-<line x1="629.6" y1="132.0" x2="629.6" y2="240.0" stroke="#2c2c2a" stroke-width="1" shape-rendering="crispEdges"/>
-<text x="629.6" y="255.0" font-size="11" fill="#898781" text-anchor="middle" font-weight="400" style="font-variant-numeric: tabular-nums">100</text>
-<line x1="689.9" y1="132.0" x2="689.9" y2="240.0" stroke="#2c2c2a" stroke-width="1" shape-rendering="crispEdges"/>
-<text x="689.9" y="255.0" font-size="11" fill="#898781" text-anchor="middle" font-weight="400" style="font-variant-numeric: tabular-nums">150</text>
-<line x1="750.1" y1="132.0" x2="750.1" y2="240.0" stroke="#2c2c2a" stroke-width="1" shape-rendering="crispEdges"/>
-<text x="750.1" y="255.0" font-size="11" fill="#898781" text-anchor="middle" font-weight="400" style="font-variant-numeric: tabular-nums">200</text>
-<line x1="509.1" y1="132.0" x2="509.1" y2="240.0" stroke="#383835" stroke-width="1" shape-rendering="crispEdges"/>
-<path d="M509.1,142.0 H775.0 A4.0,4.0 0 0 1 779.0,146.0 V152.0 A4.0,4.0 0 0 1 775.0,156.0 H509.1 Z" fill="#3987e5"><title>StartLux-Prism int8: 224 of 231</title></path>
-<text x="785.0" y="153.3" font-size="12" fill="#ffffff" text-anchor="start" font-weight="600" style="font-variant-numeric: tabular-nums" stroke="#1a1a19" stroke-width="3" stroke-linejoin="round" paint-order="stroke">224</text>
-<path d="M509.1,168.0 H777.4 A4.0,4.0 0 0 1 781.4,172.0 V178.0 A4.0,4.0 0 0 1 777.4,182.0 H509.1 Z" fill="#3987e5"><title>StartLux-Prism W4A8: 226 of 231</title></path>
-<text x="787.4" y="179.3" font-size="12" fill="#ffffff" text-anchor="start" font-weight="600" style="font-variant-numeric: tabular-nums" stroke="#1a1a19" stroke-width="3" stroke-linejoin="round" paint-order="stroke">226</text>
-<path d="M509.1,194.0 H777.4 A4.0,4.0 0 0 1 781.4,198.0 V204.0 A4.0,4.0 0 0 1 777.4,208.0 H509.1 Z" fill="#62615c"><title>official engine, BF16: 226 of 231</title></path>
-<text x="787.4" y="205.3" font-size="12" fill="#c3c2b7" text-anchor="start" font-weight="400" style="font-variant-numeric: tabular-nums" stroke="#1a1a19" stroke-width="3" stroke-linejoin="round" paint-order="stroke">226</text>
-<path d="M509.1,220.0 H776.2 A4.0,4.0 0 0 1 780.2,224.0 V230.0 A4.0,4.0 0 0 1 776.2,234.0 H509.1 Z" fill="#62615c"><title>official engine, FP8: 225 of 231</title></path>
-<text x="786.2" y="231.3" font-size="12" fill="#c3c2b7" text-anchor="start" font-weight="400" style="font-variant-numeric: tabular-nums" stroke="#1a1a19" stroke-width="3" stroke-linejoin="round" paint-order="stroke">225</text>
-<text x="158.2" y="153.3" font-size="12.5" fill="#ffffff" text-anchor="end" font-weight="600">StartLux-Prism int8</text>
-<text x="158.2" y="179.3" font-size="12.5" fill="#ffffff" text-anchor="end" font-weight="600">StartLux-Prism W4A8</text>
-<text x="158.2" y="205.3" font-size="12.5" fill="#c3c2b7" text-anchor="end" font-weight="400">official engine, BF16</text>
-<text x="158.2" y="231.3" font-size="12.5" fill="#c3c2b7" text-anchor="end" font-weight="400">official engine, FP8</text>
-<text x="22.0" y="286.0" font-size="11.5" fill="#898781" text-anchor="start" font-weight="400">Every suite, and the GPU each server ran on: docs/benchmarks.md.</text>
+<rect x="0.5" y="0.5" width="839" height="319" rx="14" fill="#0d1117" stroke="#232a35"/>
+<text x="26.0" y="44.0" font-size="19" fill="#f1f5f9" text-anchor="start" font-weight="700">StartLux-Decision v1.1 27B AutoThink: the official engine's accuracy</text>
+<text x="26.0" y="69.0" font-size="13" fill="#cbd5e1" text-anchor="start" font-weight="400">With thoughts (think_mode auto, gate 0.9), every item once in file order. StartLux-Prism int8 on the Q8_0 file and W4A8 on the</text>
+<text x="26.0" y="88.0" font-size="13" fill="#cbd5e1" text-anchor="start" font-weight="400">Q4_K_M file; the official engine (Startlux-decide-inference on vLLM 0.31) on the BF16 release, in BF16 and FP8.</text>
+<text x="174.2" y="115.0" font-size="12.5" fill="#f1f5f9" text-anchor="start" font-weight="600">StartLux-Decision v1's seven evaluation suites</text>
+<text x="174.2" y="132.0" font-size="12.5" fill="#f1f5f9" text-anchor="start" font-weight="600">(12,351 decisions): average accuracy, %</text>
+<text x="174.2" y="263.0" font-size="11" fill="#7d8899" text-anchor="middle" font-weight="400" style="font-variant-numeric: tabular-nums">0</text>
+<line x1="226.9" y1="140.0" x2="226.9" y2="248.0" stroke="#1b222c" stroke-width="1" shape-rendering="crispEdges"/>
+<text x="226.9" y="263.0" font-size="11" fill="#7d8899" text-anchor="middle" font-weight="400" style="font-variant-numeric: tabular-nums">20</text>
+<line x1="279.6" y1="140.0" x2="279.6" y2="248.0" stroke="#1b222c" stroke-width="1" shape-rendering="crispEdges"/>
+<text x="279.6" y="263.0" font-size="11" fill="#7d8899" text-anchor="middle" font-weight="400" style="font-variant-numeric: tabular-nums">40</text>
+<line x1="332.2" y1="140.0" x2="332.2" y2="248.0" stroke="#1b222c" stroke-width="1" shape-rendering="crispEdges"/>
+<text x="332.2" y="263.0" font-size="11" fill="#7d8899" text-anchor="middle" font-weight="400" style="font-variant-numeric: tabular-nums">60</text>
+<line x1="384.9" y1="140.0" x2="384.9" y2="248.0" stroke="#1b222c" stroke-width="1" shape-rendering="crispEdges"/>
+<text x="384.9" y="263.0" font-size="11" fill="#7d8899" text-anchor="middle" font-weight="400" style="font-variant-numeric: tabular-nums">80</text>
+<line x1="437.5" y1="140.0" x2="437.5" y2="248.0" stroke="#1b222c" stroke-width="1" shape-rendering="crispEdges"/>
+<text x="437.5" y="263.0" font-size="11" fill="#7d8899" text-anchor="middle" font-weight="400" style="font-variant-numeric: tabular-nums">100</text>
+<line x1="174.2" y1="140.0" x2="174.2" y2="248.0" stroke="#2b3443" stroke-width="1" shape-rendering="crispEdges"/>
+<path d="M174.2,150.0 H415.0 A4.0,4.0 0 0 1 419.0,154.0 V160.0 A4.0,4.0 0 0 1 415.0,164.0 H174.2 Z" fill="#2dd4bf"><title>StartLux-Prism int8: 92.94 %</title></path>
+<text x="425.0" y="161.3" font-size="12" fill="#f1f5f9" text-anchor="start" font-weight="600" style="font-variant-numeric: tabular-nums" stroke="#0d1117" stroke-width="3" stroke-linejoin="round" paint-order="stroke">92.94</text>
+<path d="M174.2,176.0 H415.3 A4.0,4.0 0 0 1 419.3,180.0 V186.0 A4.0,4.0 0 0 1 415.3,190.0 H174.2 Z" fill="#2dd4bf"><title>StartLux-Prism W4A8: 93.07 %</title></path>
+<text x="425.3" y="187.3" font-size="12" fill="#f1f5f9" text-anchor="start" font-weight="600" style="font-variant-numeric: tabular-nums" stroke="#0d1117" stroke-width="3" stroke-linejoin="round" paint-order="stroke">93.07</text>
+<path d="M174.2,202.0 H415.0 A4.0,4.0 0 0 1 419.0,206.0 V212.0 A4.0,4.0 0 0 1 415.0,216.0 H174.2 Z" fill="#2b3443"><title>official engine, BF16: 92.97 %</title></path>
+<text x="425.0" y="213.3" font-size="12" fill="#cbd5e1" text-anchor="start" font-weight="400" style="font-variant-numeric: tabular-nums" stroke="#0d1117" stroke-width="3" stroke-linejoin="round" paint-order="stroke">92.97</text>
+<path d="M174.2,228.0 H414.7 A4.0,4.0 0 0 1 418.7,232.0 V238.0 A4.0,4.0 0 0 1 414.7,242.0 H174.2 Z" fill="#2b3443"><title>official engine, FP8: 92.83 %</title></path>
+<text x="424.7" y="239.3" font-size="12" fill="#cbd5e1" text-anchor="start" font-weight="400" style="font-variant-numeric: tabular-nums" stroke="#0d1117" stroke-width="3" stroke-linejoin="round" paint-order="stroke">92.83</text>
+<text x="509.1" y="132.0" font-size="12.5" fill="#f1f5f9" text-anchor="start" font-weight="600">JevBench public: items right, of 231</text>
+<text x="509.1" y="263.0" font-size="11" fill="#7d8899" text-anchor="middle" font-weight="400" style="font-variant-numeric: tabular-nums">0</text>
+<line x1="568.5" y1="140.0" x2="568.5" y2="248.0" stroke="#1b222c" stroke-width="1" shape-rendering="crispEdges"/>
+<text x="568.5" y="263.0" font-size="11" fill="#7d8899" text-anchor="middle" font-weight="400" style="font-variant-numeric: tabular-nums">50</text>
+<line x1="627.9" y1="140.0" x2="627.9" y2="248.0" stroke="#1b222c" stroke-width="1" shape-rendering="crispEdges"/>
+<text x="627.9" y="263.0" font-size="11" fill="#7d8899" text-anchor="middle" font-weight="400" style="font-variant-numeric: tabular-nums">100</text>
+<line x1="687.3" y1="140.0" x2="687.3" y2="248.0" stroke="#1b222c" stroke-width="1" shape-rendering="crispEdges"/>
+<text x="687.3" y="263.0" font-size="11" fill="#7d8899" text-anchor="middle" font-weight="400" style="font-variant-numeric: tabular-nums">150</text>
+<line x1="746.6" y1="140.0" x2="746.6" y2="248.0" stroke="#1b222c" stroke-width="1" shape-rendering="crispEdges"/>
+<text x="746.6" y="263.0" font-size="11" fill="#7d8899" text-anchor="middle" font-weight="400" style="font-variant-numeric: tabular-nums">200</text>
+<line x1="509.1" y1="140.0" x2="509.1" y2="248.0" stroke="#2b3443" stroke-width="1" shape-rendering="crispEdges"/>
+<path d="M509.1,150.0 H771.1 A4.0,4.0 0 0 1 775.1,154.0 V160.0 A4.0,4.0 0 0 1 771.1,164.0 H509.1 Z" fill="#2dd4bf"><title>StartLux-Prism int8: 224 of 231</title></path>
+<text x="781.1" y="161.3" font-size="12" fill="#f1f5f9" text-anchor="start" font-weight="600" style="font-variant-numeric: tabular-nums" stroke="#0d1117" stroke-width="3" stroke-linejoin="round" paint-order="stroke">224</text>
+<path d="M509.1,176.0 H773.5 A4.0,4.0 0 0 1 777.5,180.0 V186.0 A4.0,4.0 0 0 1 773.5,190.0 H509.1 Z" fill="#2dd4bf"><title>StartLux-Prism W4A8: 226 of 231</title></path>
+<text x="783.5" y="187.3" font-size="12" fill="#f1f5f9" text-anchor="start" font-weight="600" style="font-variant-numeric: tabular-nums" stroke="#0d1117" stroke-width="3" stroke-linejoin="round" paint-order="stroke">226</text>
+<path d="M509.1,202.0 H773.5 A4.0,4.0 0 0 1 777.5,206.0 V212.0 A4.0,4.0 0 0 1 773.5,216.0 H509.1 Z" fill="#2b3443"><title>official engine, BF16: 226 of 231</title></path>
+<text x="783.5" y="213.3" font-size="12" fill="#cbd5e1" text-anchor="start" font-weight="400" style="font-variant-numeric: tabular-nums" stroke="#0d1117" stroke-width="3" stroke-linejoin="round" paint-order="stroke">226</text>
+<path d="M509.1,228.0 H772.3 A4.0,4.0 0 0 1 776.3,232.0 V238.0 A4.0,4.0 0 0 1 772.3,242.0 H509.1 Z" fill="#2b3443"><title>official engine, FP8: 225 of 231</title></path>
+<text x="782.3" y="239.3" font-size="12" fill="#cbd5e1" text-anchor="start" font-weight="400" style="font-variant-numeric: tabular-nums" stroke="#0d1117" stroke-width="3" stroke-linejoin="round" paint-order="stroke">225</text>
+<text x="162.2" y="161.3" font-size="12.5" fill="#f1f5f9" text-anchor="end" font-weight="600">StartLux-Prism int8</text>
+<text x="162.2" y="187.3" font-size="12.5" fill="#f1f5f9" text-anchor="end" font-weight="600">StartLux-Prism W4A8</text>
+<text x="162.2" y="213.3" font-size="12.5" fill="#cbd5e1" text-anchor="end" font-weight="400">official engine, BF16</text>
+<text x="162.2" y="239.3" font-size="12.5" fill="#cbd5e1" text-anchor="end" font-weight="400">official engine, FP8</text>
+<text x="26.0" y="294.0" font-size="11.5" fill="#7d8899" text-anchor="start" font-weight="400">Every suite, and the GPU each server ran on: docs/benchmarks.md.</text>
 </svg>

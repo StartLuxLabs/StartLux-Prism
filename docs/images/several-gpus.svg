@@ -1,54 +1,55 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="840" height="350" viewBox="0 0 840 350" role="img" aria-labelledby="title desc" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif">
+<svg xmlns="http://www.w3.org/2000/svg" width="840" height="381" viewBox="0 0 840 381" role="img" aria-labelledby="title desc" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif">
 <title id="title">Several GPUs: StartLux-Decision v1.1 27B on H200s</title>
 <desc id="desc">StartLux-Prism int8, JevBench. Data parallelism (DP: whole servers behind the router) for throughput, tensor parallelism (TP: one model split over the GPUs) for the time per request. Every configuration answers as one GPU does, bit for bit; one GPU in gray, for scale.</desc>
-<rect x="0.5" y="0.5" width="839" height="349" rx="8" fill="#fcfcfb" stroke="#e9e8e2"/>
-<text x="22.0" y="38.0" font-size="16" fill="#0b0b0b" text-anchor="start" font-weight="600">Several GPUs: StartLux-Decision v1.1 27B on H200s</text>
-<text x="22.0" y="62.0" font-size="12.5" fill="#52514e" text-anchor="start" font-weight="400">StartLux-Prism int8, JevBench. Data parallelism (DP: whole servers behind the router) for throughput, tensor parallelism (TP: one model</text>
-<text x="22.0" y="80.0" font-size="12.5" fill="#52514e" text-anchor="start" font-weight="400">split over the GPUs) for the time per request. Every configuration answers as one GPU does, bit for bit; one GPU in gray, for scale.</text>
-<text x="167.8" y="107.0" font-size="12.5" fill="#0b0b0b" text-anchor="start" font-weight="600">Read-outs from many clients: requests/s (higher is</text>
-<text x="167.8" y="124.0" font-size="12.5" fill="#0b0b0b" text-anchor="start" font-weight="600">better)</text>
-<text x="167.8" y="281.0" font-size="11" fill="#898781" text-anchor="middle" font-weight="400" style="font-variant-numeric: tabular-nums">0</text>
-<line x1="241.8" y1="132.0" x2="241.8" y2="266.0" stroke="#e1e0d9" stroke-width="1" shape-rendering="crispEdges"/>
-<text x="241.8" y="281.0" font-size="11" fill="#898781" text-anchor="middle" font-weight="400" style="font-variant-numeric: tabular-nums">50</text>
-<line x1="315.7" y1="132.0" x2="315.7" y2="266.0" stroke="#e1e0d9" stroke-width="1" shape-rendering="crispEdges"/>
-<text x="315.7" y="281.0" font-size="11" fill="#898781" text-anchor="middle" font-weight="400" style="font-variant-numeric: tabular-nums">100</text>
-<line x1="389.7" y1="132.0" x2="389.7" y2="266.0" stroke="#e1e0d9" stroke-width="1" shape-rendering="crispEdges"/>
-<text x="389.7" y="281.0" font-size="11" fill="#898781" text-anchor="middle" font-weight="400" style="font-variant-numeric: tabular-nums">150</text>
-<line x1="167.8" y1="132.0" x2="167.8" y2="266.0" stroke="#c3c2b7" stroke-width="1" shape-rendering="crispEdges"/>
-<path d="M167.8,142.0 H209.5 A4.0,4.0 0 0 1 213.5,146.0 V152.0 A4.0,4.0 0 0 1 209.5,156.0 H167.8 Z" fill="#b4b2aa"><title>one GPU: 30.9 requests/s</title></path>
-<text x="219.5" y="153.3" font-size="12" fill="#52514e" text-anchor="start" font-weight="400" style="font-variant-numeric: tabular-nums" stroke="#fcfcfb" stroke-width="3" stroke-linejoin="round" paint-order="stroke">30.9</text>
-<path d="M167.8,168.0 H227.9 A4.0,4.0 0 0 1 231.9,172.0 V178.0 A4.0,4.0 0 0 1 227.9,182.0 H167.8 Z" fill="#2a78d6"><title>2 GPUs: TP 2: 43.3 (1.40x) requests/s</title></path>
-<text x="237.9" y="179.3" font-size="12" fill="#0b0b0b" text-anchor="start" font-weight="600" style="font-variant-numeric: tabular-nums" stroke="#fcfcfb" stroke-width="3" stroke-linejoin="round" paint-order="stroke">43.3 (1.40x)</text>
-<path d="M167.8,194.0 H243.7 A4.0,4.0 0 0 1 247.7,198.0 V204.0 A4.0,4.0 0 0 1 243.7,208.0 H167.8 Z" fill="#2a78d6"><title>4 GPUs: TP 4: 54.0 (1.75x) requests/s</title></path>
-<text x="253.7" y="205.3" font-size="12" fill="#0b0b0b" text-anchor="start" font-weight="600" style="font-variant-numeric: tabular-nums" stroke="#fcfcfb" stroke-width="3" stroke-linejoin="round" paint-order="stroke">54.0 (1.75x)</text>
-<path d="M167.8,220.0 H291.0 A4.0,4.0 0 0 1 295.0,224.0 V230.0 A4.0,4.0 0 0 1 291.0,234.0 H167.8 Z" fill="#2a78d6"><title>4 GPUs: DP 2 x TP 2: 86.0 (2.78x) requests/s</title></path>
-<text x="301.0" y="231.3" font-size="12" fill="#0b0b0b" text-anchor="start" font-weight="600" style="font-variant-numeric: tabular-nums" stroke="#fcfcfb" stroke-width="3" stroke-linejoin="round" paint-order="stroke">86.0 (2.78x)</text>
-<path d="M167.8,246.0 H343.0 A4.0,4.0 0 0 1 347.0,250.0 V256.0 A4.0,4.0 0 0 1 343.0,260.0 H167.8 Z" fill="#2a78d6"><title>4 GPUs: DP 4: 121.1 (3.92x) requests/s</title></path>
-<text x="353.0" y="257.3" font-size="12" fill="#0b0b0b" text-anchor="start" font-weight="600" style="font-variant-numeric: tabular-nums" stroke="#fcfcfb" stroke-width="3" stroke-linejoin="round" paint-order="stroke">121.1 (3.92x)</text>
-<text x="507.9" y="107.0" font-size="12.5" fill="#0b0b0b" text-anchor="start" font-weight="600">One request at a time, with thoughts: mean ms per</text>
-<text x="507.9" y="124.0" font-size="12.5" fill="#0b0b0b" text-anchor="start" font-weight="600">item (lower is better)</text>
-<text x="507.9" y="281.0" font-size="11" fill="#898781" text-anchor="middle" font-weight="400" style="font-variant-numeric: tabular-nums">0</text>
-<line x1="597.4" y1="132.0" x2="597.4" y2="266.0" stroke="#e1e0d9" stroke-width="1" shape-rendering="crispEdges"/>
-<text x="597.4" y="281.0" font-size="11" fill="#898781" text-anchor="middle" font-weight="400" style="font-variant-numeric: tabular-nums">500</text>
-<line x1="686.9" y1="132.0" x2="686.9" y2="266.0" stroke="#e1e0d9" stroke-width="1" shape-rendering="crispEdges"/>
-<text x="686.9" y="281.0" font-size="11" fill="#898781" text-anchor="middle" font-weight="400" style="font-variant-numeric: tabular-nums">1,000</text>
-<line x1="776.4" y1="132.0" x2="776.4" y2="266.0" stroke="#e1e0d9" stroke-width="1" shape-rendering="crispEdges"/>
-<text x="776.4" y="281.0" font-size="11" fill="#898781" text-anchor="middle" font-weight="400" style="font-variant-numeric: tabular-nums">1,500</text>
-<line x1="507.9" y1="132.0" x2="507.9" y2="266.0" stroke="#c3c2b7" stroke-width="1" shape-rendering="crispEdges"/>
-<path d="M507.9,142.0 H720.3 A4.0,4.0 0 0 1 724.3,146.0 V152.0 A4.0,4.0 0 0 1 720.3,156.0 H507.9 Z" fill="#b4b2aa"><title>one GPU: 1,209 ms</title></path>
-<text x="730.3" y="153.3" font-size="12" fill="#52514e" text-anchor="start" font-weight="400" style="font-variant-numeric: tabular-nums" stroke="#fcfcfb" stroke-width="3" stroke-linejoin="round" paint-order="stroke">1,209</text>
-<path d="M507.9,168.0 H665.4 A4.0,4.0 0 0 1 669.4,172.0 V178.0 A4.0,4.0 0 0 1 665.4,182.0 H507.9 Z" fill="#2a78d6"><title>2 GPUs: TP 2: 902 ms</title></path>
-<text x="675.4" y="179.3" font-size="12" fill="#0b0b0b" text-anchor="start" font-weight="600" style="font-variant-numeric: tabular-nums" stroke="#fcfcfb" stroke-width="3" stroke-linejoin="round" paint-order="stroke">902</text>
-<path d="M507.9,194.0 H641.4 A4.0,4.0 0 0 1 645.4,198.0 V204.0 A4.0,4.0 0 0 1 641.4,208.0 H507.9 Z" fill="#2a78d6"><title>4 GPUs: TP 4: 768 ms</title></path>
-<text x="651.4" y="205.3" font-size="12" fill="#0b0b0b" text-anchor="start" font-weight="600" style="font-variant-numeric: tabular-nums" stroke="#fcfcfb" stroke-width="3" stroke-linejoin="round" paint-order="stroke">768</text>
-<path d="M507.9,220.0 H665.4 A4.0,4.0 0 0 1 669.4,224.0 V230.0 A4.0,4.0 0 0 1 665.4,234.0 H507.9 Z" fill="#2a78d6"><title>4 GPUs: DP 2 x TP 2: 902 ms</title></path>
-<text x="675.4" y="231.3" font-size="12" fill="#0b0b0b" text-anchor="start" font-weight="600" style="font-variant-numeric: tabular-nums" stroke="#fcfcfb" stroke-width="3" stroke-linejoin="round" paint-order="stroke">902</text>
-<text x="513.9" y="257.0" font-size="11.5" fill="#898781" text-anchor="start" font-weight="400" stroke="#fcfcfb" stroke-width="3" stroke-linejoin="round" paint-order="stroke">as one GPU (1,209), plus ~1 ms for the router</text>
-<text x="155.8" y="153.3" font-size="12.5" fill="#52514e" text-anchor="end" font-weight="400">one GPU</text>
-<text x="155.8" y="179.3" font-size="12.5" fill="#0b0b0b" text-anchor="end" font-weight="600">2 GPUs: TP 2</text>
-<text x="155.8" y="205.3" font-size="12.5" fill="#0b0b0b" text-anchor="end" font-weight="600">4 GPUs: TP 4</text>
-<text x="155.8" y="231.3" font-size="12.5" fill="#0b0b0b" text-anchor="end" font-weight="600">4 GPUs: DP 2 x TP 2</text>
-<text x="155.8" y="257.3" font-size="12.5" fill="#0b0b0b" text-anchor="end" font-weight="600">4 GPUs: DP 4</text>
-<text x="22.0" y="312.0" font-size="11.5" fill="#898781" text-anchor="start" font-weight="400">Read-outs: the most requests/s over 32 to 256 clients (one GPU and TP: from 64 clients). With thoughts: the 231 items one at a time, 67 of them</text>
-<text x="22.0" y="328.0" font-size="11.5" fill="#898781" text-anchor="start" font-weight="400">thinking. Second H200 server (NVSwitch), 2026-10-14.</text>
+<rect x="0.5" y="0.5" width="839" height="380" rx="14" fill="#ffffff" stroke="#e6ece9"/>
+<text x="26.0" y="44.0" font-size="19" fill="#0f172a" text-anchor="start" font-weight="700">Several GPUs: StartLux-Decision v1.1 27B on H200s</text>
+<text x="26.0" y="69.0" font-size="13" fill="#475569" text-anchor="start" font-weight="400">StartLux-Prism int8, JevBench. Data parallelism (DP: whole servers behind the router) for throughput, tensor parallelism (TP: one</text>
+<text x="26.0" y="88.0" font-size="13" fill="#475569" text-anchor="start" font-weight="400">model split over the GPUs) for the time per request. Every configuration answers as one GPU does, bit for bit; one GPU in gray,</text>
+<text x="26.0" y="107.0" font-size="13" fill="#475569" text-anchor="start" font-weight="400">for scale.</text>
+<text x="171.8" y="134.0" font-size="12.5" fill="#0f172a" text-anchor="start" font-weight="600">Read-outs from many clients: requests/s (higher is</text>
+<text x="171.8" y="151.0" font-size="12.5" fill="#0f172a" text-anchor="start" font-weight="600">better)</text>
+<text x="171.8" y="308.0" font-size="11" fill="#94a3b8" text-anchor="middle" font-weight="400" style="font-variant-numeric: tabular-nums">0</text>
+<line x1="244.5" y1="159.0" x2="244.5" y2="293.0" stroke="#edf1f5" stroke-width="1" shape-rendering="crispEdges"/>
+<text x="244.5" y="308.0" font-size="11" fill="#94a3b8" text-anchor="middle" font-weight="400" style="font-variant-numeric: tabular-nums">50</text>
+<line x1="317.1" y1="159.0" x2="317.1" y2="293.0" stroke="#edf1f5" stroke-width="1" shape-rendering="crispEdges"/>
+<text x="317.1" y="308.0" font-size="11" fill="#94a3b8" text-anchor="middle" font-weight="400" style="font-variant-numeric: tabular-nums">100</text>
+<line x1="389.7" y1="159.0" x2="389.7" y2="293.0" stroke="#edf1f5" stroke-width="1" shape-rendering="crispEdges"/>
+<text x="389.7" y="308.0" font-size="11" fill="#94a3b8" text-anchor="middle" font-weight="400" style="font-variant-numeric: tabular-nums">150</text>
+<line x1="171.8" y1="159.0" x2="171.8" y2="293.0" stroke="#cbd5e1" stroke-width="1" shape-rendering="crispEdges"/>
+<path d="M171.8,169.0 H212.7 A4.0,4.0 0 0 1 216.7,173.0 V179.0 A4.0,4.0 0 0 1 212.7,183.0 H171.8 Z" fill="#d5dce6"><title>one GPU: 30.9 requests/s</title></path>
+<text x="222.7" y="180.3" font-size="12" fill="#475569" text-anchor="start" font-weight="400" style="font-variant-numeric: tabular-nums" stroke="#ffffff" stroke-width="3" stroke-linejoin="round" paint-order="stroke">30.9</text>
+<path d="M171.8,195.0 H230.7 A4.0,4.0 0 0 1 234.7,199.0 V205.0 A4.0,4.0 0 0 1 230.7,209.0 H171.8 Z" fill="#0d9488"><title>2 GPUs: TP 2: 43.3 (1.40x) requests/s</title></path>
+<text x="240.7" y="206.3" font-size="12" fill="#0f172a" text-anchor="start" font-weight="600" style="font-variant-numeric: tabular-nums" stroke="#ffffff" stroke-width="3" stroke-linejoin="round" paint-order="stroke">43.3 (1.40x)</text>
+<path d="M171.8,221.0 H246.3 A4.0,4.0 0 0 1 250.3,225.0 V231.0 A4.0,4.0 0 0 1 246.3,235.0 H171.8 Z" fill="#0d9488"><title>4 GPUs: TP 4: 54.0 (1.75x) requests/s</title></path>
+<text x="256.3" y="232.3" font-size="12" fill="#0f172a" text-anchor="start" font-weight="600" style="font-variant-numeric: tabular-nums" stroke="#ffffff" stroke-width="3" stroke-linejoin="round" paint-order="stroke">54.0 (1.75x)</text>
+<path d="M171.8,247.0 H292.7 A4.0,4.0 0 0 1 296.7,251.0 V257.0 A4.0,4.0 0 0 1 292.7,261.0 H171.8 Z" fill="#0d9488"><title>4 GPUs: DP 2 x TP 2: 86.0 (2.78x) requests/s</title></path>
+<text x="302.7" y="258.3" font-size="12" fill="#0f172a" text-anchor="start" font-weight="600" style="font-variant-numeric: tabular-nums" stroke="#ffffff" stroke-width="3" stroke-linejoin="round" paint-order="stroke">86.0 (2.78x)</text>
+<path d="M171.8,273.0 H343.7 A4.0,4.0 0 0 1 347.7,277.0 V283.0 A4.0,4.0 0 0 1 343.7,287.0 H171.8 Z" fill="#0d9488"><title>4 GPUs: DP 4: 121.1 (3.92x) requests/s</title></path>
+<text x="353.7" y="284.3" font-size="12" fill="#0f172a" text-anchor="start" font-weight="600" style="font-variant-numeric: tabular-nums" stroke="#ffffff" stroke-width="3" stroke-linejoin="round" paint-order="stroke">121.1 (3.92x)</text>
+<text x="507.9" y="134.0" font-size="12.5" fill="#0f172a" text-anchor="start" font-weight="600">One request at a time, with thoughts: mean ms per</text>
+<text x="507.9" y="151.0" font-size="12.5" fill="#0f172a" text-anchor="start" font-weight="600">item (lower is better)</text>
+<text x="507.9" y="308.0" font-size="11" fill="#94a3b8" text-anchor="middle" font-weight="400" style="font-variant-numeric: tabular-nums">0</text>
+<line x1="596.1" y1="159.0" x2="596.1" y2="293.0" stroke="#edf1f5" stroke-width="1" shape-rendering="crispEdges"/>
+<text x="596.1" y="308.0" font-size="11" fill="#94a3b8" text-anchor="middle" font-weight="400" style="font-variant-numeric: tabular-nums">500</text>
+<line x1="684.3" y1="159.0" x2="684.3" y2="293.0" stroke="#edf1f5" stroke-width="1" shape-rendering="crispEdges"/>
+<text x="684.3" y="308.0" font-size="11" fill="#94a3b8" text-anchor="middle" font-weight="400" style="font-variant-numeric: tabular-nums">1,000</text>
+<line x1="772.4" y1="159.0" x2="772.4" y2="293.0" stroke="#edf1f5" stroke-width="1" shape-rendering="crispEdges"/>
+<text x="772.4" y="308.0" font-size="11" fill="#94a3b8" text-anchor="middle" font-weight="400" style="font-variant-numeric: tabular-nums">1,500</text>
+<line x1="507.9" y1="159.0" x2="507.9" y2="293.0" stroke="#cbd5e1" stroke-width="1" shape-rendering="crispEdges"/>
+<path d="M507.9,169.0 H717.1 A4.0,4.0 0 0 1 721.1,173.0 V179.0 A4.0,4.0 0 0 1 717.1,183.0 H507.9 Z" fill="#d5dce6"><title>one GPU: 1,209 ms</title></path>
+<text x="727.1" y="180.3" font-size="12" fill="#475569" text-anchor="start" font-weight="400" style="font-variant-numeric: tabular-nums" stroke="#ffffff" stroke-width="3" stroke-linejoin="round" paint-order="stroke">1,209</text>
+<path d="M507.9,195.0 H663.0 A4.0,4.0 0 0 1 667.0,199.0 V205.0 A4.0,4.0 0 0 1 663.0,209.0 H507.9 Z" fill="#0d9488"><title>2 GPUs: TP 2: 902 ms</title></path>
+<text x="673.0" y="206.3" font-size="12" fill="#0f172a" text-anchor="start" font-weight="600" style="font-variant-numeric: tabular-nums" stroke="#ffffff" stroke-width="3" stroke-linejoin="round" paint-order="stroke">902</text>
+<path d="M507.9,221.0 H639.4 A4.0,4.0 0 0 1 643.4,225.0 V231.0 A4.0,4.0 0 0 1 639.4,235.0 H507.9 Z" fill="#0d9488"><title>4 GPUs: TP 4: 768 ms</title></path>
+<text x="649.4" y="232.3" font-size="12" fill="#0f172a" text-anchor="start" font-weight="600" style="font-variant-numeric: tabular-nums" stroke="#ffffff" stroke-width="3" stroke-linejoin="round" paint-order="stroke">768</text>
+<path d="M507.9,247.0 H663.0 A4.0,4.0 0 0 1 667.0,251.0 V257.0 A4.0,4.0 0 0 1 663.0,261.0 H507.9 Z" fill="#0d9488"><title>4 GPUs: DP 2 x TP 2: 902 ms</title></path>
+<text x="673.0" y="258.3" font-size="12" fill="#0f172a" text-anchor="start" font-weight="600" style="font-variant-numeric: tabular-nums" stroke="#ffffff" stroke-width="3" stroke-linejoin="round" paint-order="stroke">902</text>
+<text x="513.9" y="284.0" font-size="11.5" fill="#94a3b8" text-anchor="start" font-weight="400" stroke="#ffffff" stroke-width="3" stroke-linejoin="round" paint-order="stroke">as one GPU (1,209), plus ~1 ms for the router</text>
+<text x="159.8" y="180.3" font-size="12.5" fill="#475569" text-anchor="end" font-weight="400">one GPU</text>
+<text x="159.8" y="206.3" font-size="12.5" fill="#0f172a" text-anchor="end" font-weight="600">2 GPUs: TP 2</text>
+<text x="159.8" y="232.3" font-size="12.5" fill="#0f172a" text-anchor="end" font-weight="600">4 GPUs: TP 4</text>
+<text x="159.8" y="258.3" font-size="12.5" fill="#0f172a" text-anchor="end" font-weight="600">4 GPUs: DP 2 x TP 2</text>
+<text x="159.8" y="284.3" font-size="12.5" fill="#0f172a" text-anchor="end" font-weight="600">4 GPUs: DP 4</text>
+<text x="26.0" y="339.0" font-size="11.5" fill="#94a3b8" text-anchor="start" font-weight="400">Read-outs: the most requests/s over 32 to 256 clients (one GPU and TP: from 64 clients). With thoughts: the 231 items one at a time, 67 of them</text>
+<text x="26.0" y="355.0" font-size="11.5" fill="#94a3b8" text-anchor="start" font-weight="400">thinking. Second H200 server (NVSwitch), 2026-10-14.</text>
 </svg>
