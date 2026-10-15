@@ -1,9 +1,9 @@
 # StartLux-Prism
 
 **A fast CUDA inference engine for StartLux-Decision models.** It serves StartLux-Decision v1 (4B, 9B, 27B) and v1.1
-AutoThink (9B, 27B) straight from their GGUF files, behind the TypeSafe `/v1/systemone` API, on the RTX 5090 and the
-H200, on one GPU or several. Like a prism that splits light into its spectrum, it turns each question into a calibrated
-probability for every option.
+AutoThink (4B, 9B, 27B) straight from their GGUF files, behind the TypeSafe `/v1/systemone` API, on NVIDIA's RTX 40
+and 50 series and its A and H series (tested on the RTX 4090, RTX 5090, A800 and H200), on one GPU or several. Like a
+prism that splits light into its spectrum, it turns each question into a calibrated probability for every option.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/images/v11-hero-dark.svg">
@@ -12,18 +12,32 @@ probability for every option.
 
 ## Why StartLux-Prism
 
-- **Faster than the official engine.** On one H200, against StartLux-Decision v1.1's own engine on vLLM 0.31 in FP8:
-  2.8x faster on a short question, 5.3x on a three-question request, 1.17x the throughput from 64 clients. On eight
-  H200s: 238 read-outs per second against 138 for its BF16 release.
+- **Faster than the official engine.** The 27B on one H200, against StartLux-Decision's own engine on vLLM 0.31 in FP8:
+  on v1.1, 2.8x faster on a short question, 5.3x on a three-question request, 1.17x the throughput from 64 clients; on
+  v1, 2.9x, 5.6x and 1.22x. On eight H200s: 238 read-outs per second against 138 for the official engine in BF16. More
+  results, from many clients and under stress: [docs/benchmarks.md](docs/benchmarks.md).
 - **The same answers.** Prompts, read-outs, thoughts and decision rules are the model's own; only the forward pass is
-  new. v1.1's evaluation suites score 92.94 on StartLux-Prism int8, 92.97 on the official BF16 server and 92.83 in FP8. An
+  new, so the scores are the official engine's ([below](#the-official-engines-accuracy-in-int8-and-in-4-bits)). An
   answer is bit-identical whatever it is batched with, on any number of GPUs, from the cache or not.
 - **All of v1.1.** AutoThink thoughts generated on the GPU (95 tokens/s for one sequence, 3,832 for 64 at once), from
   the Q8_0 and the Q4_K_M files; `none_probability` and `allow_none`, up to 8 images per request.
+- **Many GPU architectures.** The A series (Ampere: A800), the RTX 40 series (Ada: RTX 4090), the H series (Hopper:
+  H200) and the RTX 50 series (Blackwell: RTX 5090), with drivers for CUDA 12 or 13. In 4 bits the 27B runs on one
+  32 GB RTX 5090: v1.1's Q4_K_M file, thinking, scores there what the official engine scores on an H200.
 - **One GPU or several.** Data parallelism for throughput (four H200s give 3.92x one), tensor parallelism (`--tp 2` or
   `4`) for latency.
-- **The released files as they are.** Q8_0 runs as int8 (W8A8) and Q4_K_M on its own 4-bit weights (W4A8), so the 27B
-  fits a 32 GB RTX 5090.
+- **The released files as they are.** Q8_0 runs as int8 (W8A8) and Q4_K_M on its own 4-bit weights (W4A8), read from
+  the GGUF at start-up with no conversion step.
+
+### The official engine's accuracy, in int8 and in 4 bits
+
+StartLux-Decision v1.1 27B AutoThink with thoughts: StartLux-Prism int8 from the Q8_0 file, and W4A8 from the Q4_K_M
+file on one RTX 5090, against the official engine on the BF16 release.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/v11-accuracy-dark.svg">
+  <img src="docs/images/v11-accuracy.svg" width="840" alt="StartLux-Decision v1.1 27B AutoThink with thoughts. StartLux-Decision v1's seven evaluation suites, average accuracy: StartLux-Prism int8 92.94, StartLux-Prism W4A8 93.07, official engine BF16 92.97, FP8 92.83. JevBench public, items right of 231: 224, 226, 226, 225.">
+</picture>
 
 ## Install
 
@@ -140,8 +154,17 @@ StartLux-Decision v1.1 27B AutoThink, one H200 per server, the same requests:
 
 Under load both engines are bound by the tensor cores, which run int8 and FP8 at the same rate, so the lead narrows to
 17%. On several H200s, read-outs per second: one GPU 30.9, four 121.1, eight 237.8 (the official engine on eight:
-137.5). On StartLux-Decision v1, StartLux-Prism has the lowest latency of every engine compared (1.6-2.3x below the next)
-and 1.6-2.4x their throughput.
+137.5).
+
+StartLux-Decision v1 27B, against the same official engine in FP8:
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/v1-hero-dark.svg">
+  <img src="docs/images/v1-hero.svg" width="840" alt="StartLux-Decision v1 27B on one H200, StartLux-Prism int8 against the official engine in FP8. Mean ms per request, one at a time: one question of about 256 tokens 18.9 against 54.5; about 8,192 tokens 438.5 against 539.1; the README's three questions 17.2 against 96.4. JevBench requests per second: from 1 client 24.4 against 12.0; from 64 clients 30.9 against 25.4.">
+</picture>
+
+Against every other engine compared on v1 (SGLang, vLLM, llama.cpp, StartLux-Decision's PyTorch server, decider and
+JevK5), StartLux-Prism has the lowest latency (1.6-2.3x below the next) and 1.6-2.4x their throughput.
 
 Methods, every engine, table and chart: [docs/benchmarks.md](docs/benchmarks.md).
 
@@ -149,8 +172,8 @@ Methods, every engine, table and chart: [docs/benchmarks.md](docs/benchmarks.md)
 
 The speed does not cost accuracy. On StartLux-Decision v1's own evaluation (12,351 decisions), int8 averages 91.14
 against the reference's 91.15 on the 4B and 90.80 against 91.06 on the 9B. About 1% of the decisions change, all near
-ties, and calibration does not move. v1.1 27B with thoughts: 92.94, against 92.97 on the official BF16 server. Every
-suite: [docs/benchmarks.md](docs/benchmarks.md#accuracy-startlux-decision-v1s-evaluation).
+ties, and calibration does not move. v1.1 27B with thoughts: 92.94 in int8 and 93.07 in W4A8, against 92.97 on the
+official BF16 server. Every suite: [docs/benchmarks.md](docs/benchmarks.md#accuracy-startlux-decision-v1s-evaluation).
 
 ## How it works
 
@@ -164,10 +187,6 @@ suite: [docs/benchmarks.md](docs/benchmarks.md#accuracy-startlux-decision-v1s-ev
 
 More: [design and code map](docs/design.md), [optimization log](docs/optimizations.md),
 [correctness and tests](docs/testing.md).
-
-StartLux-Prism was called flash-jev until 2026-10-14: `python -m startlux_prism.server` (and `.dp`) and `import
-startlux_prism` replace `flash_jev`; `FLASHJEV_*` environment variables still work, and a calibration file already in
-`~/.cache/flash-jev` is found.
 
 ## License
 

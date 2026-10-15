@@ -22,6 +22,7 @@ tensor parallelism, both; eight GPUs against the official engine). Each chart is
 - [Accuracy: StartLux-Decision-v1's evaluation](#accuracy-startlux-decision-v1s-evaluation)
 - [StartLux-Decision v1.1 27B AutoThink: thinking](#startlux-decision-v11-27b-autothink-thinking)
 - [StartLux-Decision v1.1 27B AutoThink against its official engine](#startlux-decision-v11-27b-autothink-against-its-official-engine)
+- [StartLux-Decision v1 27B against the official engine](#startlux-decision-v1-27b-against-the-official-engine)
 - [Images](#images)
 - [Several GPUs: data parallelism](#several-gpus-data-parallelism)
 - [Tensor parallelism: the 27B on 2 and 4 H200s](#tensor-parallelism-the-27b-on-2-and-4-h200s)
@@ -784,6 +785,8 @@ above on one H200 of the same server, the decode steps on their own 4-bit weight
 |---|---|---|---|---|---|
 | 27B, Q4_K_M, never | 212 | 154.2 / 42.0 | - | - | - |
 | **27B, Q4_K_M, auto** | **227** | 1,785 / 81.8 | 69 (30%), 65 of them right | 417 / 249 / 4,096 | 68 closed, 1 at the budget |
+| 27B, Q4_K_M, never, RTX 5090 | 213 | 113.7 / 26.4 | - | - | - |
+| 27B, Q4_K_M, auto, RTX 5090 | 226 | 1,846 / 61.0 | 69 (30%), 64 of them right | 375 / 249 / 1,868 | 69 closed |
 | 9B, Q4_K_M, never | 200 | 46.4 / 13.1 | - | - | - |
 | 9B, Q4_K_M, auto | 211 | 1,590 / 26.4 | 75 (32%), 57 of them right | 1,286 / 902 / 4,096 | 70 closed, 4 at the budget, 1 loop |
 
@@ -899,6 +902,14 @@ second for one sequence. Per token, the two take the same time. StartLux-Prism's
 | 64 | 5.89 | 6.52 | **7.61** |
 | correct per pass, of 231 | 224-229 (mean 226.5) | 221-228 (225.2) | 219-222 (220.5) |
 
+Accuracy with thoughts: the suites below, and JevBench one request at a time (the table above: 226 in BF16, 225 in
+FP8, 224 in int8; W4A8: below the suites):
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="images/v11-accuracy-dark.svg">
+  <img src="images/v11-accuracy.svg" width="840" alt="StartLux-Decision v1.1 27B AutoThink with thoughts. StartLux-Decision v1's seven evaluation suites, average accuracy: StartLux-Prism int8 92.94, StartLux-Prism W4A8 93.07, official engine BF16 92.97, FP8 92.83. JevBench public, items right of 231: 224, 226, 226, 225.">
+</picture>
+
 **StartLux-Decision v1's evaluation suites with thoughts** (`think_mode` auto, 12,351 decisions from 16 clients, the
 three servers at once, so the times compare only roughly):
 
@@ -907,9 +918,15 @@ three servers at once, so the times compare only roughly):
 | official, BF16 | 100.00 | 100.00 | 94.59 | 78.20 | 95.48 | 90.83 | 91.67 | 92.97 | 0.0999 | 0.0547 | 1,252 s |
 | official, FP8 | 100.00 | 98.61 | 94.59 | 78.35 | 95.81 | 90.71 | 91.72 | 92.83 | 0.1044 | 0.0443 | 957 s |
 | **StartLux-Prism int8** | 100.00 | 98.61 | 94.59 | 78.50 | 96.13 | 90.83 | 91.90 | 92.94 | 0.1093 | 0.0531 | **750 s** |
+| **StartLux-Prism W4A8**, RTX 5090 | 100.00 | 100.00 | 95.50 | 78.30 | 95.48 | 90.97 | 91.22 | 93.07 | 0.0846 | 0.0538 | 3,914 s |
 
-StartLux-Prism's scores are those of its earlier run ([thinking](#startlux-decision-v11-27b-autothink-thinking)), to the
-digit, although the questions now came from 16 clients at once.
+StartLux-Prism int8's scores are those of its earlier run ([thinking](#startlux-decision-v11-27b-autothink-thinking)), to
+the digit, although the questions now came from 16 clients at once. The W4A8 row is the Q4_K_M release
+(`StartLux-Decision-v1.1-27B-AutoThink-Q4_K_M.gguf`) on one RTX 5090 (32 GB), 2026-10-15, with the settings of these runs
+(gate 0.9, `allow_none` off: the defaults then) and 4 thoughts at once, 8,192-token batches and a prefix cache of 8
+entries, which fit the 27B into 32 GB; its time is the RTX 5090's. On JevBench, one request at a time, the same server
+answers 213 of 231 without thoughts and 226 with them (69 thoughts, all closed), as an earlier run with 2 thoughts at
+once did.
 
 **Accuracy with thoughts, many samples.** One thought per question, as in the suites, puts the three servers level.
 Many thoughts per question show a small gap. In the many-client JevBench runs every request carries its own request
@@ -972,6 +989,59 @@ Through the server (JevBench, requests/s; correct per pass of 231):
 | bf16, read-outs | 14.9 | 16.7 | 16.9 | 213 |
 | int8, with thoughts | 0.84 | 4.94 | 7.61 | 219-222 (mean 220.5) |
 | bf16, with thoughts | 0.51 | 3.40 | 4.14 | 224-228 (mean 226.2) |
+
+## StartLux-Decision v1 27B against the official engine
+
+StartLux-Prism int8 against the official engine of the
+[v1.1 comparison](#startlux-decision-v11-27b-autothink-against-its-official-engine) in FP8, its faster setting, on
+StartLux-Decision v1 27B: the same measurements and clients, without thoughts (v1 answers in one pass). One GPU of the
+first H200 server, the two servers one after the other, 2026-10-15; other users' jobs ran on the other GPUs.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="images/v1-hero-dark.svg">
+  <img src="images/v1-hero.svg" width="840" alt="StartLux-Decision v1 27B on one H200, StartLux-Prism int8 against the official engine in FP8. Mean ms per request, one at a time: one question of about 256 tokens 18.9 against 54.5; about 8,192 tokens 438.5 against 539.1; the README's three questions 17.2 against 96.4. JevBench requests per second: from 1 client 24.4 against 12.0; from 64 clients 30.9 against 25.4.">
+</picture>
+
+**The servers:**
+- **Official engine:** Startlux-decide-inference at commit `b70404d` (package 1.1.0), `startlux-decide serve --model
+  DIR --launch-vllm --gpus N --quantization fp8` on vLLM 0.31.0. It serves v1 folders (`format` "StartLux-Decision-v1"
+  in `decision_config.json`) in one pass by default.
+  - Weights: the BF16 release `startlux-models/StartLux-Decision-v1-27B` (commit `5de3f54`, 55.6 GB in 11 shards;
+    every file's SHA-256 checked against Hugging Face).
+  - The release carries an MTP layer's weights (v1.1's does not), so the launcher turns MTP speculative decoding on
+    with 3 draft tokens. Read-outs generate no tokens: the times are within 4% of the official engine's on v1.1, which
+    ran without MTP.
+- **StartLux-Prism int8:** the Q8_0 GGUF release (`StartLux-Decision-27B-Q8_0.gguf`, [above](#setup)), server defaults,
+  this repository at `9bea64f`.
+
+**One request at a time** (the official client `startlux-decide bench` with the v1.1 comparison's requests; mean ms,
+the first 5 of each file's 25 requests dropped; p50 and p95 within 3% of the mean, except the official engine's ~1,024
+tokens: 74-98 ms in two groups):
+
+| request | official, FP8 | **StartLux-Prism int8** | StartLux-Prism faster by |
+|---|---|---|---|
+| one yes/no question, ~256 prompt tokens | 54.5 | **18.9** | 2.9x |
+| ~1,024 tokens | 88.5 | **57.0** | 1.6x |
+| ~4,096 tokens | 277.2 | **213.2** | 1.3x |
+| ~8,192 tokens | 539.1 | **438.5** | 1.2x |
+| the official README's three questions | 96.4 | **17.2** | 5.6x |
+
+**JevBench** (`bench/run_jevbench.py`, `think_mode` never; requests/s over three passes of the 231 items, every request
+with its own request number):
+
+| | official, FP8 | **StartLux-Prism int8** |
+|---|---|---|
+| one at a time, the items as they are: correct of 231, mean ms | 212, 83.3 | 207, **40.9** |
+| requests/s from 1 client | 12.0 | **24.4** |
+| requests/s from 16 clients | 25.0 | **30.0** |
+| requests/s from 64 clients | 25.4 | **30.9** |
+| correct per pass with request numbers (9 passes), of 231 | 205-209 (mean 207.0) | 205-208 (206.7) |
+
+The two score the same: a request number in front of the evidence moves near-ties, and over the nine numbered passes
+both average 207 (StartLux publishes 208 for this model); the items as they are happen to give the official engine 212.
+As on v1.1, StartLux-Prism takes a third of the time for a short question and a fifth for three questions about the
+same evidence, and from many clients both are bound by the tensor cores (int8 and FP8 at the same rate), where its lead
+is 1.2x.
 
 ## Images
 
@@ -1325,6 +1395,8 @@ clients on every model), where no engine failed a request.
     262,144, `--gpu-memory-utilization 0.88`, `--logprobs-mode processed_logprobs --max-logprobs 26`,
     `--generation-config vllm`, images).
   - Thoughts: one streamed request each. There is no MTP, since the release holds no MTP weights.
+  - StartLux-Decision v1 27B: the same command on the v1 BF16 release, which serves one pass. That release holds MTP
+    weights, so the launcher adds MTP speculative decoding with 3 draft tokens.
 * **Long evidence** (the 8k and 50k tables and the 8k-token clients): llama.cpp `-c 262144 --parallel 4`, vLLM
   `--max-model-len 65536`, SGLang `--context-length 65536`, decider `DECIDER_MAX_STATE_TOKENS=65536`; the rest as above
   (16,384 tokens of context otherwise).
