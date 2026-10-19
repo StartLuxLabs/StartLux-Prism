@@ -1,389 +1,228 @@
-"""The charts of README.md and docs/benchmarks.md: SVG files in docs/images, a light and a dark version of each
-(`<name>.svg`, `<name>-dark.svg`; the docs choose with <picture> and prefers-color-scheme).
+"""The charts of README.md and docs: SVG files in docs/images, a light and a dark version of each (`<name>.svg`,
+`<name>-dark.svg`; the pages choose with <picture> and prefers-color-scheme).
 
-    python bench/charts.py
+    python bench/charts.py [OUT_DIR]
 
 The numbers are those of docs/benchmarks.md's tables (from results/, as bench/report.py prints them), and every chart
-has its table next to it there. One style throughout: StartLux-Prism in teal, every other engine in soft slate, the
-value at each bar's tip; the README's top charts lead with the speed-ups as big numbers (`hero_chart`). The colors are
-the light and dark tokens below (the teal marks at 3:1 or more against both surfaces).
+has its table next to it there. Plain matplotlib in the colors of the StartLux-Decision technical report
+(arXiv:2610.17309): its violets for StartLux-Prism, its reds for every other engine, the value on every bar. Text is
+drawn as paths, so the SVGs look the same in every browser, and the files carry no date, so a rerun changes nothing.
 """
 import os
+import sys
+import textwrap
 
-OUT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "docs", "images")
+import matplotlib
 
-THEMES = {
-    "light": dict(surface="#ffffff", ink="#0f172a", ink2="#475569", muted="#94a3b8", grid="#edf1f5", axis="#cbd5e1",
-                  accent="#0d9488", other="#d5dce6", line2="#94a3b8", border="#e6ece9", pill="#f0fdfa",
-                  pill_ink="#0f766e", kpi="#0d9488", kpi_bg="#f0fdfa"),
-    "dark": dict(surface="#0d1117", ink="#f1f5f9", ink2="#cbd5e1", muted="#7d8899", grid="#1b222c", axis="#2b3443",
-                 accent="#2dd4bf", other="#2b3443", line2="#7d8899", border="#232a35", pill="#042f2e",
-                 pill_ink="#99f6e4", kpi="#2dd4bf", kpi_bg="#0b2a28"),
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt  # noqa: E402
+import numpy as np  # noqa: E402
+from matplotlib import transforms  # noqa: E402
+from matplotlib.lines import Line2D  # noqa: E402
+from matplotlib.patches import Patch  # noqa: E402
+
+OUT = sys.argv[1] if len(sys.argv) > 1 else os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "docs",
+                                                         "images")
+
+# The StartLux-Decision report's palette: violets for its own models (27B #7c62b8, 9B #a07ede), coral and brick red
+PRISM, PRISM_LIGHT = "#7c62b8", "#a07ede"          # StartLux-Prism int8; its other precisions and configurations
+OTHER, OTHER_DARK = "#ea8e89", "#b9524b"           # every other engine (the official one in FP8); the official in BF16
+
+THEMES = {   # GitHub's text, muted text, border and page colors in each theme
+    "light": dict(text="#1f2328", muted="#59636e", grid="#d1d9e0", axis="#818b98", page="#ffffff"),
+    "dark": dict(text="#d1d7e0", muted="#9198a1", grid="#3d444d", axis="#9198a1", page="#0d1117"),
 }
-FONT = "system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif"
-W = 840              # chart width, px (the docs show every chart at this width)
-PAD = 26             # outer padding
-ROW = 26             # one bar's row
-BAR = 14             # bar thickness (<= 24)
-GROUP_BAR = 13       # bars in a group: 2 px apart
-GAP = 30             # between side-by-side panels
+WIDTH = 10.5                                       # inches: the pages show every chart 840 px wide
 
 
-def text_w(s, size):
-    """Rendered width of s in the system sans, roughly (enough to lay out labels without clipping)."""
-    w = 0.0
-    for c in s:
-        if c in "il.,:;|!'":
-            w += 0.27
-        elif c in "jtfr()[]{}-/ ":
-            w += 0.35
-        elif c in "mwMW":
-            w += 0.86
-        elif c.isupper():
-            w += 0.68
-        elif c.isdigit():
-            w += 0.58
-        elif ord(c) > 0x2000:
-            w += 0.62
+def style(theme):
+    t = THEMES[theme]
+    plt.rcdefaults()
+    plt.rcParams.update({
+        "svg.fonttype": "path", "svg.hashsalt": "startlux-prism",
+        "font.family": "DejaVu Sans", "font.size": 10,
+        "text.color": t["text"], "axes.labelcolor": t["text"], "axes.edgecolor": t["axis"],
+        "xtick.color": t["axis"], "ytick.color": t["axis"], "xtick.labelcolor": t["text"],
+        "ytick.labelcolor": t["text"],
+        "axes.titlesize": 10.5, "axes.labelsize": 9.5, "xtick.labelsize": 9, "ytick.labelsize": 9.5,
+        "axes.spines.top": False, "axes.spines.right": False,
+        "axes.grid": True, "grid.color": t["grid"], "grid.linewidth": 0.7,
+        "axes.axisbelow": True, "legend.frameon": False, "legend.fontsize": 9.5,
+        "figure.facecolor": "none", "axes.facecolor": "none", "savefig.facecolor": "none",
+    })
+    return t
+
+
+def save(fig, name, theme):
+    path = os.path.join(OUT, name + ("" if theme == "light" else "-dark") + ".svg")
+    fig.savefig(path, format="svg", bbox_inches="tight", pad_inches=0.1, transparent=True, metadata={"Date": None})
+    plt.close(fig)
+    return path
+
+
+def num(v, fmt=None):
+    if fmt:
+        return format(v, fmt)
+    return f"{v:,.2f}" if v < 10 else f"{v:,.1f}"
+
+
+def frame(fig, axes, t, title, subtitle=None, handles=None, note=None, head=26, foot=30):
+    """Title, subtitle and legend above the panels, the note under them: placed in points from the panels' edges
+    (head: the room their titles take above them; foot: what their axes take below them)."""
+    top = max(a.get_position().y1 for a in axes)
+    bottom = min(a.get_position().y0 for a in axes)
+
+    def at(y, pts):
+        return dict(x=0.5, y=y, transform=transforms.offset_copy(fig.transFigure, fig=fig, y=pts, units="points"))
+
+    y = head
+    if handles:
+        fig.legend(handles=handles, loc="lower center", ncol=len(handles), borderaxespad=0, handlelength=1.5,
+                   columnspacing=1.8, bbox_to_anchor=(0.5, top),
+                   bbox_transform=transforms.offset_copy(fig.transFigure, fig=fig, y=y, units="points"))
+        y += 21
+    for line in reversed(textwrap.wrap(subtitle or "", 150)):
+        fig.text(s=line, ha="center", va="bottom", fontsize=9, color=t["muted"], **at(top, y))
+        y += 12.5
+    fig.text(s=title, ha="center", va="bottom", fontsize=12.5, **at(top, y + 3))
+    y = -foot
+    for line in textwrap.wrap(note or "", 160):
+        p = at(bottom, y)
+        p["x"] = 0.01
+        fig.text(s=line, ha="left", va="top", fontsize=8.5, color=t["muted"], **p)
+        y -= 11.5
+
+
+def hbars(ax, t, labels, vals, colors, shown=None, xmax=None, title=None, xlabel=None, bold=()):
+    """Horizontal bars, the first row on top, the value at each bar's end. A value past xmax is cut: a gap across the
+    bar's end and the value written inside it. A string is written in place of the bar."""
+    n = len(labels)
+    nums = [v for v in vals if not isinstance(v, str)]
+    shown = shown or [v if isinstance(v, str) else f"{v:,.1f}" for v in vals]
+    end = xmax or max(nums) * 1.17
+    ax.set_xlim(0, end)
+    ax.set_ylim(n - 0.5, -0.5)
+    ax.grid(axis="y", visible=False)
+    ax.set_yticks(range(n), labels)
+    for i, (v, s, c) in enumerate(zip(vals, shown, colors)):
+        if isinstance(v, str):
+            ax.text(end * 0.012, i, v, va="center", ha="left", fontsize=8.5, color=t["muted"], style="italic")
+            continue
+        weight = "bold" if labels[i] in bold else "normal"
+        if xmax and v > xmax:                            # cut: a gap near the bar's end, the value before it
+            ax.barh(i, end, 0.62, color=c)
+            for x in (end * 0.93, end * 0.955):
+                ax.plot([x - end * 0.006, x + end * 0.006], [i + 0.38, i - 0.38], color=t["page"], lw=2.2,
+                        solid_capstyle="butt")
+            ax.text(end * 0.905, i, s, va="center", ha="right", fontsize=8.5, color="white", fontweight="bold")
         else:
-            w += 0.54
-    return w * size
+            ax.barh(i, v, 0.62, color=c)
+            ax.text(v + end * 0.012, i, s, va="center", ha="left", fontsize=8.5, fontweight=weight)
+    for lbl in ax.get_yticklabels():
+        if lbl.get_text() in bold:
+            lbl.set_fontweight("bold")
+    if title:
+        ax.set_title(title)
+    if xlabel:
+        ax.set_xlabel(xlabel)
 
 
-def wrap(s, size, width):
-    lines, cur = [], ""
-    for word in s.split():
-        nxt = word if not cur else cur + " " + word
-        if text_w(nxt, size) > width and cur:
-            lines.append(cur)
-            cur = word
-        else:
-            cur = nxt
-    return lines + ([cur] if cur else [])
+def vgroups(ax, t, groups, series, colors, fmt=None, title=None, ylabel=None, ymax=None):
+    """Grouped vertical bars: series[s][g] for series s in group g, the value on every bar."""
+    x = np.arange(len(groups))
+    k = len(series)
+    w = 0.8 / k
+    ax.grid(axis="x", visible=False)
+    top = max(max(s) for s in series)
+    for s, (vals, c) in enumerate(zip(series, colors)):
+        bars = ax.bar(x + (s - (k - 1) / 2) * w, vals, w, color=c)
+        ax.bar_label(bars, [num(v, fmt) for v in vals], padding=2, fontsize=8.5)
+    ax.set_xticks(x, groups)
+    ax.set_ylim(0, ymax or top * 1.18)
+    if title:
+        ax.set_title(title)
+    if ylabel:
+        ax.set_ylabel(ylabel)
 
 
-def esc(s):
-    return s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+def patches(pairs):
+    return [Patch(color=c, label=label) for c, label in pairs]
 
 
-def nice_max(v):
-    """The axis end above v: 1, 1.2, 1.5, 2, 2.5, 3, 4, 5, 6, 8 x 10^k."""
-    k = 1.0
-    while k * 10 < v:
-        k *= 10
-    while k > v:
-        k /= 10
-    for m in (1, 1.2, 1.5, 2, 2.5, 3, 4, 5, 6, 8, 10):
-        if m * k >= v * 1.0001:
-            return m * k
-    return 10 * k
+CHARTS = {}
 
 
-def ticks(vmax, n=4):
-    """Clean tick values from 0 to vmax: the finest 1 / 2 / 2.5 / 5 x 10^k step with at most n + 1 intervals."""
-    k = 1.0
-    while k * 10 <= vmax:
-        k *= 10
-    k /= 1000
-    step = next(m * k * 10 ** e for e in range(6) for m in (1, 2, 2.5, 5) if vmax / (m * k * 10 ** e) <= n + 1.0001)
-    out, t = [], 0.0
-    while t <= vmax * 1.0001:
-        out.append(round(t, 10))
-        t += step
-    return out
+def chart(fn):
+    CHARTS[fn.__name__.replace("_", "-")] = fn
+    return fn
 
 
-def fmt_tick(t, unit=""):
-    if t >= 1000:
-        s = f"{t:,.0f}"
-    elif t == int(t):
-        s = f"{int(t)}"
-    else:
-        s = f"{t:g}"
-    return s + unit
+# ---- the README ---------------------------------------------------------------------------------------------------
+
+def hero(theme, title, lat, tput):
+    """lat: [(label, StartLux-Prism ms, official ms)] one request at a time; tput: [(label, ours, theirs)] req/s."""
+    t = style(theme)
+    fig, (a, b) = plt.subplots(1, 2, figsize=(WIDTH, 3.6), width_ratios=[len(lat), len(tput)])
+    w = 0.36
+    x = np.arange(len(lat))
+    ours = a.bar(x - w / 2, [p / o for _, p, o in lat], w, color=PRISM, label="StartLux-Prism, int8")
+    theirs = a.bar(x + w / 2, [1.0] * len(lat), w, color=OTHER, label="Official engine, FP8 (vLLM 0.31)")
+    a.bar_label(ours, [num(p) for _, p, _ in lat], padding=2, fontsize=8.5)
+    a.bar_label(theirs, [num(o) for _, _, o in lat], padding=2, fontsize=8.5)
+    a.set_xticks(x, [label for label, _, _ in lat])
+    a.set_ylim(0, 1.2)
+    a.grid(axis="x", visible=False)
+    a.set_ylabel("Latency, official engine = 1")
+    a.set_title("One request at a time (lower is better; labels in ms)")
+    vgroups(b, t, [label for label, _, _ in tput], [[p for _, p, _ in tput], [o for _, _, o in tput]],
+            [PRISM, OTHER], title="JevBench, 231 items (higher is better)", ylabel="Requests per second")
+    fig.tight_layout(rect=(0, 0, 1, 0.9), w_pad=3)
+    fig.suptitle(title, fontsize=12, y=1.0)
+    fig.legend(handles=[ours, theirs], loc="upper center", ncol=2, bbox_to_anchor=(0.5, 0.955))
+    return fig
 
 
-class Svg:
-    def __init__(self, theme, width=W):
-        self.c = THEMES[theme]
-        self.w = width
-        self.parts = []
-
-    def add(self, s):
-        self.parts.append(s)
-
-    def text(self, x, y, s, size=12, color="ink", anchor="start", weight=400, num=False, halo=False):
-        style = ' style="font-variant-numeric: tabular-nums"' if num else ""
-        if halo:                                        # a surface-colored outline: gridlines stop short of the text
-            style += f' stroke="{self.c["surface"]}" stroke-width="3" stroke-linejoin="round" paint-order="stroke"'
-        self.add(f'<text x="{x:.1f}" y="{y:.1f}" font-size="{size}" fill="{self.c[color]}" text-anchor="{anchor}"'
-                 f' font-weight="{weight}"{style}>{esc(s)}</text>')
-
-    def line(self, x1, y1, x2, y2, color, width=1):
-        self.add(f'<line x1="{x1:.1f}" y1="{y1:.1f}" x2="{x2:.1f}" y2="{y2:.1f}" stroke="{self.c[color]}"'
-                 f' stroke-width="{width}" shape-rendering="crispEdges"/>')
-
-    def hbar(self, x0, y, w, h, color, tip, r=4.0):
-        """A horizontal bar from the baseline x0: square there, 4 px rounded at its data end."""
-        w = max(w, 1.0)
-        r = min(r, w / 2, h / 2)
-        d = (f"M{x0:.1f},{y:.1f} H{x0 + w - r:.1f} A{r},{r} 0 0 1 {x0 + w:.1f},{y + r:.1f} V{y + h - r:.1f}"
-             f" A{r},{r} 0 0 1 {x0 + w - r:.1f},{y + h:.1f} H{x0:.1f} Z")
-        self.add(f'<path d="{d}" fill="{self.c[color]}"><title>{esc(tip)}</title></path>')
-
-    def doc(self, height, title, desc):
-        c = self.c
-        return (f'<svg xmlns="http://www.w3.org/2000/svg" width="{self.w}" height="{height:.0f}" '
-                f'viewBox="0 0 {self.w} {height:.0f}" role="img" aria-labelledby="title desc" font-family="{FONT}">\n'
-                f'<title id="title">{esc(title)}</title>\n<desc id="desc">{esc(desc)}</desc>\n'
-                f'<rect x="0.5" y="0.5" width="{self.w - 1}" height="{height - 1:.0f}" rx="14" fill="{c["surface"]}"'
-                f' stroke="{c["border"]}"/>\n' + "\n".join(self.parts) + "\n</svg>\n")
+@chart
+def v11_hero(theme):
+    return hero(theme, "StartLux-Decision v1.1 27B AutoThink on one H200",
+                [("Short question\n~256 tokens", 19.0, 53.1), ("Long question\n~8,192 tokens", 439.8, 531.2),
+                 ("README's three\nquestions", 17.4, 92.9), ("Three questions\nwith thoughts", 785.1, 1296.0)],
+                [("1 client", 24.2, 12.1), ("64 clients", 30.7, 26.3), ("64 clients\nwith thoughts", 7.61, 6.52)])
 
 
-def header(g, title, subtitle, legend=None, line_legend=False):
-    """Title, subtitle and legend; returns the y below them."""
-    y = PAD + 18
-    g.text(PAD, y, title, size=19, weight=700)
-    y += 6
-    for ln in wrap(subtitle, 13, g.w - 2 * PAD):
-        y += 19
-        g.text(PAD, y, ln, size=13, color="ink2")
-    if legend:
-        y += 24
-        x = PAD
-        for color, label in legend:
-            if line_legend:
-                g.add(f'<line x1="{x:.1f}" y1="{y - 4:.1f}" x2="{x + 18:.1f}" y2="{y - 4:.1f}" stroke="{g.c[color]}"'
-                      f' stroke-width="2" stroke-linecap="round"/>')
-                g.add(f'<circle cx="{x + 9:.1f}" cy="{y - 4:.1f}" r="4" fill="{g.c[color]}" stroke="{g.c["surface"]}"'
-                      f' stroke-width="2"/>')
-                x += 24
-            else:
-                g.add(f'<rect x="{x:.1f}" y="{y - 10:.1f}" width="22" height="10" rx="5" fill="{g.c[color]}"/>')
-                x += 30
-            g.text(x, y, label, size=12.5, color="ink2")
-            x += text_w(label, 12.5) + 22
-    return y
+@chart
+def v1_hero(theme):
+    return hero(theme, "StartLux-Decision v1 27B on one H200",
+                [("Short question\n~256 tokens", 18.9, 54.5), ("Long question\n~8,192 tokens", 438.5, 539.1),
+                 ("README's three\nquestions", 17.2, 96.4)],
+                [("1 client", 24.4, 12.0), ("64 clients", 30.9, 25.4)])
 
 
-def footer(g, y, note):
-    if note:
-        y += 8
-        for ln in wrap(note, 11.5, g.w - 2 * PAD):
-            y += 16
-            g.text(PAD, y, ln, size=11.5, color="muted")
-    return y + PAD
+@chart
+def v11_accuracy(theme):
+    t = style(theme)
+    names = ["StartLux-Prism\nint8", "StartLux-Prism\nW4A8", "Official\nBF16", "Official\nFP8"]
+    colors = [PRISM, PRISM_LIGHT, OTHER_DARK, OTHER]
+    suites = [92.94, 93.07, 92.97, 92.83]     # StartLux-Decision v1's seven suites, average accuracy %
+    jevbench = [224, 226, 226, 225]           # JevBench public, items right of 231
+    fig, (a, b) = plt.subplots(1, 2, figsize=(WIDTH, 3.4))
+    for ax, vals, fmt, top, label, head in ((a, suites, ".2f", 110, "Average accuracy (%)",
+                                             "Seven evaluation suites (12,351 decisions)"),
+                                            (b, jevbench, "d", 254, "Items right, of 231",
+                                             "JevBench public (231 items)")):
+        bars = ax.bar(range(4), vals, 0.6, color=colors)
+        ax.bar_label(bars, [format(v, fmt) for v in vals], padding=2, fontsize=8.5)
+        ax.set_xticks(range(4), names)
+        ax.set_ylim(0, top)
+        ax.grid(axis="x", visible=False)
+        ax.set_ylabel(label)
+        ax.set_title(head)
+    fig.suptitle("StartLux-Decision v1.1 27B AutoThink with thoughts: accuracy", fontsize=12)
+    fig.tight_layout(w_pad=3)
+    return fig
 
 
-def bar_chart(theme, title, subtitle, rows, panels, legend=None, note=None, desc="", width=W):
-    """Horizontal bars, side-by-side panels sharing the row labels.
-
-    rows: [(label, highlighted)]; a panel: dict(head, vals (one per row: a number, or a string written in place of
-    the bar), shown (the value texts), max (axis end; larger values are cut and marked), unit, tick_unit)."""
-    g = Svg(theme, width)
-    y = header(g, title, subtitle, legend)
-    lw = max(text_w(lbl, 12.5) * 1.06 + 14 for lbl, _ in rows)
-    pw = (g.w - 2 * PAD - lw - GAP * (len(panels) - 1)) / len(panels)
-    heads = [wrap(p["head"], 12.5, pw) for p in panels]
-    y += 16 + 17 * max(len(h) for h in heads)
-    y0 = y + 6                                                  # top of the first row
-    bottom = y0 + ROW * len(rows)
-    for i, p in enumerate(panels):
-        px0 = PAD + lw + i * (pw + GAP)
-        for j, ln in enumerate(heads[i]):
-            g.text(px0, y0 - 12 - 17 * (len(heads[i]) - 1 - j), ln, size=12.5, weight=600)
-        nums = [v for v in p["vals"] if not isinstance(v, str)]
-        vmax = p.get("max") or nice_max(max(nums))
-        vl = max(text_w(s, 12) * 1.08 for v, s in zip(p["vals"], p["shown"]) if not isinstance(v, str)) + 8
-        plot = pw - vl
-        for t in ticks(vmax, max(2, min(5, int(plot / 58)))):
-            x = px0 + t / vmax * plot
-            if t > 0:
-                g.line(x, y0 - 4, x, bottom, "grid")
-            g.text(x, bottom + 15, fmt_tick(t, p.get("tick_unit", "")), size=11, color="muted", anchor="middle",
-                   num=True)
-        g.line(px0, y0 - 4, px0, bottom, "axis")
-        for r, ((label, hi), v, shown) in enumerate(zip(rows, p["vals"], p["shown"])):
-            cy = y0 + r * ROW + ROW / 2
-            if isinstance(v, str):
-                g.text(px0 + 6, cy + 4, v, size=11.5, color="muted", halo=True)
-                continue
-            cut = v > vmax
-            w = plot if cut else v / vmax * plot
-            g.hbar(px0, cy - BAR / 2, w, BAR, "accent" if hi else "other", f"{label}: {shown} {p.get('unit', '')}")
-            if cut:                                             # the bar is cut: a gap across its end
-                for dx in (14, 9):
-                    g.add(f'<line x1="{px0 + w - dx - 2:.1f}" y1="{cy + BAR / 2 + 2:.1f}" x2="{px0 + w - dx + 2:.1f}"'
-                          f' y2="{cy - BAR / 2 - 2:.1f}" stroke="{g.c["surface"]}" stroke-width="2.5"/>')
-            g.text(px0 + w + 6, cy + 4.3, shown, size=12, color="ink" if hi else "ink2", weight=600 if hi else 400,
-                   num=True, halo=True)
-    for r, (label, hi) in enumerate(rows):
-        g.text(PAD + lw - 12, y0 + r * ROW + ROW / 2 + 4.3, label, size=12.5, color="ink" if hi else "ink2",
-               anchor="end", weight=600 if hi else 400)
-    y = footer(g, bottom + 22, note)
-    return g.doc(y, title, desc or subtitle)
-
-
-def group_chart(theme, title, subtitle, groups, panels, legend, note=None, desc=""):
-    """Grouped horizontal bars (StartLux-Prism, then another engine), panels stacked; a panel: dict(head, vals: one
-    (ours, theirs) pair per group, names: the other engine per group (or None), max, unit, and optionally groups (this
-    panel's own group labels), fmt (the values' format, default ",.1f") and extra (a text after our value per group,
-    e.g. a speed-up))."""
-    g = Svg(theme)
-    y = header(g, title, subtitle, legend)
-    lw = max(text_w(lbl, 12.5) * 1.06 + 14 for p in panels for lbl in p.get("groups", groups))
-    px0 = PAD + lw
-    pw = g.w - PAD - px0
-    gh = 2 * GROUP_BAR + 2                                      # a group's bars, 2 px apart
-    for p in panels:
-        groups_p = p.get("groups", groups)
-        fmt = p.get("fmt", ",.1f")
-        y += 30
-        for ln in wrap(p["head"], 12.5, g.w - 2 * PAD):
-            g.text(PAD, y, ln, size=12.5, weight=600)
-            y += 17
-        y0 = y + 2
-        step = gh + 14
-        bottom = y0 + step * len(groups_p) - 8
-        shown = [[format(v, fmt) for v in pair] for pair in p["vals"]]
-        extra = p.get("extra") or [None] * len(groups_p)
-        tails = [[s[0] + (f"  {e}" if e else ""), s[1] + (f"  {n}" if n else "")]
-                 for s, n, e in zip(shown, p.get("names") or [None] * len(groups_p), extra)]
-        vl = max(text_w(t, 12) * 1.06 for pair in tails for t in pair) + 10
-        plot = pw - vl
-        vmax = p.get("max") or nice_max(max(max(pair) for pair in p["vals"]))
-        for t in ticks(vmax):
-            x = px0 + t / vmax * plot
-            if t > 0:
-                g.line(x, y0 - 4, x, bottom + 4, "grid")
-            g.text(x, bottom + 19, fmt_tick(t), size=11, color="muted", anchor="middle", num=True)
-        g.line(px0, y0 - 4, px0, bottom + 4, "axis")
-        for k, (label, pair, tail) in enumerate(zip(groups_p, p["vals"], tails)):
-            top = y0 + k * step
-            g.text(px0 - 12, top + gh / 2 + 4.3, label, size=12.5, anchor="end", color="ink")
-            for s, v in enumerate(pair):
-                by = top + s * (GROUP_BAR + 2)
-                w = v / vmax * plot
-                name = legend[s][1] if s == 0 else (p["names"][k] if p.get("names") else legend[1][1])
-                g.hbar(px0, by, w, GROUP_BAR, "accent" if s == 0 else "other",
-                       f"{label}, {name}: {format(v, fmt)} {p['unit']}")
-                if s == 0:
-                    g.text(px0 + w + 6, by + 10.5, shown[k][0], size=12, weight=600, num=True, halo=True)
-                    if extra[k]:
-                        g.text(px0 + w + 6 + text_w(shown[k][0], 12) * 1.08 + 8, by + 10.5, extra[k], size=12,
-                               color="ink2", halo=True)
-                else:
-                    g.text(px0 + w + 6, by + 10.5, shown[k][1], size=12, color="ink2", num=True, halo=True)
-                    if p.get("names") and p["names"][k]:
-                        g.text(px0 + w + 6 + text_w(shown[k][1], 12) * 1.06 + 8, by + 10.5, p["names"][k], size=12,
-                               color="muted", halo=True)
-        y = bottom + 19
-    y = footer(g, y + 6, note)
-    return g.doc(y, title, desc or subtitle)
-
-
-def line_chart(theme, title, subtitle, panels, legend, note=None, desc=""):
-    """Side-by-side line panels: x = prompt tokens (thousands), y = seconds; a panel: dict(head, xs, series (one list
-    of y per legend entry; None = no answer), xmax, ymax)."""
-    g = Svg(theme)
-    y = header(g, title, subtitle, legend, line_legend=True)
-    yl = 34                                                    # y tick labels
-    pw = (g.w - 2 * PAD - GAP * (len(panels) - 1)) / len(panels)
-    heads = [wrap(p["head"], 12.5, pw) for p in panels]
-    y += 18 + 17 * max(len(h) for h in heads)
-    ph = 200
-    y0 = y + 8
-    colors = [c for c, _ in legend]
-    for i, p in enumerate(panels):
-        x0 = PAD + i * (pw + GAP) + yl
-        plot = pw - yl - 46                                    # end labels right of the plot
-        for j, ln in enumerate(heads[i]):
-            g.text(PAD + i * (pw + GAP), y0 - 14 - 17 * (len(heads[i]) - 1 - j), ln, size=12.5, weight=600)
-        X = lambda v: x0 + v / p["xmax"] * plot                # noqa: E731
-        Y = lambda v: y0 + ph - v / p["ymax"] * ph             # noqa: E731
-        for t in ticks(p["ymax"]):
-            if t > 0:
-                g.line(x0, Y(t), x0 + plot, Y(t), "grid")
-            g.text(x0 - 7, Y(t) + 4, fmt_tick(t, " s"), size=11, color="muted", anchor="end", num=True)
-        g.line(x0, Y(0), x0 + plot, Y(0), "axis")
-        for t in p["xs"]:
-            g.text(X(t), y0 + ph + 16, f"{t}k", size=11, color="muted", anchor="middle", num=True)
-        ends = []
-        for s, ys in enumerate(p["series"]):
-            pts = [(X(xv), Y(yv), xv, yv) for xv, yv in zip(p["xs"], ys) if yv is not None]
-            d = " ".join(f"{'M' if k == 0 else 'L'}{px:.1f},{py:.1f}" for k, (px, py, _, _) in enumerate(pts))
-            col = g.c[colors[s]]
-            g.add(f'<path d="{d}" fill="none" stroke="{col}" stroke-width="2" stroke-linejoin="round"'
-                  f' stroke-linecap="round"/>')
-            for px, py, xv, yv in pts:
-                g.add(f'<circle cx="{px:.1f}" cy="{py:.1f}" r="4" fill="{col}" stroke="{g.c["surface"]}"'
-                      f' stroke-width="2"><title>{esc(legend[s][1])}, {xv}k tokens: {yv:,.3f} s</title></circle>')
-            ends.append((pts[-1], s))
-        for (px, py, xv, yv), s in ends:                       # end labels: right of the last x, else above
-            last = xv == max(p["xs"])
-            g.text(px + 8 if last else px, py + 4 if last else py - 10, f"{yv:,.1f} s", size=12,
-                   color="ink" if s == 0 else "ink2", weight=600 if s == 0 else 400,
-                   anchor="start" if last else "middle", num=True, halo=True)
-    y = footer(g, y0 + ph + 26, note)
-    return g.doc(y, title, desc or subtitle)
-
-
-def ratio(ours, theirs, kind):
-    """The pill's text: how many times faster ("lat": lower is better) or how many times the requests/s."""
-    r = theirs / ours if kind == "lat" else ours / theirs
-    return f"{r:.1f}× faster" if kind == "lat" else (f"{r:.2f}× more" if r < 1.95 else f"{r:.1f}× more")
-
-
-def hero_chart(theme, title, subtitle, kpis, panels, legend, note=None, desc=""):
-    """The README's top charts: the speed-ups as big numbers, then one row per measurement with StartLux-Prism's bar
-    over the other engine's, on the row's own scale (the slower engine's bar spans it), the values at the bar ends and
-    the ratio in a pill. kpis: [(big number, caption)]; a panel: dict(head, kind ("lat": lower is better, or "tput"),
-    rows: [(label, ours, theirs)])."""
-    g = Svg(theme)
-    c = g.c
-    y = header(g, title, subtitle, legend)
-    if kpis:
-        y += 20
-        gap = 12
-        tw = (g.w - 2 * PAD - gap * (len(kpis) - 1)) / len(kpis)
-        for i, (big, cap) in enumerate(kpis):
-            tx = PAD + i * (tw + gap)
-            g.add(f'<rect x="{tx:.1f}" y="{y:.1f}" width="{tw:.1f}" height="74" rx="12" fill="{c["kpi_bg"]}"/>')
-            g.text(tx + 16, y + 40, big, size=30, color="kpi", weight=700, num=True)
-            g.text(tx + 16, y + 61, cap, size=12, color="ink2")
-        y += 74
-    lw = max(text_w(lbl, 13.5) for p in panels for lbl, _, _ in p["rows"]) + 28
-    pill_w, vw, bh, gap2, step = 96, 64, 13, 3, 50
-    x0 = PAD + lw
-    plot = g.w - PAD - pill_w - 16 - vw - x0
-    fmt = lambda v: f"{v:,.1f}" if v >= 10 else f"{v:.2f}"              # noqa: E731
-    for p in panels:
-        y += 36
-        g.add(f'<text x="{PAD}" y="{y:.1f}" font-size="11.5" fill="{c["muted"]}" font-weight="600" '
-              f'letter-spacing="0.06em">{esc(p["head"].upper())}</text>')
-        y += 14
-        for label, ours, theirs in p["rows"]:
-            cy = y + bh + gap2 / 2
-            g.text(PAD, cy + 4.5, label, size=13.5, weight=500)
-            m = max(ours, theirs)
-            for k, (v, color, ink, weight) in enumerate(((ours, "accent", "ink", 700), (theirs, "other", "ink2", 400))):
-                by = y + k * (bh + gap2)
-                w = max(v / m * plot, bh)
-                name = legend[k][1]
-                g.add(f'<rect x="{x0:.1f}" y="{by:.1f}" width="{w:.1f}" height="{bh}" rx="{bh / 2}" '
-                      f'fill="{c[color]}"><title>{esc(label)}, {esc(name)}: {fmt(v)}</title></rect>')
-                g.text(x0 + w + 8, by + 10.5, fmt(v), size=12.5, color=ink, weight=weight, num=True)
-            px = g.w - PAD - pill_w
-            g.add(f'<rect x="{px:.1f}" y="{cy - 11:.1f}" width="{pill_w}" height="22" rx="11" fill="{c["pill"]}"/>')
-            g.text(px + pill_w / 2, cy + 4.3, ratio(ours, theirs, p["kind"]), size=12, color="pill_ink",
-                   anchor="middle", weight=700)
-            y += step
-        y -= step - (2 * bh + gap2)
-    y = footer(g, y + 14, note)
-    return g.doc(y, title, desc or subtitle)
-
-
-# ---- the data (docs/benchmarks.md) -------------------------------------------------------------------------------
+# ---- docs/benchmarks.md: StartLux-Decision v1 against every engine ------------------------------------------------
 
 STAND_IN = "decider and JevK5 run StartLux's weights as same-shape stand-ins (they ship no StartLux checkpoint)."
 MODELS = ("4B · RTX 5090", "9B · RTX 5090", "27B · H200")
@@ -402,313 +241,295 @@ JEVBENCH = [
     ("llama.cpp (Q8_0)", (134.7, 162.7, 589.2), (6.5, 5.7, 1.4)),
 ]
 LAT_MAX = (None, None, 150)          # axis ends: the 27B's llama.cpp bar (589.2 ms) is cut
+OURS = "StartLux-Prism int8"
 
 
-def all_engines_chart(theme, title, subtitle, which, unit, note):
+def engine_color(name):
+    return PRISM if name == OURS else PRISM_LIGHT if name.startswith("StartLux-Prism") else OTHER
+
+
+def all_engines(theme, title, subtitle, which, xlabel, note):
     """Every engine on the three models: one panel per model, the rows in JEVBENCH's order."""
+    t = style(theme)
     k = 1 if which == "lat" else 2
-    return bar_chart(
-        theme, title, subtitle, [(r[0], r[0] == "StartLux-Prism int8") for r in JEVBENCH],
-        [dict(head=MODELS[m], vals=[r[k][m] for r in JEVBENCH], shown=[f"{r[k][m]:,.1f}" for r in JEVBENCH],
-              unit=unit, max=LAT_MAX[m] if which == "lat" else None) for m in range(3)],
-        note=note)
-
-
-def engines_chart(theme, title, m, note):
-    """JevBench one request at a time (mean ms per item) and from 32 clients (requests/s) on MODELS[m], one row per
-    engine, fastest first."""
-    rows = sorted(JEVBENCH, key=lambda r: r[1][m])
-    lat = [r[1][m] for r in rows]
-    return bar_chart(
-        theme, title,
-        "The 231 public JevBench items; every engine alone on the GPU, through the same HTTP client.",
-        [(r[0], r[0] == "StartLux-Prism int8") for r in rows],
-        [dict(head="One request at a time: mean ms per item (lower is better)", vals=lat,
-              shown=[f"{v:,.1f}" for v in lat], unit="ms", max=LAT_MAX[m]),
-         dict(head="From 32 clients: requests per second (higher is better)", vals=[r[2][m] for r in rows],
-              shown=[f"{r[2][m]:,.1f}" for r in rows], unit="requests/s")],
-        note=note)
-
-
-CHARTS = {}
-
-
-def chart(fn):
-    CHARTS[fn.__name__] = fn
-    return fn
+    fig, axes = plt.subplots(1, 3, figsize=(WIDTH, 3.9), sharey=True)
+    labels = [r[0] for r in JEVBENCH]
+    for m, ax in enumerate(axes):
+        hbars(ax, t, labels, [r[k][m] for r in JEVBENCH], [engine_color(r[0]) for r in JEVBENCH],
+              xmax=LAT_MAX[m] if which == "lat" else None, title=MODELS[m], xlabel=xlabel, bold=(OURS,))
+    fig.subplots_adjust(left=0.2, right=0.98, top=0.86, bottom=0.14, wspace=0.12)
+    frame(fig, axes, t, title, subtitle, note=note, foot=32)
+    return fig
 
 
 @chart
 def jevbench_latency(theme):
-    return all_engines_chart(
+    return all_engines(
         theme, "StartLux-Decision v1 on JevBench, one request at a time: every engine",
         "Mean ms per item over the 231 public items (lower is better). Every engine alone on the GPU with the same "
-        "Q8_0 weights, through the same HTTP client.", "lat", "ms",
+        "Q8_0 weights, through the same HTTP client.", "lat", "ms per item",
         STAND_IN + " The 27B's llama.cpp bar is cut (589.2 ms). Scores, p50 and p95: docs/benchmarks.md.")
 
 
 @chart
 def jevbench_throughput(theme):
-    return all_engines_chart(
+    return all_engines(
         theme, "StartLux-Decision v1 on JevBench from 32 clients: every engine",
         "Requests per second over three passes of the 231 public items (higher is better); no engine failed a request. "
-        "The same Q8_0 weights for every engine.", "tput", "requests/s",
+        "The same Q8_0 weights for every engine.", "tput", "requests per second",
         STAND_IN + " 8 and 16 clients give every engine within a few percent of its 32-client rate.")
+
+
+def engines(theme, title, m, note):
+    """JevBench one request at a time (mean ms per item) and from 32 clients (requests/s) on MODELS[m], one row per
+    engine, fastest first."""
+    t = style(theme)
+    rows = sorted(JEVBENCH, key=lambda r: r[1][m])
+    labels = [r[0] for r in rows]
+    colors = [engine_color(r[0]) for r in rows]
+    fig, (a, b) = plt.subplots(1, 2, figsize=(WIDTH, 3.9), sharey=True)
+    hbars(a, t, labels, [r[1][m] for r in rows], colors, xmax=LAT_MAX[m], bold=(OURS,),
+          title="One request at a time (lower is better)", xlabel="mean ms per item")
+    hbars(b, t, labels, [r[2][m] for r in rows], colors, bold=(OURS,),
+          title="From 32 clients (higher is better)", xlabel="requests per second")
+    fig.subplots_adjust(left=0.2, right=0.98, top=0.86, bottom=0.14, wspace=0.12)
+    frame(fig, (a, b), t, title, "The 231 public JevBench items; every engine alone on the GPU, through the same HTTP "
+                                 "client.", note=note, foot=32)
+    return fig
 
 
 @chart
 def rtx5090_4b(theme):
-    return engines_chart(theme, "StartLux-Decision-v1-4B (Q8_0) on an RTX 5090", 0,
-                         "Q8_0 weights for every engine (bf16 conversions of them for the PyTorch engines); "
-                         "2026-10-10. " + STAND_IN)
+    return engines(theme, "StartLux-Decision-v1-4B (Q8_0) on an RTX 5090", 0,
+                   "Q8_0 weights for every engine (bf16 conversions of them for the PyTorch engines); 2026-10-10. "
+                   + STAND_IN)
 
 
 @chart
 def rtx5090_9b(theme):
-    return engines_chart(theme, "StartLux-Decision-v1-9B (Q8_0) on an RTX 5090", 1,
-                         "Q8_0 weights for every engine (bf16 conversions of them for the PyTorch engines); "
-                         "2026-10-10. " + STAND_IN)
+    return engines(theme, "StartLux-Decision-v1-9B (Q8_0) on an RTX 5090", 1,
+                   "Q8_0 weights for every engine (bf16 conversions of them for the PyTorch engines); 2026-10-10. "
+                   + STAND_IN)
 
 
 @chart
 def h200_27b(theme):
-    return engines_chart(theme, "StartLux-Decision-v1-27B (Q8_0) on an H200", 2,
-                         "Q8_0 weights for every engine (bf16 conversions of them for the PyTorch engines); "
-                         "2026-10-12. llama.cpp's latency bar is cut (589.2 ms). " + STAND_IN)
+    return engines(theme, "StartLux-Decision-v1-27B (Q8_0) on an H200", 2,
+                   "Q8_0 weights for every engine (bf16 conversions of them for the PyTorch engines); 2026-10-12. "
+                   "llama.cpp's latency bar is cut (589.2 ms). " + STAND_IN)
 
 
-def long_chart(theme, title, rows, cut8, cut50, note):
-    return bar_chart(
-        theme, title,
-        "One yes/no question about an application log of 8,000 or 50,000 tokens, one request at a time; every engine "
-        "counted every token. " + STAND_IN,
-        [(r[0], r[0] == "StartLux-Prism int8") for r in rows],
-        [dict(head="8,000 tokens: p50 ms (lower is better)", vals=[r[1] for r in rows],
-              shown=[f"{r[1]:,}" if isinstance(r[1], int) else f"{r[1]:,.1f}" for r in rows], unit="ms", max=cut8),
-         dict(head="50,000 tokens: p50 ms (lower is better)", vals=[r[2] for r in rows],
-              shown=[r[2] if isinstance(r[2], str) else f"{r[2]:,}" for r in rows], unit="ms", max=cut50)],
-        note=note)
+def long_evidence(theme, title, rows, cut8, cut50, note):
+    t = style(theme)
+    labels = [r[0] for r in rows]
+    colors = [engine_color(r[0]) for r in rows]
+    fig, (a, b) = plt.subplots(1, 2, figsize=(WIDTH, 3.4), sharey=True)
+    hbars(a, t, labels, [r[1] for r in rows], colors, xmax=cut8, bold=(OURS,),
+          shown=[f"{v:,}" if isinstance(v, int) else f"{v:,.1f}" for v in (r[1] for r in rows)],
+          title="8,000 tokens (lower is better)", xlabel="p50 ms")
+    hbars(b, t, labels, [r[2] for r in rows], colors, xmax=cut50, bold=(OURS,),
+          shown=[v if isinstance(v, str) else f"{v:,}" for v in (r[2] for r in rows)],
+          title="50,000 tokens (lower is better)", xlabel="p50 ms")
+    fig.subplots_adjust(left=0.2, right=0.98, top=0.84, bottom=0.15, wspace=0.12)
+    frame(fig, (a, b), t, title, "One yes/no question about an application log of 8,000 or 50,000 tokens, one request "
+                                 "at a time; every engine counted every token. " + STAND_IN, note=note, foot=32)
+    return fig
 
 
 @chart
 def rtx5090_4b_long(theme):
-    rows = [("StartLux-Prism int8", 162.5, 1960), ("decider, compile + FP8", 328.7, 3708), ("SGLang via adapter", 342.2, 2911),
-            ("JevK5", 417.7, 3263), ("StartLux-Decision server", 424.2, "fails above 32,768 tokens"),
-            ("vLLM via adapter", 440.5, 3359), ("decider, default", 521.5, 3272), ("llama.cpp (Q8_0)", 730.3, 5326)]
-    return long_chart(theme, "Long evidence: StartLux-Decision-v1-4B (Q8_0) on an RTX 5090", rows, None, None,
-                      "2026-10-10. The StartLux-Decision server's chunked path fails on prompts above 32,768 tokens "
-                      "with the transformers version installed.")
+    rows = [("StartLux-Prism int8", 162.5, 1960), ("decider, compile + FP8", 328.7, 3708),
+            ("SGLang via adapter", 342.2, 2911), ("JevK5", 417.7, 3263),
+            ("StartLux-Decision server", 424.2, "fails above 32,768 tokens"), ("vLLM via adapter", 440.5, 3359),
+            ("decider, default", 521.5, 3272), ("llama.cpp (Q8_0)", 730.3, 5326)]
+    return long_evidence(theme, "Long evidence: StartLux-Decision-v1-4B (Q8_0) on an RTX 5090", rows, None, None,
+                         "2026-10-10. The StartLux-Decision server's chunked path fails on prompts above 32,768 tokens "
+                         "with the transformers version installed.")
 
 
 @chart
 def h200_27b_long(theme):
     rows = [("StartLux-Prism int8", 432, 3693), ("decider, compile + FP8", 698, 7301), ("SGLang via adapter", 704, 4936),
-            ("vLLM via adapter", 833, 5743), ("JevK5", 847, 5783), ("StartLux-Decision server", 870, "fails above 32,768 tokens"),
-            ("decider, default", 1062, 6779), ("llama.cpp (Q8_0)", 3514, 28623)]
-    return long_chart(theme, "Long evidence: StartLux-Decision-v1-27B (Q8_0) on an H200", rows, 1200, 8000,
-                      "2026-10-12. llama.cpp's bars are cut (3,514 and 28,623 ms). SGLang runs FlashAttention 3 here; "
-                      "at 50,000 tokens attention is most of the work.")
+            ("vLLM via adapter", 833, 5743), ("JevK5", 847, 5783),
+            ("StartLux-Decision server", 870, "fails above 32,768 tokens"), ("decider, default", 1062, 6779),
+            ("llama.cpp (Q8_0)", 3514, 28623)]
+    return long_evidence(theme, "Long evidence: StartLux-Decision-v1-27B (Q8_0) on an H200", rows, 1200, 8000,
+                         "2026-10-12. llama.cpp's bars are cut (3,514 and 28,623 ms). SGLang runs FlashAttention 3 "
+                         "here; at 50,000 tokens attention is most of the work.")
 
 
 @chart
 def max_context(theme):
-    return line_chart(
-        theme, "The longest request in one pass (no chunked prefill)",
-        "One request at a time, the whole prompt in one forward pass; seconds per request. vLLM does not start "
-        "without chunked prefill on this model.",
-        [dict(head="StartLux-Decision-v1-4B (Q8_0), RTX 5090", xs=[16, 32, 48, 64, 96],
-              series=[[0.377, 0.978, 1.814, 2.861, 5.567], [0.692, 1.562, 2.559, 3.741, None]], xmax=100, ymax=6),
-         dict(head="StartLux-Decision-v1-27B (Q8_0), H200", xs=[16, 32, 48, 64, 96, 128],
-              series=[[0.910, 2.047, 3.460, 5.120, 9.234, 14.205], [1.424, 2.984, 4.697, 6.605, 10.821, 15.705]],
-              xmax=132, ymax=16)],
-        legend=[("accent", "StartLux-Prism int8"), ("line2", "SGLang 0.5.21, --chunked-prefill-size -1")],
-        note="Prompt length in thousands of tokens. On the RTX 5090 StartLux-Prism runs with --prefix-cache 0 (its largest "
-             "batch then 98,304 tokens) and SGLang with --mem-fraction-static 0.6 (it does not start otherwise); "
-             "SGLang ran out of memory at 96k there, and between 128k and 192k on the H200. StartLux-Prism refuses a "
-             "request beyond its largest batch (HTTP 422); it never cuts one.")
+    t = style(theme)
+    panels = [("StartLux-Decision-v1-4B (Q8_0), RTX 5090", [16, 32, 48, 64, 96],
+               [[0.377, 0.978, 1.814, 2.861, 5.567], [0.692, 1.562, 2.559, 3.741, None]], 6),
+              ("StartLux-Decision-v1-27B (Q8_0), H200", [16, 32, 48, 64, 96, 128],
+               [[0.910, 2.047, 3.460, 5.120, 9.234, 14.205], [1.424, 2.984, 4.697, 6.605, 10.821, 15.705]], 17)]
+    names = ["StartLux-Prism int8", "SGLang 0.5.21, --chunked-prefill-size -1"]
+    fig, axes = plt.subplots(1, 2, figsize=(WIDTH, 3.5))
+    for ax, (head, xs, series, ymax) in zip(axes, panels):
+        for ys, c in zip(series, (PRISM, OTHER)):
+            pts = [(x, y) for x, y in zip(xs, ys) if y is not None]
+            ax.plot([p[0] for p in pts], [p[1] for p in pts], "-o", color=c, lw=2, ms=5)
+            x, y = pts[-1]
+            ax.annotate(f"{y:,.1f} s", (x, y), xytext=(6, 0), textcoords="offset points", va="center",
+                        fontsize=8.5, fontweight="bold" if c == PRISM else "normal")
+        ax.set_xticks(xs, [f"{x}k" for x in xs])
+        ax.set_xlim(0, max(xs) * 1.14)
+        ax.set_ylim(0, ymax)
+        ax.set_title(head)
+        ax.set_xlabel("prompt tokens")
+        ax.set_ylabel("seconds per request")
+    fig.subplots_adjust(left=0.07, right=0.98, top=0.82, bottom=0.15, wspace=0.22)
+    frame(fig, axes, t, "The longest request in one pass (no chunked prefill)",
+          "One request at a time, the whole prompt in one forward pass; seconds per request. vLLM does not start "
+          "without chunked prefill on this model.",
+          handles=[Line2D([], [], color=c, marker="o", lw=2, ms=5, label=n) for c, n in zip((PRISM, OTHER), names)],
+          note="On the RTX 5090 StartLux-Prism runs with --prefix-cache 0 (its largest batch then 98,304 tokens) and "
+               "SGLang with --mem-fraction-static 0.6 (it does not start otherwise); SGLang ran out of memory at 96k "
+               "there, and between 128k and 192k on the H200. StartLux-Prism refuses a request beyond its largest batch "
+               "(HTTP 422); it never cuts one.", foot=34)
+    return fig
 
 
 @chart
 def prefix_cache(theme):
+    t = style(theme)
     rows = [("StartLux-Prism int8, prefix cache", 54.1, 5.4), ("vLLM, automatic prefix caching", 162.0, 42.6),
             ("StartLux-Prism int8, cache off", 50.7, 48.0), ("SGLang, radix cache", 129.9, 113.3),
             ("decider, compile + FP8", 104.6, 157.8), ("StartLux-Decision server", 173.9, 173.6)]
-    return bar_chart(
-        theme, "Follow-up questions about evidence already sent",
-        "StartLux-Decision-v1-4B (Q8_0) on an RTX 5090: the 20 public JevBench items with the longest evidence (2,000-3,700 "
-        "tokens), each asked, then two more questions about the same evidence. p50 ms.",
-        [(r[0], r[0] == "StartLux-Prism int8, prefix cache") for r in rows],
-        [dict(head="First request (new evidence)", vals=[r[1] for r in rows], shown=[f"{r[1]:,.1f}" for r in rows],
-              unit="ms", max=200),
-         dict(head="Follow-up requests (same evidence)", vals=[r[2] for r in rows], shown=[f"{r[2]:,.1f}" for r in rows],
-              unit="ms", max=200)],
-        note="2026-10-10. StartLux-Prism answers a follow-up from the evidence's cached state, bit-identical to "
-             "recomputing it.")
+    labels = [r[0] for r in rows]
+    colors = [PRISM if i == 0 else PRISM_LIGHT if r[0].startswith("StartLux-Prism") else OTHER
+              for i, r in enumerate(rows)]
+    fig, (a, b) = plt.subplots(1, 2, figsize=(WIDTH, 2.9), sharey=True)
+    hbars(a, t, labels, [r[1] for r in rows], colors, xmax=200, bold=(labels[0],),
+          title="First request (new evidence)", xlabel="p50 ms")
+    hbars(b, t, labels, [r[2] for r in rows], colors, xmax=200, bold=(labels[0],),
+          title="Follow-up requests (same evidence)", xlabel="p50 ms")
+    fig.subplots_adjust(left=0.23, right=0.98, top=0.8, bottom=0.17, wspace=0.12)
+    frame(fig, (a, b), t, "Follow-up questions about evidence already sent",
+          "StartLux-Decision-v1-4B (Q8_0) on an RTX 5090: the 20 public JevBench items with the longest evidence "
+          "(2,000-3,700 tokens), each asked, then two more questions about the same evidence. p50 ms.",
+          note="2026-10-10. StartLux-Prism answers a follow-up from the evidence's cached state, bit-identical to "
+               "recomputing it.", foot=32)
+    return fig
 
 
 @chart
 def q4km(theme):
-    return group_chart(
-        theme, "StartLux-Decision-v1 Q4_K_M files: StartLux-Prism W4A8 against llama.cpp",
-        "Each engine on the same Q4_K_M GGUF file: StartLux-Prism on the file's own 4-bit weights (int8 activations, "
-        "int8 tensor cores), llama.cpp b10639. JevBench, one request at a time.",
-        ["4B · RTX 5090", "9B · RTX 5090", "27B · RTX 5090", "27B · H200"],
-        [dict(head="Mean ms per JevBench item (lower is better)",
-              vals=[(19.7, 135.8), (32.1, 160.3), (112.7, 439.3), (155.2, 626.7)], unit="ms")],
-        legend=[("accent", "StartLux-Prism W4A8"), ("other", "llama.cpp")],
-        note="Scores on the same files: 201, 200, 207, 207 of 231 for StartLux-Prism; 201, 200, 206, 207 for llama.cpp. "
-             "On the H200 the W4A8 GEMMs still run on mma.sync, not on Hopper's warpgroup MMA.")
+    t = style(theme)
+    groups = ["4B · RTX 5090", "9B · RTX 5090", "27B · RTX 5090", "27B · H200"]
+    vals = [(19.7, 135.8), (32.1, 160.3), (112.7, 439.3), (155.2, 626.7)]
+    fig, ax = plt.subplots(figsize=(WIDTH, 3.1))
+    vgroups(ax, t, groups, [[v[0] for v in vals], [v[1] for v in vals]], [PRISM, OTHER],
+            title="Mean ms per JevBench item (lower is better)", ylabel="ms per item")
+    fig.subplots_adjust(left=0.08, right=0.98, top=0.8, bottom=0.12)
+    frame(fig, (ax,), t, "StartLux-Decision-v1 Q4_K_M files: StartLux-Prism W4A8 against llama.cpp",
+          "Each engine on the same Q4_K_M GGUF file: StartLux-Prism on the file's own 4-bit weights (int8 activations, "
+          "int8 tensor cores), llama.cpp b10639. JevBench, one request at a time.",
+          handles=patches([(PRISM, "StartLux-Prism W4A8"), (OTHER, "llama.cpp")]),
+          note="Scores on the same files: 201, 200, 207, 207 of 231 for StartLux-Prism; 201, 200, 206, 207 for "
+               "llama.cpp. On the H200 the W4A8 GEMMs still run on mma.sync, not on Hopper's warpgroup MMA.", foot=26)
+    return fig
 
 
-V11_ROWS = [("StartLux-Prism int8", True), ("official engine, FP8", False), ("official engine, BF16", False)]
-V11_NOTE = ("Official engine: Startlux-decide-inference (StartLux-Decision v1.1's own package, commit b70404d) with "
-            "its release flags on vLLM 0.31.0, from the BF16 release (FP8: vLLM's --quantization fp8); the release has "
-            "no MTP weights, so neither side drafts tokens. StartLux-Prism int8 from the Q8_0 GGUF release. One H200 per "
+# ---- docs/benchmarks.md: StartLux-Decision v1.1 against its official engine ---------------------------------------
+
+V11_NOTE = ("Official engine: Startlux-decide-inference (StartLux-Decision v1.1's own package, commit b70404d) with its "
+            "release flags on vLLM 0.31.0, from the BF16 release (FP8: vLLM's --quantization fp8); the release has no "
+            "MTP weights, so neither side drafts tokens. StartLux-Prism int8 from the Q8_0 GGUF release. One H200 per "
             "server, 2026-10-13/14.")
+V11_SYSTEMS = [(PRISM, "StartLux-Prism int8"), (OTHER, "official engine, FP8"), (OTHER_DARK, "official engine, BF16")]
+
+
+def v11_panels(theme, title, subtitle, panels, ylabel, note):
+    t = style(theme)
+    fig, axes = plt.subplots(1, len(panels), figsize=(WIDTH, 3.0))
+    colors = [c for c, _ in V11_SYSTEMS]
+    for ax, (head, vals) in zip(axes, panels):
+        bars = ax.bar(range(3), vals, 0.62, color=colors)
+        ax.bar_label(bars, [num(v) for v in vals], padding=2, fontsize=8.5)
+        ax.set_xticks([])
+        ax.grid(axis="x", visible=False)
+        ax.set_ylim(0, max(vals) * 1.18)
+        ax.set_title(head)
+    axes[0].set_ylabel(ylabel)
+    fig.subplots_adjust(left=0.07, right=0.98, top=0.76, bottom=0.06, wspace=0.28)
+    frame(fig, axes, t, title, subtitle, handles=patches(V11_SYSTEMS), note=note, foot=10)
+    return fig
 
 
 @chart
 def v11_official_latency(theme):
-    return bar_chart(
+    return v11_panels(
         theme, "StartLux-Decision v1.1 27B AutoThink: StartLux-Prism against the official engine",
         "One request at a time, new evidence in every request, the official engine's own client (startlux-decide "
         "bench). Mean ms per request (lower is better).",
-        V11_ROWS,
-        [dict(head="One yes/no question, ~256 tokens", vals=[19.0, 53.1, 54.2], shown=["19.0", "53.1", "54.2"],
-              unit="ms"),
-         dict(head="One yes/no question, ~8,192 tokens", vals=[439.8, 531.2, 728.8], shown=["439.8", "531.2", "728.8"],
-              unit="ms"),
-         dict(head="The README's three questions", vals=[17.4, 92.9, 93.1], shown=["17.4", "92.9", "93.1"],
-              unit="ms")],
-        note=V11_NOTE)
+        [("One yes/no question, ~256 tokens", [19.0, 53.1, 54.2]),
+         ("One yes/no question, ~8,192 tokens", [439.8, 531.2, 728.8]),
+         ("The README's three questions", [17.4, 92.9, 93.1])], "ms per request", V11_NOTE)
 
 
 @chart
 def v11_official_throughput(theme):
-    return bar_chart(
+    return v11_panels(
         theme, "StartLux-Decision v1.1 27B AutoThink under load",
         "JevBench's 231 public items, requests per second (higher is better): read-outs only (think_mode never) from "
         "one and from 64 clients, and with thoughts (think_mode auto, the release's default) from 64 clients.",
-        V11_ROWS,
-        [dict(head="Read-outs, one client", vals=[24.2, 12.1, 10.6], shown=["24.2", "12.1", "10.6"], unit="req/s"),
-         dict(head="Read-outs, 64 clients", vals=[30.7, 26.3, 18.3], shown=["30.7", "26.3", "18.3"], unit="req/s"),
-         dict(head="With thoughts, 64 clients", vals=[7.61, 6.52, 5.89], shown=["7.61", "6.52", "5.89"],
-              unit="req/s")],
-        note=V11_NOTE + " Three passes over the items per measurement, every request with its own evidence.")
-
-
-@chart
-def v11_hero(theme):
-    return hero_chart(
-        theme, "StartLux-Decision v1.1 27B AutoThink on one H200",
-        "StartLux-Prism int8 against the official engine (vLLM 0.31, FP8), the same requests to both.",
-        [("2.8×", "faster on a short question"), ("5.3×", "faster on three questions"), ("1.7×", "faster with thoughts"),
-         ("1.17×", "the throughput, 64 clients")],
-        [dict(head="One request at a time  ·  ms, lower is better", kind="lat",
-              rows=[("Short question, ~256 tokens", 19.0, 53.1), ("Long question, ~8,192 tokens", 439.8, 531.2),
-                    ("The README's three questions", 17.4, 92.9), ("Three questions, with thoughts", 785.1, 1296.0)]),
-         dict(head="JevBench, 231 items  ·  requests/s, higher is better", kind="tput",
-              rows=[("1 client", 24.2, 12.1), ("64 clients", 30.7, 26.3), ("64 clients, with thoughts", 7.61, 6.52)])],
-        legend=[("accent", "StartLux-Prism int8"), ("other", "official engine, FP8")],
-        note="Each row's bars share one scale. The official engine: Startlux-decide-inference with its release flags. "
-             "Methods and every run: docs/benchmarks.md.")
-
-
-# StartLux-Decision v1 27B against the official engine in FP8 (docs/benchmarks.md): mean ms one request at a time
-# (~256 and ~8,192 tokens, the README's three questions), JevBench requests/s from 1 and 64 clients; (ours, theirs)
-V1_OFFICIAL = dict(lat=[(18.9, 54.5), (438.5, 539.1), (17.2, 96.4)], tput=[(24.35, 12.04), (30.85, 25.37)])
-
-
-@chart
-def v1_hero(theme):
-    (s, s2), (l8, l82), (t3, t32) = V1_OFFICIAL["lat"]
-    (c1, c12), (c64, c642) = V1_OFFICIAL["tput"]
-    return hero_chart(
-        theme, "StartLux-Decision v1 27B on one H200",
-        "StartLux-Prism int8 against the official engine (vLLM 0.31, FP8), the same requests to both. v1 answers in one "
-        "pass.",
-        [(ratio(s, s2, "lat").split()[0], "faster on a short question"),
-         (ratio(t3, t32, "lat").split()[0], "faster on three questions"),
-         (ratio(c1, c12, "tput").split()[0], "the throughput, 1 client"),
-         (ratio(c64, c642, "tput").split()[0], "the throughput, 64 clients")],
-        [dict(head="One request at a time  ·  ms, lower is better", kind="lat",
-              rows=[("Short question, ~256 tokens", s, s2), ("Long question, ~8,192 tokens", l8, l82),
-                    ("The README's three questions", t3, t32)]),
-         dict(head="JevBench, 231 items  ·  requests/s, higher is better", kind="tput",
-              rows=[("1 client", c1, c12), ("64 clients", c64, c642)])],
-        legend=[("accent", "StartLux-Prism int8"), ("other", "official engine, FP8")],
-        note="Each row's bars share one scale. The official engine: Startlux-decide-inference with its release flags, "
-             "from the BF16 release. Methods and every run: docs/benchmarks.md.")
-
-
-V11_W4_SUITES, V11_W4_JB = 93.07, 226   # the Q4_K_M file in W4A8 (docs/benchmarks.md)
-
-
-@chart
-def v11_accuracy(theme):
-    rows = [("StartLux-Prism int8", True), ("StartLux-Prism W4A8", True), ("official engine, BF16", False),
-            ("official engine, FP8", False)]
-    suites = [92.94, V11_W4_SUITES, 92.97, 92.83]
-    jb = [224, V11_W4_JB, 226, 225]
-    return bar_chart(
-        theme, "StartLux-Decision v1.1 27B AutoThink: the official engine's accuracy",
-        "With thoughts (think_mode auto, gate 0.9), every item once in file order. StartLux-Prism int8 on the Q8_0 "
-        "file and W4A8 on the Q4_K_M file; the official engine (Startlux-decide-inference on vLLM 0.31) on the BF16 "
-        "release, in BF16 and FP8.",
-        rows,
-        [dict(head="StartLux-Decision v1's seven evaluation suites (12,351 decisions): average accuracy, %",
-              vals=suites, shown=[f"{v:.2f}" for v in suites], unit="%", max=100),
-         dict(head="JevBench public: items right, of 231", vals=jb, shown=[f"{v}" for v in jb], unit="of 231",
-              max=231)],
-        note="Every suite, and the GPU each server ran on: docs/benchmarks.md.")
+        [("Read-outs, one client", [24.2, 12.1, 10.6]), ("Read-outs, 64 clients", [30.7, 26.3, 18.3]),
+         ("With thoughts, 64 clients", [7.61, 6.52, 5.89])], "requests per second",
+        V11_NOTE + " Three passes over the items per measurement, every request with its own evidence.")
 
 
 @chart
 def v11_precision(theme):
-    return group_chart(
-        theme, "StartLux-Prism int8 against bf16: StartLux-Decision v1.1 27B on one H200",
-        "The same Q8_0 weights: int8 (W8A8) or dequantized to bf16 (cuBLAS); the engine alone, no HTTP.",
-        [],
-        [dict(head="Prefill: prompt tokens per second (higher is better)",
-              groups=["One prompt of 1,024 tokens", "One prompt of 8,192 tokens", "One prompt of 32,768 tokens",
-                      "Passes of 8,192 tokens of short prompts"],
-              vals=[(18865, 11571), (19219, 11424), (15810, 10155), (20855, 11958)], unit="tokens/s", fmt=",.0f",
-              extra=["1.63x", "1.68x", "1.56x", "1.74x"]),
-         dict(head="Decode: ms per step (lower is better)",
-              groups=["1 sequence", "8 sequences", "64 sequences"],
-              vals=[(10.47, 14.89), (11.06, 15.90), (16.70, 21.74)], unit="ms", fmt=",.2f",
-              extra=["1.42x", "1.44x", "1.30x"])],
-        legend=[("accent", "StartLux-Prism int8"), ("other", "StartLux-Prism bf16")],
-        note="Decode at a 512-token context. Thoughts written by int8 are slightly less accurate on hard items "
-             "(docs/benchmarks.md).")
+    t = style(theme)
+    fig, (a, b) = plt.subplots(1, 2, figsize=(WIDTH, 3.5), width_ratios=[4, 3])
+    vgroups(a, t, ["One prompt of\n1,024 tokens\n(1.63×)", "One prompt of\n8,192 tokens\n(1.68×)",
+                   "One prompt of\n32,768 tokens\n(1.56×)", "Passes of 8,192\ntokens, short\nprompts (1.74×)"],
+            [[18865, 19219, 15810, 20855], [11571, 11424, 10155, 11958]], [PRISM, PRISM_LIGHT], fmt=",.0f",
+            title="Prefill (higher is better)", ylabel="prompt tokens per second")
+    vgroups(b, t, ["1 sequence\n(1.42×)", "8 sequences\n(1.44×)", "64 sequences\n(1.30×)"],
+            [[10.47, 11.06, 16.70], [14.89, 15.90, 21.74]], [PRISM, PRISM_LIGHT], fmt=",.2f",
+            title="Decode (lower is better)", ylabel="ms per step")
+    fig.subplots_adjust(left=0.08, right=0.98, top=0.8, bottom=0.2, wspace=0.25)
+    frame(fig, (a, b), t, "StartLux-Prism int8 against bf16: StartLux-Decision v1.1 27B on one H200",
+          "The same Q8_0 weights: int8 (W8A8) or dequantized to bf16 (cuBLAS); the engine alone, no HTTP. In "
+          "parentheses: how many times faster int8 is.",
+          handles=patches([(PRISM, "StartLux-Prism int8"), (PRISM_LIGHT, "StartLux-Prism bf16")]),
+          note="Decode at a 512-token context. Thoughts written by int8 are slightly less accurate on hard items "
+               "(docs/benchmarks.md).", foot=50)
+    return fig
 
 
 @chart
 def several_gpus(theme):
-    return bar_chart(
-        theme, "Several GPUs: StartLux-Decision v1.1 27B on H200s",
-        "StartLux-Prism int8, JevBench. Data parallelism (DP: whole servers behind the router) for throughput, tensor "
-        "parallelism (TP: one model split over the GPUs) for the time per request. Every configuration answers as one "
-        "GPU does, bit for bit; one GPU in gray, for scale.",
-        [("one GPU", False), ("2 GPUs: TP 2", True), ("4 GPUs: TP 4", True), ("4 GPUs: DP 2 x TP 2", True),
-         ("4 GPUs: DP 4", True)],
-        [dict(head="Read-outs from many clients: requests/s (higher is better)", vals=[30.9, 43.3, 54.0, 86.0, 121.1],
-              shown=["30.9", "43.3 (1.40x)", "54.0 (1.75x)", "86.0 (2.78x)", "121.1 (3.92x)"],
-              unit="requests/s"),
-         dict(head="One request at a time, with thoughts: mean ms per item (lower is better)",
-              vals=[1209, 902, 768, 902, "as one GPU (1,209), plus ~1 ms for the router"],
-              shown=["1,209", "902", "768", "902", ""], unit="ms")],
-        note="Read-outs: the most requests/s over 32 to 256 clients (one GPU and TP: from 64 clients). With thoughts: "
-             "the 231 items one at a time, 67 of them thinking. Second H200 server (NVSwitch), 2026-10-14.")
+    t = style(theme)
+    labels = ["one GPU", "2 GPUs: TP 2", "4 GPUs: TP 4", "4 GPUs: DP 2 × TP 2", "4 GPUs: DP 4"]
+    colors = [PRISM_LIGHT] + [PRISM] * 4
+    fig, (a, b) = plt.subplots(1, 2, figsize=(WIDTH, 2.7), sharey=True)
+    hbars(a, t, labels, [30.9, 43.3, 54.0, 86.0, 121.1], colors,
+          shown=["30.9", "43.3 (1.40×)", "54.0 (1.75×)", "86.0 (2.78×)", "121.1 (3.92×)"], xmax=175,
+          title="Read-outs from many clients (higher is better)", xlabel="requests per second")
+    hbars(b, t, labels, [1209, 902, 768, 902, "as one GPU (1,209), plus ~1 ms for the router"], colors,
+          shown=["1,209", "902", "768", "902", ""], xmax=1450,
+          title="One request at a time, with thoughts (lower is better)", xlabel="mean ms per item")
+    fig.subplots_adjust(left=0.15, right=0.98, top=0.76, bottom=0.18, wspace=0.12)
+    frame(fig, (a, b), t, "Several GPUs: StartLux-Decision v1.1 27B on H200s",
+          "StartLux-Prism int8, JevBench. Data parallelism (DP: whole servers behind the router) for throughput, tensor "
+          "parallelism (TP: one model split over the GPUs) for the time per request. Every configuration answers as "
+          "one GPU does, bit for bit; one GPU in light violet, for scale.",
+          note="Read-outs: the most requests/s over 32 to 256 clients (one GPU and TP: from 64 clients). With "
+               "thoughts: the 231 items one at a time, 67 of them thinking. Second H200 server (NVSwitch), "
+               "2026-10-14.", foot=32)
+    return fig
 
 
 def main():
     os.makedirs(OUT, exist_ok=True)
     for name, fn in CHARTS.items():
         for theme in THEMES:
-            path = os.path.join(OUT, name.replace("_", "-") + ("-dark" if theme == "dark" else "") + ".svg")
-            with open(path, "w") as f:
-                f.write(fn(theme))
+            save(fn(theme), name, theme)
     print(f"{2 * len(CHARTS)} files in {os.path.relpath(OUT)}")
 
 
