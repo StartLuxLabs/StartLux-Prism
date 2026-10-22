@@ -4,8 +4,9 @@
     python bench/charts.py [OUT_DIR]
 
 The numbers are those of docs/benchmarks.md's tables (from results/, as bench/report.py prints them), and every chart
-has its table next to it there. Plain matplotlib in the colors of the StartLux-Decision technical report
-(arXiv:2610.17309): its violets for StartLux-Prism, its reds for every other engine, the value on every bar. Text is
+has its table next to it there. Plain matplotlib in the style of the StartLux-Decision technical report
+(arXiv:2610.17309): its violet for StartLux-Prism, greys for every other engine, Arial, titles on the left, the value on
+every bar, and one bar thickness in every chart. Text is
 drawn as paths, so the SVGs look the same in every browser, and the files carry no date, so a rerun changes nothing.
 """
 import os
@@ -24,9 +25,11 @@ from matplotlib.patches import Patch  # noqa: E402
 OUT = sys.argv[1] if len(sys.argv) > 1 else os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "docs",
                                                          "images")
 
-# The StartLux-Decision report's palette: violets for its own models (27B #7c62b8, 9B #a07ede), coral and brick red
-PRISM, PRISM_LIGHT = "#7c62b8", "#a07ede"          # StartLux-Prism int8; its other precisions and configurations
-OTHER, OTHER_DARK = "#ea8e89", "#b9524b"           # every other engine (the official one in FP8); the official in BF16
+# The StartLux-Decision report's palette: StartLux violet for its own work, greys (told apart by lightness) for others
+PRISM, PRISM_LIGHT = "#8A5CD6", "#B99BE8"          # StartLux-Prism int8; its other precisions and configurations
+OTHER, OTHER_DARK = "#B9B9B9", "#7A7A7A"           # every other engine (the official one in FP8); the official in BF16
+BAR = 0.22                                         # inches: the thickness of every bar, vertical or horizontal
+PITCH = 0.34                                       # inches: one row of horizontal bars
 
 THEMES = {   # GitHub's text, muted text, border and page colors in each theme
     "light": dict(text="#1f2328", muted="#59636e", grid="#d1d9e0", axis="#818b98", page="#ffffff"),
@@ -40,11 +43,11 @@ def style(theme):
     plt.rcdefaults()
     plt.rcParams.update({
         "svg.fonttype": "path", "svg.hashsalt": "startlux-prism",
-        "font.family": "DejaVu Sans", "font.size": 10,
+        "font.family": ["Arial", "Helvetica", "DejaVu Sans"], "font.size": 10,
         "text.color": t["text"], "axes.labelcolor": t["text"], "axes.edgecolor": t["axis"],
         "xtick.color": t["axis"], "ytick.color": t["axis"], "xtick.labelcolor": t["text"],
         "ytick.labelcolor": t["text"],
-        "axes.titlesize": 10.5, "axes.labelsize": 9.5, "xtick.labelsize": 9, "ytick.labelsize": 9.5,
+        "axes.titlesize": 10, "axes.titlelocation": "left", "axes.labelsize": 9.5, "xtick.labelsize": 9, "ytick.labelsize": 9.5,
         "axes.spines.top": False, "axes.spines.right": False,
         "axes.grid": True, "grid.color": t["grid"], "grid.linewidth": 0.7,
         "axes.axisbelow": True, "legend.frameon": False, "legend.fontsize": 9.5,
@@ -72,23 +75,25 @@ def frame(fig, axes, t, title, subtitle=None, handles=None, note=None, head=26, 
     top = max(a.get_position().y1 for a in axes)
     bottom = min(a.get_position().y0 for a in axes)
 
+    left = min(a.get_position().x0 for a in axes)
+
     def at(y, pts):
-        return dict(x=0.5, y=y, transform=transforms.offset_copy(fig.transFigure, fig=fig, y=pts, units="points"))
+        return dict(x=left, y=y, transform=transforms.offset_copy(fig.transFigure, fig=fig, y=pts, units="points"))
 
     y = head
     if handles:
-        fig.legend(handles=handles, loc="lower center", ncol=len(handles), borderaxespad=0, handlelength=1.5,
-                   columnspacing=1.8, bbox_to_anchor=(0.5, top),
+        fig.legend(handles=handles, loc="lower left", ncol=len(handles), borderaxespad=0, handlelength=1.5,
+                   columnspacing=1.8, bbox_to_anchor=(left, top),
                    bbox_transform=transforms.offset_copy(fig.transFigure, fig=fig, y=y, units="points"))
         y += 21
     for line in reversed(textwrap.wrap(subtitle or "", 150)):
-        fig.text(s=line, ha="center", va="bottom", fontsize=9, color=t["muted"], **at(top, y))
+        fig.text(s=line, ha="left", va="bottom", fontsize=9, color=t["muted"], **at(top, y))
         y += 12.5
-    fig.text(s=title, ha="center", va="bottom", fontsize=12.5, **at(top, y + 3))
+    fig.text(s=title, ha="left", va="bottom", fontsize=12, fontweight="bold", **at(top, y + 3))
     y = -foot
     for line in textwrap.wrap(note or "", 160):
         p = at(bottom, y)
-        p["x"] = 0.01
+        p["x"] = left
         fig.text(s=line, ha="left", va="top", fontsize=8.5, color=t["muted"], **p)
         y -= 11.5
 
@@ -110,13 +115,13 @@ def hbars(ax, t, labels, vals, colors, shown=None, xmax=None, title=None, xlabel
             continue
         weight = "bold" if labels[i] in bold else "normal"
         if xmax and v > xmax:                            # cut: a gap near the bar's end, the value before it
-            ax.barh(i, end, 0.62, color=c)
+            ax.barh(i, end, BAR / PITCH, color=c)
             for x in (end * 0.93, end * 0.955):
                 ax.plot([x - end * 0.006, x + end * 0.006], [i + 0.38, i - 0.38], color=t["page"], lw=2.2,
                         solid_capstyle="butt")
             ax.text(end * 0.905, i, s, va="center", ha="right", fontsize=8.5, color="white", fontweight="bold")
         else:
-            ax.barh(i, v, 0.62, color=c)
+            ax.barh(i, v, BAR / PITCH, color=c)
             ax.text(v + end * 0.012, i, s, va="center", ha="left", fontsize=8.5, fontweight=weight)
     for lbl in ax.get_yticklabels():
         if lbl.get_text() in bold:
@@ -127,16 +132,31 @@ def hbars(ax, t, labels, vals, colors, shown=None, xmax=None, title=None, xlabel
         ax.set_xlabel(xlabel)
 
 
-def vgroups(ax, t, groups, series, colors, fmt=None, title=None, ylabel=None, ymax=None):
-    """Grouped vertical bars: series[s][g] for series s in group g, the value on every bar."""
+def vwidth(ax, ngroups):
+    """The data width of a vertical bar BAR inches wide in ax, whose x axis spans ngroups (call after the layout)."""
+    return BAR * ngroups / (ax.get_position().width * ax.figure.get_figwidth())
+
+
+def hfig(nrows, ncols=1, head=1.0, foot=0.9, left=0.2, wspace=0.12):
+    """A figure whose panels hold nrows of horizontal bars, PITCH inches apart, so every bar is BAR inches thick."""
+    h = head + nrows * PITCH + foot
+    fig, axes = plt.subplots(1, ncols, figsize=(WIDTH, h), sharey=True)
+    fig.subplots_adjust(left=left, right=0.98, top=1 - head / h, bottom=foot / h, wspace=wspace)
+    return fig, axes
+
+
+def vgroups(ax, t, groups, series, colors, fmt=None, title=None, ylabel=None, ymax=None, labels=None):
+    """Grouped vertical bars, series[s][g] for series s in group g, every bar BAR inches wide (call after the layout),
+    the value (or labels[s][g]) on every bar."""
     x = np.arange(len(groups))
     k = len(series)
-    w = 0.8 / k
+    ax.set_xlim(-0.5, len(groups) - 0.5)
+    w = vwidth(ax, len(groups))
     ax.grid(axis="x", visible=False)
     top = max(max(s) for s in series)
     for s, (vals, c) in enumerate(zip(series, colors)):
-        bars = ax.bar(x + (s - (k - 1) / 2) * w, vals, w, color=c)
-        ax.bar_label(bars, [num(v, fmt) for v in vals], padding=2, fontsize=8.5)
+        bars = ax.bar(x + (s - (k - 1) / 2) * w * 1.25, vals, w, color=c)     # a quarter bar of space between bars
+        ax.bar_label(bars, labels[s] if labels else [num(v, fmt) for v in vals], padding=2, fontsize=8.5)
     ax.set_xticks(x, groups)
     ax.set_ylim(0, ymax or top * 1.18)
     if title:
@@ -162,29 +182,21 @@ def chart(fn):
 def hero(theme, title, lat, tput):
     """lat: [(label, StartLux-Prism ms, official ms)] one request at a time; tput: [(label, ours, theirs)] req/s."""
     t = style(theme)
-    fig, (a, b) = plt.subplots(1, 2, figsize=(WIDTH, 3.6), width_ratios=[len(lat), len(tput)])
-    w = 0.36
-    x = np.arange(len(lat))
-    ours = a.bar(x - w / 2, [p / o for _, p, o in lat], w, color=PRISM, label="StartLux-Prism, int8")
-    theirs = a.bar(x + w / 2, [1.0] * len(lat), w, color=OTHER, label="Official engine, FP8 (vLLM 0.31)")
-    a.bar_label(ours, [num(p) for _, p, _ in lat], padding=2, fontsize=8.5)
-    a.bar_label(theirs, [num(o) for _, _, o in lat], padding=2, fontsize=8.5)
-    a.set_xticks(x, [label for label, _, _ in lat])
-    a.set_ylim(0, 1.2)
-    a.grid(axis="x", visible=False)
-    a.set_ylabel("Latency, official engine = 1")
-    a.set_title("One request at a time (lower is better; labels in ms)")
+    fig, (a, b) = plt.subplots(1, 2, figsize=(WIDTH, 3.7), width_ratios=[len(lat), len(tput)])
+    fig.subplots_adjust(left=0.07, right=0.98, top=0.74, bottom=0.17, wspace=0.22)
+    vgroups(a, t, [label for label, _, _ in lat], [[p / o for _, p, o in lat], [1.0] * len(lat)], [PRISM, OTHER],
+            labels=[[num(p) for _, p, _ in lat], [num(o) for _, _, o in lat]], ymax=1.2,
+            title="One request at a time (lower is better; labels in ms)", ylabel="Latency, official engine = 1")
     vgroups(b, t, [label for label, _, _ in tput], [[p for _, p, _ in tput], [o for _, _, o in tput]],
             [PRISM, OTHER], title="JevBench, 231 items (higher is better)", ylabel="Requests per second")
-    fig.tight_layout(rect=(0, 0, 1, 0.9), w_pad=3)
-    fig.suptitle(title, fontsize=12, y=1.0)
-    fig.legend(handles=[ours, theirs], loc="upper center", ncol=2, bbox_to_anchor=(0.5, 0.955))
+    frame(fig, (a, b), t, title, handles=patches([(PRISM, "StartLux-Prism, int8"),
+                                                  (OTHER, "Official engine, FP8 (vLLM 0.31)")]))
     return fig
 
 
 @chart
 def v11_hero(theme):
-    return hero(theme, "StartLux-Decision v1.1 27B AutoThink on one H200",
+    return hero(theme, "StartLux-Decision-v1.1-27B-AutoThink on one H200",
                 [("Short question\n~256 tokens", 19.0, 53.1), ("Long question\n~8,192 tokens", 439.8, 531.2),
                  ("README's three\nquestions", 17.4, 92.9), ("Three questions\nwith thoughts", 785.1, 1296.0)],
                 [("1 client", 24.2, 12.1), ("64 clients", 30.7, 26.3), ("64 clients\nwith thoughts", 7.61, 6.52)])
@@ -192,7 +204,7 @@ def v11_hero(theme):
 
 @chart
 def v1_hero(theme):
-    return hero(theme, "StartLux-Decision v1 27B on one H200",
+    return hero(theme, "StartLux-Decision-v1-27B on one H200",
                 [("Short question\n~256 tokens", 18.9, 54.5), ("Long question\n~8,192 tokens", 438.5, 539.1),
                  ("README's three\nquestions", 17.2, 96.4)],
                 [("1 client", 24.4, 12.0), ("64 clients", 30.9, 25.4)])
@@ -206,19 +218,20 @@ def v11_accuracy(theme):
     suites = [92.94, 93.07, 92.97, 92.83]     # StartLux-Decision v1's seven suites, average accuracy %
     jevbench = [224, 226, 226, 225]           # JevBench public, items right of 231
     fig, (a, b) = plt.subplots(1, 2, figsize=(WIDTH, 3.4))
+    fig.subplots_adjust(left=0.08, right=0.98, top=0.8, bottom=0.17, wspace=0.25)
     for ax, vals, fmt, top, label, head in ((a, suites, ".2f", 110, "Average accuracy (%)",
                                              "Seven evaluation suites (12,351 decisions)"),
                                             (b, jevbench, "d", 254, "Items right, of 231",
                                              "JevBench public (231 items)")):
-        bars = ax.bar(range(4), vals, 0.6, color=colors)
+        ax.set_xlim(-0.5, 3.5)
+        bars = ax.bar(range(4), vals, vwidth(ax, 4), color=colors)
         ax.bar_label(bars, [format(v, fmt) for v in vals], padding=2, fontsize=8.5)
         ax.set_xticks(range(4), names)
         ax.set_ylim(0, top)
         ax.grid(axis="x", visible=False)
         ax.set_ylabel(label)
         ax.set_title(head)
-    fig.suptitle("StartLux-Decision v1.1 27B AutoThink with thoughts: accuracy", fontsize=12)
-    fig.tight_layout(w_pad=3)
+    frame(fig, (a, b), t, "StartLux-Decision-v1.1-27B-AutoThink with thoughts: accuracy")
     return fig
 
 
@@ -252,20 +265,19 @@ def all_engines(theme, title, subtitle, which, xlabel, note):
     """Every engine on the three models: one panel per model, the rows in JEVBENCH's order."""
     t = style(theme)
     k = 1 if which == "lat" else 2
-    fig, axes = plt.subplots(1, 3, figsize=(WIDTH, 3.9), sharey=True)
+    fig, axes = hfig(len(JEVBENCH), 3, head=1.05, foot=1.1)
     labels = [r[0] for r in JEVBENCH]
     for m, ax in enumerate(axes):
         hbars(ax, t, labels, [r[k][m] for r in JEVBENCH], [engine_color(r[0]) for r in JEVBENCH],
               xmax=LAT_MAX[m] if which == "lat" else None, title=MODELS[m], xlabel=xlabel, bold=(OURS,))
-    fig.subplots_adjust(left=0.2, right=0.98, top=0.86, bottom=0.14, wspace=0.12)
-    frame(fig, axes, t, title, subtitle, note=note, foot=32)
+    frame(fig, axes, t, title, subtitle, note=note, foot=40)
     return fig
 
 
 @chart
 def jevbench_latency(theme):
     return all_engines(
-        theme, "StartLux-Decision v1 on JevBench, one request at a time: every engine",
+        theme, "StartLux-Decision-v1 on JevBench, one request at a time: every engine",
         "Mean ms per item over the 231 public items (lower is better). Every engine alone on the GPU with the same "
         "Q8_0 weights, through the same HTTP client.", "lat", "ms per item",
         STAND_IN + " The 27B's llama.cpp bar is cut (589.2 ms). Scores, p50 and p95: docs/benchmarks.md.")
@@ -274,7 +286,7 @@ def jevbench_latency(theme):
 @chart
 def jevbench_throughput(theme):
     return all_engines(
-        theme, "StartLux-Decision v1 on JevBench from 32 clients: every engine",
+        theme, "StartLux-Decision-v1 on JevBench from 32 clients: every engine",
         "Requests per second over three passes of the 231 public items (higher is better); no engine failed a request. "
         "The same Q8_0 weights for every engine.", "tput", "requests per second",
         STAND_IN + " 8 and 16 clients give every engine within a few percent of its 32-client rate.")
@@ -287,14 +299,13 @@ def engines(theme, title, m, note):
     rows = sorted(JEVBENCH, key=lambda r: r[1][m])
     labels = [r[0] for r in rows]
     colors = [engine_color(r[0]) for r in rows]
-    fig, (a, b) = plt.subplots(1, 2, figsize=(WIDTH, 3.9), sharey=True)
+    fig, (a, b) = hfig(len(rows), 2, head=1.0, foot=1.0)
     hbars(a, t, labels, [r[1][m] for r in rows], colors, xmax=LAT_MAX[m], bold=(OURS,),
           title="One request at a time (lower is better)", xlabel="mean ms per item")
     hbars(b, t, labels, [r[2][m] for r in rows], colors, bold=(OURS,),
           title="From 32 clients (higher is better)", xlabel="requests per second")
-    fig.subplots_adjust(left=0.2, right=0.98, top=0.86, bottom=0.14, wspace=0.12)
     frame(fig, (a, b), t, title, "The 231 public JevBench items; every engine alone on the GPU, through the same HTTP "
-                                 "client.", note=note, foot=32)
+                                 "client.", note=note, foot=40)
     return fig
 
 
@@ -323,16 +334,15 @@ def long_evidence(theme, title, rows, cut8, cut50, note):
     t = style(theme)
     labels = [r[0] for r in rows]
     colors = [engine_color(r[0]) for r in rows]
-    fig, (a, b) = plt.subplots(1, 2, figsize=(WIDTH, 3.4), sharey=True)
+    fig, (a, b) = hfig(len(rows), 2, head=1.15, foot=0.9)
     hbars(a, t, labels, [r[1] for r in rows], colors, xmax=cut8, bold=(OURS,),
           shown=[f"{v:,}" if isinstance(v, int) else f"{v:,.1f}" for v in (r[1] for r in rows)],
           title="8,000 tokens (lower is better)", xlabel="p50 ms")
     hbars(b, t, labels, [r[2] for r in rows], colors, xmax=cut50, bold=(OURS,),
           shown=[v if isinstance(v, str) else f"{v:,}" for v in (r[2] for r in rows)],
           title="50,000 tokens (lower is better)", xlabel="p50 ms")
-    fig.subplots_adjust(left=0.2, right=0.98, top=0.84, bottom=0.15, wspace=0.12)
     frame(fig, (a, b), t, title, "One yes/no question about an application log of 8,000 or 50,000 tokens, one request "
-                                 "at a time; every engine counted every token. " + STAND_IN, note=note, foot=32)
+                                 "at a time; every engine counted every token. " + STAND_IN, note=note, foot=40)
     return fig
 
 
@@ -401,17 +411,16 @@ def prefix_cache(theme):
     labels = [r[0] for r in rows]
     colors = [PRISM if i == 0 else PRISM_LIGHT if r[0].startswith("StartLux-Prism") else OTHER
               for i, r in enumerate(rows)]
-    fig, (a, b) = plt.subplots(1, 2, figsize=(WIDTH, 2.9), sharey=True)
+    fig, (a, b) = hfig(len(rows), 2, head=1.15, foot=0.85, left=0.23)
     hbars(a, t, labels, [r[1] for r in rows], colors, xmax=200, bold=(labels[0],),
           title="First request (new evidence)", xlabel="p50 ms")
     hbars(b, t, labels, [r[2] for r in rows], colors, xmax=200, bold=(labels[0],),
           title="Follow-up requests (same evidence)", xlabel="p50 ms")
-    fig.subplots_adjust(left=0.23, right=0.98, top=0.8, bottom=0.17, wspace=0.12)
     frame(fig, (a, b), t, "Follow-up questions about evidence already sent",
           "StartLux-Decision-v1-4B (Q8_0) on an RTX 5090: the 20 public JevBench items with the longest evidence "
           "(2,000-3,700 tokens), each asked, then two more questions about the same evidence. p50 ms.",
           note="2026-10-10. StartLux-Prism answers a follow-up from the evidence's cached state, bit-identical to "
-               "recomputing it.", foot=32)
+               "recomputing it.", foot=40)
     return fig
 
 
@@ -421,9 +430,9 @@ def q4km(theme):
     groups = ["4B · RTX 5090", "9B · RTX 5090", "27B · RTX 5090", "27B · H200"]
     vals = [(19.7, 135.8), (32.1, 160.3), (112.7, 439.3), (155.2, 626.7)]
     fig, ax = plt.subplots(figsize=(WIDTH, 3.1))
+    fig.subplots_adjust(left=0.08, right=0.98, top=0.8, bottom=0.12)
     vgroups(ax, t, groups, [[v[0] for v in vals], [v[1] for v in vals]], [PRISM, OTHER],
             title="Mean ms per JevBench item (lower is better)", ylabel="ms per item")
-    fig.subplots_adjust(left=0.08, right=0.98, top=0.8, bottom=0.12)
     frame(fig, (ax,), t, "StartLux-Decision-v1 Q4_K_M files: StartLux-Prism W4A8 against llama.cpp",
           "Each engine on the same Q4_K_M GGUF file: StartLux-Prism on the file's own 4-bit weights (int8 activations, "
           "int8 tensor cores), llama.cpp b10639. JevBench, one request at a time.",
@@ -445,16 +454,17 @@ V11_SYSTEMS = [(PRISM, "StartLux-Prism int8"), (OTHER, "official engine, FP8"), 
 def v11_panels(theme, title, subtitle, panels, ylabel, note):
     t = style(theme)
     fig, axes = plt.subplots(1, len(panels), figsize=(WIDTH, 3.0))
+    fig.subplots_adjust(left=0.07, right=0.98, top=0.76, bottom=0.06, wspace=0.28)
     colors = [c for c, _ in V11_SYSTEMS]
     for ax, (head, vals) in zip(axes, panels):
-        bars = ax.bar(range(3), vals, 0.62, color=colors)
+        ax.set_xlim(-0.5, 2.5)
+        bars = ax.bar(range(3), vals, vwidth(ax, 3), color=colors)
         ax.bar_label(bars, [num(v) for v in vals], padding=2, fontsize=8.5)
         ax.set_xticks([])
         ax.grid(axis="x", visible=False)
         ax.set_ylim(0, max(vals) * 1.18)
         ax.set_title(head)
     axes[0].set_ylabel(ylabel)
-    fig.subplots_adjust(left=0.07, right=0.98, top=0.76, bottom=0.06, wspace=0.28)
     frame(fig, axes, t, title, subtitle, handles=patches(V11_SYSTEMS), note=note, foot=10)
     return fig
 
@@ -462,7 +472,7 @@ def v11_panels(theme, title, subtitle, panels, ylabel, note):
 @chart
 def v11_official_latency(theme):
     return v11_panels(
-        theme, "StartLux-Decision v1.1 27B AutoThink: StartLux-Prism against the official engine",
+        theme, "StartLux-Decision-v1.1-27B-AutoThink: StartLux-Prism against the official engine",
         "One request at a time, new evidence in every request, the official engine's own client (startlux-decide "
         "bench). Mean ms per request (lower is better).",
         [("One yes/no question, ~256 tokens", [19.0, 53.1, 54.2]),
@@ -473,7 +483,7 @@ def v11_official_latency(theme):
 @chart
 def v11_official_throughput(theme):
     return v11_panels(
-        theme, "StartLux-Decision v1.1 27B AutoThink under load",
+        theme, "StartLux-Decision-v1.1-27B-AutoThink under load",
         "JevBench's 231 public items, requests per second (higher is better): read-outs only (think_mode never) from "
         "one and from 64 clients, and with thoughts (think_mode auto, the release's default) from 64 clients.",
         [("Read-outs, one client", [24.2, 12.1, 10.6]), ("Read-outs, 64 clients", [30.7, 26.3, 18.3]),
@@ -485,6 +495,7 @@ def v11_official_throughput(theme):
 def v11_precision(theme):
     t = style(theme)
     fig, (a, b) = plt.subplots(1, 2, figsize=(WIDTH, 3.5), width_ratios=[4, 3])
+    fig.subplots_adjust(left=0.08, right=0.98, top=0.8, bottom=0.2, wspace=0.25)
     vgroups(a, t, ["One prompt of\n1,024 tokens\n(1.63×)", "One prompt of\n8,192 tokens\n(1.68×)",
                    "One prompt of\n32,768 tokens\n(1.56×)", "Passes of 8,192\ntokens, short\nprompts (1.74×)"],
             [[18865, 19219, 15810, 20855], [11571, 11424, 10155, 11958]], [PRISM, PRISM_LIGHT], fmt=",.0f",
@@ -492,8 +503,7 @@ def v11_precision(theme):
     vgroups(b, t, ["1 sequence\n(1.42×)", "8 sequences\n(1.44×)", "64 sequences\n(1.30×)"],
             [[10.47, 11.06, 16.70], [14.89, 15.90, 21.74]], [PRISM, PRISM_LIGHT], fmt=",.2f",
             title="Decode (lower is better)", ylabel="ms per step")
-    fig.subplots_adjust(left=0.08, right=0.98, top=0.8, bottom=0.2, wspace=0.25)
-    frame(fig, (a, b), t, "StartLux-Prism int8 against bf16: StartLux-Decision v1.1 27B on one H200",
+    frame(fig, (a, b), t, "StartLux-Prism int8 against bf16: StartLux-Decision-v1.1-27B on one H200",
           "The same Q8_0 weights: int8 (W8A8) or dequantized to bf16 (cuBLAS); the engine alone, no HTTP. In "
           "parentheses: how many times faster int8 is.",
           handles=patches([(PRISM, "StartLux-Prism int8"), (PRISM_LIGHT, "StartLux-Prism bf16")]),
@@ -507,21 +517,20 @@ def several_gpus(theme):
     t = style(theme)
     labels = ["one GPU", "2 GPUs: TP 2", "4 GPUs: TP 4", "4 GPUs: DP 2 × TP 2", "4 GPUs: DP 4"]
     colors = [PRISM_LIGHT] + [PRISM] * 4
-    fig, (a, b) = plt.subplots(1, 2, figsize=(WIDTH, 2.7), sharey=True)
+    fig, (a, b) = hfig(len(labels), 2, head=1.3, foot=0.95, left=0.15)
     hbars(a, t, labels, [30.9, 43.3, 54.0, 86.0, 121.1], colors,
           shown=["30.9", "43.3 (1.40×)", "54.0 (1.75×)", "86.0 (2.78×)", "121.1 (3.92×)"], xmax=175,
           title="Read-outs from many clients (higher is better)", xlabel="requests per second")
     hbars(b, t, labels, [1209, 902, 768, 902, "as one GPU (1,209), plus ~1 ms for the router"], colors,
           shown=["1,209", "902", "768", "902", ""], xmax=1450,
           title="One request at a time, with thoughts (lower is better)", xlabel="mean ms per item")
-    fig.subplots_adjust(left=0.15, right=0.98, top=0.76, bottom=0.18, wspace=0.12)
-    frame(fig, (a, b), t, "Several GPUs: StartLux-Decision v1.1 27B on H200s",
+    frame(fig, (a, b), t, "Several GPUs: StartLux-Decision-v1.1-27B on H200s",
           "StartLux-Prism int8, JevBench. Data parallelism (DP: whole servers behind the router) for throughput, tensor "
           "parallelism (TP: one model split over the GPUs) for the time per request. Every configuration answers as "
           "one GPU does, bit for bit; one GPU in light violet, for scale.",
           note="Read-outs: the most requests/s over 32 to 256 clients (one GPU and TP: from 64 clients). With "
                "thoughts: the 231 items one at a time, 67 of them thinking. Second H200 server (NVSwitch), "
-               "2026-10-14.", foot=32)
+               "2026-10-14.", foot=40)
     return fig
 
 

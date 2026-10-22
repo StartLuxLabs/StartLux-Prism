@@ -5,7 +5,7 @@ releases, byte-identical to them: [Setup](#setup)): one request at a time, many 
 once, long evidence, follow-up questions served from a prefix cache, the longest request each engine computes in one
 pass, and the stress test of a running server. Two machines: an RTX 5090 (the 4B, the 9B and the 27B's Q4_K_M file)
 and an H200 (the 27B). Every engine runs alone on the GPU, one after another, through the same HTTP client; the v1
-numbers are from 2026-10-10 to 2026-10-12. Then StartLux-Decision v1.1 27B AutoThink on a second H200 server
+numbers are from 2026-10-10 to 2026-10-12. Then StartLux-Decision-v1.1-27B-AutoThink on a second H200 server
 (2026-10-13 and 14): thoughts (its Q8_0 and Q4_K_M files, and the 9B's Q4_K_M), its official engine, int8 against
 bf16, images, and several GPUs (data parallelism,
 tensor parallelism, both; eight GPUs against the official engine). Each chart is drawn from the table below it (`python bench/charts.py`).
@@ -20,9 +20,9 @@ tensor parallelism, both; eight GPUs against the official engine). Each chart is
 - [Q4_K_M files: W4A8](#q4_k_m-files-w4a8)
 - [The longest request in one pass](#the-longest-request-in-one-pass)
 - [Accuracy: StartLux-Decision-v1's evaluation](#accuracy-startlux-decision-v1s-evaluation)
-- [StartLux-Decision v1.1 27B AutoThink: thinking](#startlux-decision-v11-27b-autothink-thinking)
-- [StartLux-Decision v1.1 27B AutoThink against its official engine](#startlux-decision-v11-27b-autothink-against-its-official-engine)
-- [StartLux-Decision v1 27B against the official engine](#startlux-decision-v1-27b-against-the-official-engine)
+- [StartLux-Decision-v1.1-27B-AutoThink: thinking](#startlux-decision-v11-27b-autothink-thinking)
+- [StartLux-Decision-v1.1-27B-AutoThink against its official engine](#startlux-decision-v11-27b-autothink-against-its-official-engine)
+- [StartLux-Decision-v1-27B against the official engine](#startlux-decision-v1-27b-against-the-official-engine)
 - [Images](#images)
 - [Several GPUs: data parallelism](#several-gpus-data-parallelism)
 - [Tensor parallelism: the 27B on 2 and 4 H200s](#tensor-parallelism-the-27b-on-2-and-4-h200s)
@@ -731,7 +731,7 @@ Reproduce on the GPU server: `scripts/accuracy_v1.sh` (STARTLUX_V1: a checkout o
 folder its `eval/fetch_benchmarks.sh` fills), then `python bench/accuracy_tables.py` (these tables) and
 `bench/compare_preds.py` (agreement per suite). Results in `results/accuracy_v1/`.
 
-## StartLux-Decision v1.1 27B AutoThink: thinking
+## StartLux-Decision-v1.1-27B-AutoThink: thinking
 
 StartLux-Decision-v1.1-27B-AutoThink from its Q8_0 GGUF (`StartLux-Decision-v1.1-27B-AutoThink-Q8_0.gguf`, 28.60 GB,
 SHA-256 `28757be9a8fae5253201edd155e553e7a7324d9f1130ad20ac1009780d90659d`, the release on Hugging Face), int8
@@ -811,7 +811,7 @@ instead of 27: at a few rows the W4A8 GEMMs stream the 27B's shapes at 1.2-2.7 T
 the W4A8 GEMMs' arithmetic sets the pace (mma.sync on Hopper, [Q4_K_M files](#q4_k_m-files-w4a8)), and the read-outs
 without thoughts take 3.8x the Q8_0 file's time on the H200 (154 against 41 ms), for the same reason.
 
-## StartLux-Decision v1.1 27B AutoThink against its official engine
+## StartLux-Decision-v1.1-27B-AutoThink against its official engine
 
 StartLux-Prism against Startlux-decide-inference, StartLux-Decision v1.1's own package and server (`startlux-decide`), on
 one 8-GPU H200 server, one GPU per server, 2026-10-13/14. Other users' jobs ran on two other GPUs of the server meanwhile.
@@ -907,7 +907,7 @@ FP8, 224 in int8; W4A8: below the suites):
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="images/v11-accuracy-dark.svg">
-  <img src="images/v11-accuracy.svg" width="840" alt="StartLux-Decision v1.1 27B AutoThink with thoughts. StartLux-Decision v1's seven evaluation suites, average accuracy: StartLux-Prism int8 92.94, StartLux-Prism W4A8 93.07, official engine BF16 92.97, FP8 92.83. JevBench public, items right of 231: 224, 226, 226, 225.">
+  <img src="images/v11-accuracy.svg" width="840" alt="StartLux-Decision-v1.1-27B-AutoThink with thoughts. StartLux-Decision v1's seven evaluation suites, average accuracy: StartLux-Prism int8 92.94, StartLux-Prism W4A8 93.07, official engine BF16 92.97, FP8 92.83. JevBench public, items right of 231: 224, 226, 226, 225.">
 </picture>
 
 **StartLux-Decision v1's evaluation suites with thoughts** (`think_mode` auto, 12,351 decisions from 16 clients, the
@@ -958,7 +958,7 @@ What the experiment shows:
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="images/v11-precision-dark.svg">
-  <img src="images/v11-precision.svg" width="840" alt="StartLux-Prism int8 against bf16 on StartLux-Decision v1.1 27B, one H200. Prefill tokens per second: one prompt of 1,024 tokens 18,865 against 11,571; 8,192 tokens 19,219 against 11,424; 32,768 tokens 15,810 against 10,155; passes of 8,192 tokens of short prompts 20,855 against 11,958. Decode ms per step: 1 sequence 10.47 against 14.89; 8 sequences 11.06 against 15.90; 64 sequences 16.70 against 21.74.">
+  <img src="images/v11-precision.svg" width="840" alt="StartLux-Prism int8 against bf16 on StartLux-Decision-v1.1-27B, one H200. Prefill tokens per second: one prompt of 1,024 tokens 18,865 against 11,571; 8,192 tokens 19,219 against 11,424; 32,768 tokens 15,810 against 10,155; passes of 8,192 tokens of short prompts 20,855 against 11,958. Decode ms per step: 1 sequence 10.47 against 14.89; 8 sequences 11.06 against 15.90; 64 sequences 16.70 against 21.74.">
 </picture>
 
 Prefill (`bench/prefill_speed.py`):
@@ -990,17 +990,17 @@ Through the server (JevBench, requests/s; correct per pass of 231):
 | int8, with thoughts | 0.84 | 4.94 | 7.61 | 219-222 (mean 220.5) |
 | bf16, with thoughts | 0.51 | 3.40 | 4.14 | 224-228 (mean 226.2) |
 
-## StartLux-Decision v1 27B against the official engine
+## StartLux-Decision-v1-27B against the official engine
 
 StartLux-Prism int8 against the official engine of the
 [v1.1 comparison](#startlux-decision-v11-27b-autothink-against-its-official-engine) in BF16 and in FP8 (the chart: FP8,
-its faster setting), on StartLux-Decision v1 27B: the same measurements and clients, without thoughts (v1 answers in
+its faster setting), on StartLux-Decision-v1-27B: the same measurements and clients, without thoughts (v1 answers in
 one pass). One GPU of the first H200 server, the three servers one after the other, 2026-10-15; other users' jobs ran
 on the other GPUs.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="images/v1-hero-dark.svg">
-  <img src="images/v1-hero.svg" width="840" alt="StartLux-Decision v1 27B on one H200, StartLux-Prism int8 against the official engine in FP8. Mean ms per request, one at a time: one question of about 256 tokens 18.9 against 54.5; about 8,192 tokens 438.5 against 539.1; the README's three questions 17.2 against 96.4. JevBench requests per second: from 1 client 24.4 against 12.0; from 64 clients 30.9 against 25.4.">
+  <img src="images/v1-hero.svg" width="840" alt="StartLux-Decision-v1-27B on one H200, StartLux-Prism int8 against the official engine in FP8. Mean ms per request, one at a time: one question of about 256 tokens 18.9 against 54.5; about 8,192 tokens 438.5 against 539.1; the README's three questions 17.2 against 96.4. JevBench requests per second: from 1 client 24.4 against 12.0; from 64 clients 30.9 against 25.4.">
 </picture>
 
 **The servers:**
@@ -1396,7 +1396,7 @@ clients on every model), where no engine failed a request.
     262,144, `--gpu-memory-utilization 0.88`, `--logprobs-mode processed_logprobs --max-logprobs 26`,
     `--generation-config vllm`, images).
   - Thoughts: one streamed request each. There is no MTP, since the release holds no MTP weights.
-  - StartLux-Decision v1 27B: the same command on the v1 BF16 release, which serves one pass. That release holds MTP
+  - StartLux-Decision-v1-27B: the same command on the v1 BF16 release, which serves one pass. That release holds MTP
     weights, so the launcher adds MTP speculative decoding with 3 draft tokens.
 * **Long evidence** (the 8k and 50k tables and the 8k-token clients): llama.cpp `-c 262144 --parallel 4`, vLLM
   `--max-model-len 65536`, SGLang `--context-length 65536`, decider `DECIDER_MAX_STATE_TOKENS=65536`; the rest as above
