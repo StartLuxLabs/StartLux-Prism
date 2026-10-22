@@ -1,25 +1,11 @@
 # StartLux-Prism
 
-<div align="center">
+**Fast, exact inference for [StartLux-Decision](https://huggingface.co/startlux-models/collections) models on NVIDIA
+GPUs.** StartLux-Prism serves StartLux-Decision v1 and v1.1 AutoThink (4B, 9B, 27B) straight from their released GGUF
+files, behind the TypeSafe `/v1/systemone` API, on GPUs from Ampere to Blackwell, one or several. Like a prism that
+splits light into its spectrum, it turns each question into a calibrated probability for every option.
 
-**Fast, exact inference for [StartLux-Decision](https://huggingface.co/startlux-models/collections) models on NVIDIA GPUs**
-
-[![Python 3.12](https://img.shields.io/badge/python-3.12-3776AB?labelColor=555555)](#installation)
-[![CUDA 12 | 13](https://img.shields.io/badge/CUDA-12%20%7C%2013-76B900?labelColor=555555)](#installation)
-[![GPUs: Ampere to Blackwell](https://img.shields.io/badge/GPU-Ampere%20%7C%20Ada%20%7C%20Hopper%20%7C%20Blackwell-76B900?labelColor=555555)](#supported-models-and-gpus)
-[![Models on Hugging Face](https://img.shields.io/badge/models-Hugging%20Face-FFB000?labelColor=555555)](https://huggingface.co/startlux-models/collections)
-
-[Installation](#installation) · [Quick start](#quick-start) · [Models and GPUs](#supported-models-and-gpus) ·
-[Performance](#performance) · [Accuracy](#accuracy) · [Serving guide](docs/serving.md) ·
-[Benchmarks](docs/benchmarks.md) · [Design](docs/design.md)
-
-</div>
-
-StartLux-Prism serves StartLux-Decision v1 and v1.1 AutoThink (4B, 9B, 27B) from their released GGUF files, behind the
-TypeSafe `/v1/systemone` API, on one GPU or several. A decision model answers each typed question with a calibrated
-probability for every option, read from a single forward pass. StartLux-Prism is built for that workload: it computes a
-request's shared evidence once, reads out only the answer letters, and runs every pass as CUDA graphs on int8 tensor
-cores whose results do not depend on the batch.
+**[Live comparison](#live-comparison-video-understanding)** · **[Installation](#installation)** · **[Quick start](#quick-start)** · **[Example](#example)** · **[Models and GPUs](#supported-models-and-gpus)** · **[Serving guide](docs/serving.md)** · **[Benchmarks](docs/benchmarks.md)**
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/images/v11-hero-dark.svg">
@@ -35,7 +21,18 @@ cores whose results do not depend on the batch.
 
 <sub><b>StartLux-Decision-v1-27B on one H200: StartLux-Prism int8 against the official engine in FP8 (vLLM 0.31).</b></sub>
 
-## Highlights
+## Live comparison: video understanding
+
+![StartLux-Prism and vLLM side by side, answering 24 questions about one warehouse video](docs/images/video-live-360p.gif)
+
+The same StartLux-Decision v1.1 27B checkpoint answers **24 structured questions about one video in a single request**:
+eight frames sampled from the clip (640x360), one H200, 8-bit on both sides. The official engine on vLLM 0.31 (FP8, its
+launcher's flags) took **0.72 s**; StartLux-Prism int8 took **0.21 s** (**3.38x faster**).
+Both engines ran on the same GPU, one after the other. The animation replays each at its measured speed: end-to-end
+HTTP time, median of 5 runs, model loading excluded.
+[Watch the MP4](docs/images/video-live-360p.mp4). Video: Usman AbdulrasheedGambo / Pexels.
+
+## Why StartLux-Prism
 
 - **Faster than the official engine.** Serving the 27B on one H200, StartLux-Prism answers a short question 2.8× and a
   three-question request 5.3× faster than StartLux-Decision's own engine in FP8 (vLLM 0.31), with 1.17× its throughput
@@ -104,7 +101,35 @@ The server prints each loading step, then `Ready`, its endpoints and a request t
 ([what a start prints](docs/serving.md#what-a-start-prints)). The first start measures the int8 activation ranges once
 and keeps them in `~/.cache/startlux-prism/calib`.
 
-Ask two questions about one ticket:
+### Several GPUs
+
+The same flags apply, and every answer is bit-identical to the single-GPU one:
+
+```bash
+python -m startlux_prism.dp --gpus 0,1,2,3,4,5,6,7 --gguf $G --model-dir $M --port 8092   # data parallel: most throughput
+python -m startlux_prism.server --tp 2 --gpus 0,1 --gguf $G --model-dir $M --port 8092    # tensor parallel: less latency
+python -m startlux_prism.dp --gpus 0,1,2,3 --tp 2 --gguf $G --model-dir $M --port 8092    # both
+```
+
+### In production
+
+The server has no authentication of its own: serve other machines (`--host 0.0.0.0`) only behind your own access
+control. To keep the compiled kernels and the calibration across restarts, or to run the server under systemd, see
+[Running as a service](docs/serving.md#running-as-a-service).
+
+## Example
+
+With the server running, ask one question:
+
+```bash
+curl -s localhost:8092/v1/systemone -H 'Content-Type: application/json' \
+  -d '{"state": "I was charged twice and want a refund.", "questions": {"intent": {"type": "choice", "instructions": "Choose the customer intent.", "criteria": {"billing": "A payment or refund issue", "technical": "A malfunction or setup issue", "other": "Another request"}}}}'
+```
+
+The response holds `answers.intent.choice`, the most likely label, and `answers.intent.probabilities`, one per label.
+
+Several questions about the same evidence go in one request and are answered in one
+forward pass. Ask two questions about one ticket:
 
 ```bash
 curl -s localhost:8092/v1/systemone -H 'Content-Type: application/json' -d '{
@@ -127,21 +152,35 @@ setting of the published numbers, `urgent` (0.749) falls below it: the model thi
 `none_probability` is the probability that no listed option fits; the [serving guide](docs/serving.md) explains how to
 act on it.
 
-### Several GPUs
-
-The same flags apply, and every answer is bit-identical to the single-GPU one:
+Ask about a video: sample eight frames, then send them as images (v1.1 with its `mmproj` file, up to 8 per request).
+A string `state` places them at its `<image>` marks:
 
 ```bash
-python -m startlux_prism.dp --gpus 0,1,2,3,4,5,6,7 --gguf $G --model-dir $M --port 8092   # data parallel: most throughput
-python -m startlux_prism.server --tp 2 --gpus 0,1 --gguf $G --model-dir $M --port 8092    # tensor parallel: less latency
-python -m startlux_prism.dp --gpus 0,1,2,3 --tp 2 --gguf $G --model-dir $M --port 8092    # both
+ffmpeg -i clip.mp4 -vf "fps=8/21,scale=640:360" frame%d.jpg    # eight frames from a 21-second clip, at 640x360
 ```
 
-### In production
+```python
+import base64, json, urllib.request
 
-The server has no authentication of its own: serve other machines (`--host 0.0.0.0`) only behind your own access
-control. To keep the compiled kernels and the calibration across restarts, or to run the server under systemd, see
-[Running as a service](docs/serving.md#running-as-a-service).
+frames = ["data:image/jpeg;base64," + base64.b64encode(open(f"frame{i}.jpg", "rb").read()).decode()
+          for i in range(1, 9)]
+body = {"state": "Eight frames sampled in order from one video of a work site: " + " ".join(["<image>"] * 8),
+        "images": frames,
+        "think_mode": "never",
+        "questions": {
+            "vehicle": {"type": "choice", "instructions": "Which vehicle is used?",
+                        "criteria": {"forklift": "A sit-down forklift", "order picker": "A stand-up order picker",
+                                     "none": "No vehicle"}},
+            "pedestrian_near": {"type": "noul",
+                                "instructions": "Is a person on foot within a few meters of the vehicle?"},
+            "risk": {"type": "score", "instructions": "How risky is the situation overall?",
+                     "criteria": ["Low", "Medium", "High"]}}}
+req = urllib.request.Request("http://localhost:8092/v1/systemone", json.dumps(body).encode(),
+                             {"Content-Type": "application/json"})
+print(json.dumps(json.load(urllib.request.urlopen(req))["answers"], indent=1))
+```
+
+The [live comparison](#live-comparison-video-understanding) sends this kind of request, with 24 questions.
 
 ## Supported models and GPUs
 
