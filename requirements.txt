@@ -1,0 +1,23 @@
+# StartLux-Prism's Python packages, at the versions it runs with: Linux, Python 3.12, an NVIDIA GPU from Ampere on
+# (sm_80 and later) and a driver for CUDA 13 (580 or later; older drivers: requirements-cu12.txt).  Install: README,
+# "Install".
+#
+#   pip install -r requirements.txt
+#
+torch==2.14.1          # PyPI's build is CUDA 13.0's (torch.version.cuda "13.0"); brings Triton 3.8.0
+triton==3.8.0
+numpy>=2.0
+tokenizers>=0.23
+jinja2>=3.1            # v1.1 thoughts: the folder's chat template
+pillow>=11             # images in requests (v1.1)
+
+# The CUDA kernels (startlux_prism/csrc) are compiled on the first start, for the GPU they run on: nvcc 13.0 from pip
+# (scripts/cuda_env.sh makes it CUDA_HOME; with a CUDA 13.0 toolkit installed, CUDA_HOME can name that instead) and
+# ninja.
+ninja>=1.11
+nvidia-cuda-nvcc==13.0.88
+nvidia-nvvm==13.0.88
+nvidia-cuda-crt==13.0.88
+nvidia-cuda-cccl==13.0.85
+
+# The tests and benchmarks also use: transformers==5.19.0 gguf==0.19.0 safetensors==0.8.0 nvidia-ml-py pytest matplotlib
