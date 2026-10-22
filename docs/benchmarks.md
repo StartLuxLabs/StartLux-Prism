@@ -44,10 +44,14 @@ their scores, in parentheses, come from prompts these weights were not trained w
   <img src="images/jevbench-latency.svg" width="840" alt="JevBench mean ms per item, one request at a time, for every engine on StartLux-Decision-4B and -9B (RTX 5090) and -27B (H200): StartLux-Prism int8 15.0, 21.6 and 41.0; decider with torch.compile and FP8 33.4, 50.3, 66.8; StartLux-Prism bf16 29.6, 52.1, 68.2; SGLang native 42.0, 59.8, 90.1; SGLang via adapter 40.1, 62.1, 92.0; StartLux-Decision server 47.0, 71.2, 96.0; decider default 48.5, 76.1, 99.9; JevK5 49.8, 74.4, 101.1; vLLM 55.3, 84.9, 119.1; llama.cpp 134.7, 162.7, 589.2.">
 </picture>
 
+<sub><b>StartLux-Decision-v1 on JevBench, one request at a time: every engine.</b> Mean ms per item over the 231 public items (lower is better). Every engine alone on the GPU with the same Q8_0 weights, through the same HTTP client. decider and JevK5 run StartLux's weights as same-shape stand-ins (they ship no StartLux checkpoint). The 27B's llama.cpp bar is cut (589.2 ms). Scores, p50 and p95: docs/benchmarks.md.</sub>
+
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="images/jevbench-throughput-dark.svg">
   <img src="images/jevbench-throughput.svg" width="840" alt="JevBench requests per second from 32 clients for every engine on the 4B, 9B (RTX 5090) and 27B (H200): StartLux-Prism int8 85.2, 53.3, 30.6; decider with torch.compile and FP8 35.0, 22.6, 15.4; StartLux-Prism bf16 37.0, 19.9, 16.7; SGLang native 39.5, 21.7, 18.8; SGLang via adapter 37.4, 20.5, 17.7; StartLux-Decision server 22.9, 14.2, 10.4; decider default 20.7, 12.6, 9.6; JevK5 21.8, 13.6, 9.9; vLLM 33.6, 18.9, 15.4; llama.cpp 6.5, 5.7, 1.4.">
 </picture>
+
+<sub><b>StartLux-Decision-v1 on JevBench from 32 clients: every engine.</b> Requests per second over three passes of the 231 public items (higher is better); no engine failed a request. The same Q8_0 weights for every engine. decider and JevK5 run StartLux's weights as same-shape stand-ins (they ship no StartLux checkpoint). 8 and 16 clients give every engine within a few percent of its 32-client rate.</sub>
 
 **JevBench** (the 231 public items):
 
@@ -208,6 +212,8 @@ The model: StartLux-Decision-v1-4B, `StartLux-Decision-4B-Q8_0.gguf` (4.48 GB, S
   <img src="images/rtx5090-4b.svg" width="760" alt="StartLux-Decision-4B on an RTX 5090. JevBench mean ms per item one request at a time, and requests per second from 32 clients: StartLux-Prism int8 15.0 and 85.2; StartLux-Prism bf16 29.6 and 37.0; decider compile + FP8 33.4 and 35.0; SGLang via adapter 40.1 and 37.4; SGLang native 42.0 and 39.5; StartLux-Decision server 47.0 and 22.9; decider default 48.5 and 20.7; JevK5 49.8 and 21.8; vLLM 55.3 and 33.6; llama.cpp 134.7 and 6.5.">
 </picture>
 
+<sub><b>StartLux-Decision-v1-4B (Q8_0) on an RTX 5090.</b> The 231 public JevBench items; every engine alone on the GPU, through the same HTTP client. Q8_0 weights for every engine (bf16 conversions of them for the PyTorch engines); 2026-10-10. decider and JevK5 run StartLux's weights as same-shape stand-ins (they ship no StartLux checkpoint).</sub>
+
 p50 latency (ms) at concurrency 1, best throughput of the sweep (requests/s, at concurrency c), JevBench score and
 per-item latency (mean / p50 / p95 ms):
 
@@ -304,6 +310,8 @@ is the int8 tensor cores' rate, its lead one request at a time (the first table)
   <img src="images/rtx5090-4b-long.svg" width="760" alt="Long evidence, StartLux-Decision-4B on an RTX 5090, p50 ms at 8,000 and 50,000 tokens: StartLux-Prism int8 162.5 and 1,960; decider compile + FP8 328.7 and 3,708; SGLang 342.2 and 2,911; JevK5 417.7 and 3,263; StartLux-Decision server 424.2, fails at 50,000; vLLM 440.5 and 3,359; decider default 521.5 and 3,272; llama.cpp 730.3 and 5,326.">
 </picture>
 
+<sub><b>Long evidence: StartLux-Decision-v1-4B (Q8_0) on an RTX 5090.</b> One yes/no question about an application log of 8,000 or 50,000 tokens, one request at a time; every engine counted every token. decider and JevK5 run StartLux's weights as same-shape stand-ins (they ship no StartLux checkpoint). 2026-10-10. The StartLux-Decision server's chunked path fails on prompts above 32,768 tokens with the transformers version installed.</sub>
+
 `bench/run_long.py` (`scripts/compare.sh` with `BENCH=long`): one yes/no question ("Does the log show a payment that
 failed and was never retried successfully?") about a synthetic application log (seeded payment, order, login,
 shipping, search and cart events) sized to about 8,000 and 50,000 tokens in StartLux's prompt format, every request
@@ -342,6 +350,8 @@ numbers take the unchunked path.
   <source media="(prefers-color-scheme: dark)" srcset="images/prefix-cache-dark.svg">
   <img src="images/prefix-cache.svg" width="760" alt="Follow-up questions about evidence already sent, StartLux-Decision-4B on an RTX 5090, longest JevBench items, p50 ms of the first request and of follow-ups: StartLux-Prism int8 with its prefix cache 54.1 and 5.4; vLLM 162.0 and 42.6; StartLux-Prism int8 without cache 50.7 and 48.0; SGLang 129.9 and 113.3; decider 104.6 and 157.8; StartLux-Decision server 173.9 and 173.6.">
 </picture>
+
+<sub><b>Follow-up questions about evidence already sent.</b> StartLux-Decision-v1-4B (Q8_0) on an RTX 5090: the 20 public JevBench items with the longest evidence (2,000-3,700 tokens), each asked, then two more questions about the same evidence. p50 ms. 2026-10-10. StartLux-Prism answers a follow-up from the evidence's cached state, bit-identical to recomputing it.</sub>
 
 The tables above send every request with new evidence, so no engine can reuse anything across requests. A client that
 asks a further question about evidence it already sent (or sends one request's questions as separate calls) can be
@@ -386,6 +396,8 @@ With long evidence the KV rows run out first (23 entries of about 2,750 tokens i
   <source media="(prefers-color-scheme: dark)" srcset="images/rtx5090-9b-dark.svg">
   <img src="images/rtx5090-9b.svg" width="760" alt="StartLux-Decision-9B on an RTX 5090. JevBench mean ms per item one request at a time, and requests per second from 32 clients: StartLux-Prism int8 21.6 and 53.3; decider compile + FP8 50.3 and 22.6; StartLux-Prism bf16 52.1 and 19.9; SGLang native 59.8 and 21.7; SGLang via adapter 62.1 and 20.5; StartLux-Decision server 71.2 and 14.2; JevK5 74.4 and 13.6; decider default 76.1 and 12.6; vLLM 84.9 and 18.9; llama.cpp 162.7 and 5.7.">
 </picture>
+
+<sub><b>StartLux-Decision-v1-9B (Q8_0) on an RTX 5090.</b> The 231 public JevBench items; every engine alone on the GPU, through the same HTTP client. Q8_0 weights for every engine (bf16 conversions of them for the PyTorch engines); 2026-10-10. decider and JevK5 run StartLux's weights as same-shape stand-ins (they ship no StartLux checkpoint).</sub>
 
 The same procedure on StartLux-Decision-v1-9B's Q8_0 GGUF (`StartLux-Decision-9B-Q8_0.gguf`, 9.53 GB, SHA-256
 `9daae505…`; hidden 4096, feed-forward 12288, untied output head; the same
@@ -444,6 +456,8 @@ not fit; with FP8 weights it does.
   <img src="images/h200-27b.svg" width="760" alt="StartLux-Decision-27B on an H200. JevBench mean ms per item one request at a time, and requests per second from 32 clients: StartLux-Prism int8 41.0 and 30.6; decider compile + FP8 66.8 and 15.4; StartLux-Prism bf16 68.2 and 16.7; SGLang native 90.1 and 18.8; SGLang via adapter 92.0 and 17.7; StartLux-Decision server 96.0 and 10.4; decider default 99.9 and 9.6; JevK5 101.1 and 9.9; vLLM 119.1 and 15.4; llama.cpp 589.2 and 1.4.">
 </picture>
 
+<sub><b>StartLux-Decision-v1-27B (Q8_0) on an H200.</b> The 231 public JevBench items; every engine alone on the GPU, through the same HTTP client. Q8_0 weights for every engine (bf16 conversions of them for the PyTorch engines); 2026-10-12. llama.cpp's latency bar is cut (589.2 ms). decider and JevK5 run StartLux's weights as same-shape stand-ins (they ship no StartLux checkpoint).</sub>
+
 StartLux-Decision-v1-27B from its Q8_0 GGUF (`StartLux-Decision-27B-Q8_0.gguf`, 28.60 GB, SHA-256 `5868a8a2…`; the
 Q4_K_M rows: `StartLux-Decision-27B-Q4_K_M.gguf`; hidden 5120, 64 layers: 48 linear-attention with 48 value heads, 16
 attention with 24 heads over 4 KV heads;
@@ -483,6 +497,8 @@ bf16 engines' 209 (the model card's): W8A8 on this model moves two near-ties; St
   <source media="(prefers-color-scheme: dark)" srcset="images/h200-27b-long-dark.svg">
   <img src="images/h200-27b-long.svg" width="760" alt="Long evidence, StartLux-Decision-27B on an H200, p50 ms at 8,000 and 50,000 tokens: StartLux-Prism int8 432 and 3,693; decider compile + FP8 698 and 7,301; SGLang 704 and 4,936; vLLM 833 and 5,743; JevK5 847 and 5,783; StartLux-Decision server 870, fails at 50,000; decider default 1,062 and 6,779; llama.cpp 3,514 and 28,623.">
 </picture>
+
+<sub><b>Long evidence: StartLux-Decision-v1-27B (Q8_0) on an H200.</b> One yes/no question about an application log of 8,000 or 50,000 tokens, one request at a time; every engine counted every token. decider and JevK5 run StartLux's weights as same-shape stand-ins (they ship no StartLux checkpoint). 2026-10-12. llama.cpp's bars are cut (3,514 and 28,623 ms). SGLang runs FlashAttention 3 here; at 50,000 tokens attention is most of the work.</sub>
 
 Many clients at once (requests/s, p50 ms; no engine failed a request) and long evidence (every engine with the 4B's
 long-context settings; StartLux-Prism with its prefix cache):
@@ -526,6 +542,8 @@ mma.sync (200-300 TOPS against the int8 path's 1,250 on wgmma: `docs/optimizatio
   <source media="(prefers-color-scheme: dark)" srcset="images/q4km-dark.svg">
   <img src="images/q4km.svg" width="760" alt="Q4_K_M files, JevBench mean ms per item, StartLux-Prism W4A8 against llama.cpp on the same file: 4B on an RTX 5090 19.7 against 135.8; 9B on an RTX 5090 32.1 against 160.3; 27B on an RTX 5090 112.7 against 439.3; 27B on an H200 155.2 against 626.7.">
 </picture>
+
+<sub><b>StartLux-Decision-v1 Q4_K_M files: StartLux-Prism W4A8 against llama.cpp.</b> Each engine on the same Q4_K_M GGUF file: StartLux-Prism on the file's own 4-bit weights (int8 activations, int8 tensor cores), llama.cpp b10639. JevBench, one request at a time. Scores on the same files: 201, 200, 207, 207 of 231 for StartLux-Prism; 201, 200, 206, 207 for llama.cpp. On the H200 the W4A8 GEMMs still run on mma.sync, not on Hopper's warpgroup MMA.</sub>
 
 StartLux-Decision-v1's Q4_K_M GGUFs (`StartLux-Decision-4B-Q4_K_M.gguf` 2.71 GB, `-9B-Q4_K_M.gguf` 5.63 GB,
 `-27B-Q4_K_M.gguf` 16.55 GB; Q4_K with Q6_K for some tensors) run on
@@ -603,6 +621,8 @@ shard. The 9B did not start: its launches died at random ([Crashes](#crashes-on-
   <source media="(prefers-color-scheme: dark)" srcset="images/max-context-dark.svg">
   <img src="images/max-context.svg" width="760" alt="The longest request in one pass without chunked prefill, seconds per request. StartLux-Decision-4B on an RTX 5090 at 16k, 32k, 48k, 64k and 96k tokens: StartLux-Prism int8 0.38, 0.98, 1.81, 2.86 and 5.57; SGLang 0.69, 1.56, 2.56, 3.74, out of memory at 96k. StartLux-Decision-27B on an H200 at 16k to 128k: StartLux-Prism int8 0.91, 2.05, 3.46, 5.12, 9.23, 14.2; SGLang 1.42, 2.98, 4.70, 6.61, 10.8, 15.7.">
 </picture>
+
+<sub><b>The longest request in one pass (no chunked prefill).</b> One request at a time, the whole prompt in one forward pass; seconds per request. vLLM does not start without chunked prefill on this model. On the RTX 5090 StartLux-Prism runs with --prefix-cache 0 (its largest batch then 98,304 tokens) and SGLang with --mem-fraction-static 0.6 (it does not start otherwise); SGLang ran out of memory at 96k there, and between 128k and 192k on the H200. StartLux-Prism refuses a request beyond its largest batch (HTTP 422); it never cuts one.</sub>
 
 `scripts/max_context.sh`: one request at a time at 16k, 32k, 48k, 64k, 96k, 128k, 192k and 256k tokens until one
 fails, each engine computing the whole prompt in one forward pass (p50 ms of one request after one warm-up).
@@ -821,10 +841,14 @@ one 8-GPU H200 server, one GPU per server, 2026-10-13/14. Other users' jobs ran 
   <img src="images/v11-official-latency.svg" width="840" alt="Mean ms per request, one at a time: one yes/no question of about 256 tokens, StartLux-Prism int8 19.0, official engine FP8 53.1, BF16 54.2; about 8,192 tokens, 439.8, 531.2, 728.8; the official README's three questions, 17.4, 92.9, 93.1.">
 </picture>
 
+<sub><b>StartLux-Decision-v1.1-27B-AutoThink: StartLux-Prism against the official engine.</b> One request at a time, new evidence in every request, the official engine's own client (startlux-decide bench). Mean ms per request (lower is better). Official engine: Startlux-decide-inference (StartLux-Decision v1.1's own package, commit b70404d) with its release flags on vLLM 0.31.0, from the BF16 release (FP8: vLLM's --quantization fp8); the release has no MTP weights, so neither side drafts tokens. StartLux-Prism int8 from the Q8_0 GGUF release. One H200 per server, 2026-10-13/14.</sub>
+
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="images/v11-official-throughput-dark.svg">
   <img src="images/v11-official-throughput.svg" width="840" alt="JevBench requests per second: read-outs from one client, StartLux-Prism int8 24.2, official engine FP8 12.1, BF16 10.6; read-outs from 64 clients, 30.7, 26.3, 18.3; with thoughts from 64 clients, 7.61, 6.52, 5.89.">
 </picture>
+
+<sub><b>StartLux-Decision-v1.1-27B-AutoThink under load.</b> JevBench's 231 public items, requests per second (higher is better): read-outs only (think_mode never) from one and from 64 clients, and with thoughts (think_mode auto, the release's default) from 64 clients. Official engine: Startlux-decide-inference (StartLux-Decision v1.1's own package, commit b70404d) with its release flags on vLLM 0.31.0, from the BF16 release (FP8: vLLM's --quantization fp8); the release has no MTP weights, so neither side drafts tokens. StartLux-Prism int8 from the Q8_0 GGUF release. One H200 per server, 2026-10-13/14. Three passes over the items per measurement, every request with its own evidence.</sub>
 
 **The servers:**
 - **Official engine:**
@@ -910,6 +934,8 @@ FP8, 224 in int8; W4A8: below the suites):
   <img src="images/v11-accuracy.svg" width="840" alt="StartLux-Decision-v1.1-27B-AutoThink with thoughts. StartLux-Decision v1's seven evaluation suites, average accuracy: StartLux-Prism int8 92.94, StartLux-Prism W4A8 93.07, official engine BF16 92.97, FP8 92.83. JevBench public, items right of 231: 224, 226, 226, 225.">
 </picture>
 
+<sub><b>StartLux-Decision-v1.1-27B-AutoThink with thoughts: accuracy.</b></sub>
+
 **StartLux-Decision v1's evaluation suites with thoughts** (`think_mode` auto, 12,351 decisions from 16 clients, the
 three servers at once, so the times compare only roughly):
 
@@ -961,6 +987,8 @@ What the experiment shows:
   <img src="images/v11-precision.svg" width="840" alt="StartLux-Prism int8 against bf16 on StartLux-Decision-v1.1-27B, one H200. Prefill tokens per second: one prompt of 1,024 tokens 18,865 against 11,571; 8,192 tokens 19,219 against 11,424; 32,768 tokens 15,810 against 10,155; passes of 8,192 tokens of short prompts 20,855 against 11,958. Decode ms per step: 1 sequence 10.47 against 14.89; 8 sequences 11.06 against 15.90; 64 sequences 16.70 against 21.74.">
 </picture>
 
+<sub><b>StartLux-Prism int8 against bf16: StartLux-Decision-v1.1-27B on one H200.</b> The same Q8_0 weights: int8 (W8A8) or dequantized to bf16 (cuBLAS); the engine alone, no HTTP. In parentheses: how many times faster int8 is. Decode at a 512-token context. Thoughts written by int8 are slightly less accurate on hard items (docs/benchmarks.md).</sub>
+
 Prefill (`bench/prefill_speed.py`):
 
 | one prompt per pass | 256 tokens | 1,024 | 4,096 | 8,192 | 16,384 | 32,768 | passes of 8,192 tokens (32 x 256, 64 x 128, 8 x 1,024) |
@@ -1002,6 +1030,8 @@ on the other GPUs.
   <source media="(prefers-color-scheme: dark)" srcset="images/v1-hero-dark.svg">
   <img src="images/v1-hero.svg" width="840" alt="StartLux-Decision-v1-27B on one H200, StartLux-Prism int8 against the official engine in FP8. Mean ms per request, one at a time: one question of about 256 tokens 18.9 against 54.5; about 8,192 tokens 438.5 against 539.1; the README's three questions 17.2 against 96.4. JevBench requests per second: from 1 client 24.4 against 12.0; from 64 clients 30.9 against 25.4.">
 </picture>
+
+<sub><b>StartLux-Decision-v1-27B on one H200: StartLux-Prism int8 against the official engine in FP8 (vLLM 0.31).</b></sub>
 
 **The servers:**
 - **Official engine:** Startlux-decide-inference at commit `b70404d` (package 1.1.0), `startlux-decide serve --model

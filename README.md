@@ -26,10 +26,14 @@ cores whose results do not depend on the batch.
   <img src="docs/images/v11-hero.svg" width="840" alt="StartLux-Decision-v1.1-27B-AutoThink on one H200, StartLux-Prism int8 against the official engine in FP8. Mean ms per request, one at a time: one question of about 256 tokens 19.0 against 53.1; about 8,192 tokens 439.8 against 531.2; the README's three questions 17.4 against 92.9; the same with thoughts 785.1 against 1,296.0. JevBench requests per second: read-outs from 1 client 24.2 against 12.1; from 64 clients 30.7 against 26.3; with thoughts from 64 clients 7.6 against 6.5.">
 </picture>
 
+<sub><b>StartLux-Decision-v1.1-27B-AutoThink on one H200: StartLux-Prism int8 against the official engine in FP8 (vLLM 0.31).</b></sub>
+
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/images/v1-hero-dark.svg">
   <img src="docs/images/v1-hero.svg" width="840" alt="StartLux-Decision-v1-27B on one H200, StartLux-Prism int8 against the official engine in FP8. Mean ms per request, one at a time: one question of about 256 tokens 18.9 against 54.5; about 8,192 tokens 438.5 against 539.1; the README's three questions 17.2 against 96.4. JevBench requests per second: from 1 client 24.4 against 12.0; from 64 clients 30.9 against 25.4.">
 </picture>
+
+<sub><b>StartLux-Decision-v1-27B on one H200: StartLux-Prism int8 against the official engine in FP8 (vLLM 0.31).</b></sub>
 
 ## Highlights
 
@@ -225,6 +229,8 @@ file on one RTX 5090, against the official engine on the BF16 release.
   <img src="docs/images/v11-accuracy.svg" width="840" alt="StartLux-Decision-v1.1-27B-AutoThink with thoughts. StartLux-Decision v1's seven evaluation suites, average accuracy: StartLux-Prism int8 92.94, StartLux-Prism W4A8 93.07, official engine BF16 92.97, FP8 92.83. JevBench public, items right of 231: 224, 226, 226, 225.">
 </picture>
 
+<sub><b>StartLux-Decision-v1.1-27B-AutoThink with thoughts: accuracy.</b></sub>
+
 On StartLux-Decision v1's own evaluation (12,351 decisions), int8 averages 91.14 against the reference's 91.15 on the
 4B, and 90.80 against 91.06 on the 9B. About 1% of the decisions change, all near ties, and calibration does not move.
 Every suite: [benchmarks](docs/benchmarks.md#accuracy-startlux-decision-v1s-evaluation).
@@ -263,19 +269,6 @@ Every suite: [benchmarks](docs/benchmarks.md#accuracy-startlux-decision-v1s-eval
   [Tokenizers](https://github.com/huggingface/tokenizers): the kernels' language, the runtime and the tokenizer.
 - [JevBench](https://github.com/fstandhartinger/jevbench) and [Intern-Decision](https://github.com/InternLM/Intern-Decision):
   the evaluation sets.
-
-## Citation
-
-StartLux-Prism serves the models described in the StartLux-Decision technical report. If you use it, please cite:
-
-```bibtex
-@article{zhuang2026startluxdecision,
-  title   = {StartLux-Decision: AutoThink Decision Models},
-  author  = {Zhuang, Xialie and Su, Zunhai},
-  journal = {arXiv preprint arXiv:2610.17309},
-  year    = {2026}
-}
-```
 
 ## License
 

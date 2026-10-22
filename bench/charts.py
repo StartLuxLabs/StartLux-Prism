@@ -28,12 +28,12 @@ OUT = sys.argv[1] if len(sys.argv) > 1 else os.path.join(os.path.dirname(os.path
 # The StartLux-Decision report's palette: StartLux violet for its own work, greys (told apart by lightness) for others
 PRISM, PRISM_LIGHT = "#8A5CD6", "#B99BE8"          # StartLux-Prism int8; its other precisions and configurations
 OTHER, OTHER_DARK = "#B9B9B9", "#7A7A7A"           # every other engine (the official one in FP8); the official in BF16
-BAR = 0.22                                         # inches: the thickness of every bar, vertical or horizontal
-PITCH = 0.34                                       # inches: one row of horizontal bars
+BAR = 0.30                                         # inches: the thickness of every bar, vertical or horizontal
+PITCH = 0.42                                       # inches: one row of horizontal bars
 
 THEMES = {   # GitHub's text, muted text, border and page colors in each theme
-    "light": dict(text="#1f2328", muted="#59636e", grid="#d1d9e0", axis="#818b98", page="#ffffff"),
-    "dark": dict(text="#d1d7e0", muted="#9198a1", grid="#3d444d", axis="#9198a1", page="#0d1117"),
+    "light": dict(text="#222222", muted="#6b6b6b", grid="#e6e6e6", axis="#9a9a9a", page="#ffffff"),
+    "dark": dict(text="#d1d7e0", muted="#9198a1", grid="#30363d", axis="#6e7681", page="#0d1117"),
 }
 WIDTH = 10.5                                       # inches: the pages show every chart 840 px wide
 
@@ -47,9 +47,10 @@ def style(theme):
         "text.color": t["text"], "axes.labelcolor": t["text"], "axes.edgecolor": t["axis"],
         "xtick.color": t["axis"], "ytick.color": t["axis"], "xtick.labelcolor": t["text"],
         "ytick.labelcolor": t["text"],
-        "axes.titlesize": 10, "axes.titlelocation": "left", "axes.labelsize": 9.5, "xtick.labelsize": 9, "ytick.labelsize": 9.5,
+        "axes.titlesize": 9.5, "axes.titlelocation": "left", "axes.titlecolor": t["muted"], "axes.labelsize": 9.5, "xtick.labelsize": 9, "ytick.labelsize": 9.5,
         "axes.spines.top": False, "axes.spines.right": False,
-        "axes.grid": True, "grid.color": t["grid"], "grid.linewidth": 0.7,
+        "axes.grid": True, "grid.color": t["grid"], "grid.linewidth": 0.6, "axes.linewidth": 0.6,
+        "xtick.major.width": 0.6, "ytick.major.width": 0.6, "xtick.major.size": 3, "ytick.major.size": 0,
         "axes.axisbelow": True, "legend.frameon": False, "legend.fontsize": 9.5,
         "figure.facecolor": "none", "axes.facecolor": "none", "savefig.facecolor": "none",
     })
@@ -69,33 +70,14 @@ def num(v, fmt=None):
     return f"{v:,.2f}" if v < 10 else f"{v:,.1f}"
 
 
-def frame(fig, axes, t, title, subtitle=None, handles=None, note=None, head=26, foot=30):
-    """Title, subtitle and legend above the panels, the note under them: placed in points from the panels' edges
-    (head: the room their titles take above them; foot: what their axes take below them)."""
-    top = max(a.get_position().y1 for a in axes)
-    bottom = min(a.get_position().y0 for a in axes)
-
-    left = min(a.get_position().x0 for a in axes)
-
-    def at(y, pts):
-        return dict(x=left, y=y, transform=transforms.offset_copy(fig.transFigure, fig=fig, y=pts, units="points"))
-
-    y = head
+def frame(fig, axes, t, title=None, subtitle=None, handles=None, note=None, head=26, foot=30):
+    """The report's look: no title, subtitle or note inside the figure (the page around it says them); only the
+    legend, centered above the panels (title, subtitle and note stay in the call as the chart's documentation)."""
     if handles:
-        fig.legend(handles=handles, loc="lower left", ncol=len(handles), borderaxespad=0, handlelength=1.5,
-                   columnspacing=1.8, bbox_to_anchor=(left, top),
-                   bbox_transform=transforms.offset_copy(fig.transFigure, fig=fig, y=y, units="points"))
-        y += 21
-    for line in reversed(textwrap.wrap(subtitle or "", 150)):
-        fig.text(s=line, ha="left", va="bottom", fontsize=9, color=t["muted"], **at(top, y))
-        y += 12.5
-    fig.text(s=title, ha="left", va="bottom", fontsize=12, fontweight="bold", **at(top, y + 3))
-    y = -foot
-    for line in textwrap.wrap(note or "", 160):
-        p = at(bottom, y)
-        p["x"] = left
-        fig.text(s=line, ha="left", va="top", fontsize=8.5, color=t["muted"], **p)
-        y -= 11.5
+        top = max(a.get_position().y1 for a in axes)
+        fig.legend(handles=handles, loc="lower center", ncol=len(handles), borderaxespad=0, handlelength=1.4,
+                   columnspacing=1.8, bbox_to_anchor=(0.5, top),
+                   bbox_transform=transforms.offset_copy(fig.transFigure, fig=fig, y=head, units="points"))
 
 
 def hbars(ax, t, labels, vals, colors, shown=None, xmax=None, title=None, xlabel=None, bold=()):
@@ -122,7 +104,8 @@ def hbars(ax, t, labels, vals, colors, shown=None, xmax=None, title=None, xlabel
             ax.text(end * 0.905, i, s, va="center", ha="right", fontsize=8.5, color="white", fontweight="bold")
         else:
             ax.barh(i, v, BAR / PITCH, color=c)
-            ax.text(v + end * 0.012, i, s, va="center", ha="left", fontsize=8.5, fontweight=weight)
+            ax.text(v + end * 0.012, i, s, va="center", ha="left", fontsize=8.5, fontweight=weight,
+                    color=t["text"] if weight == "bold" else t["muted"])
     for lbl in ax.get_yticklabels():
         if lbl.get_text() in bold:
             lbl.set_fontweight("bold")
@@ -155,8 +138,9 @@ def vgroups(ax, t, groups, series, colors, fmt=None, title=None, ylabel=None, ym
     ax.grid(axis="x", visible=False)
     top = max(max(s) for s in series)
     for s, (vals, c) in enumerate(zip(series, colors)):
-        bars = ax.bar(x + (s - (k - 1) / 2) * w * 1.25, vals, w, color=c)     # a quarter bar of space between bars
-        ax.bar_label(bars, labels[s] if labels else [num(v, fmt) for v in vals], padding=2, fontsize=8.5)
+        bars = ax.bar(x + (s - (k - 1) / 2) * w, vals, w, color=c, edgecolor=t["page"], linewidth=0.8)
+        ax.bar_label(bars, labels[s] if labels else [num(v, fmt) for v in vals], padding=2, fontsize=8.5,
+                     fontweight="bold" if c == PRISM else "normal", color=t["text"] if c == PRISM else t["muted"])
     ax.set_xticks(x, groups)
     ax.set_ylim(0, ymax or top * 1.18)
     if title:

@@ -164,6 +164,8 @@ Both paths run the same Q8_0 weights, dequantized to bf16 or requantized to int8
   <img src="images/v11-precision.svg" width="840" alt="StartLux-Prism int8 against bf16 on StartLux-Decision-v1.1-27B, one H200. Prefill tokens per second: one prompt of 1,024 tokens 18,865 against 11,571; 8,192 tokens 19,219 against 11,424; 32,768 tokens 15,810 against 10,155; passes of 8,192 tokens of short prompts 20,855 against 11,958. Decode ms per step: 1 sequence 10.47 against 14.89; 8 sequences 11.06 against 15.90; 64 sequences 16.70 against 21.74.">
 </picture>
 
+<sub><b>StartLux-Prism int8 against bf16: StartLux-Decision-v1.1-27B on one H200.</b> The same Q8_0 weights: int8 (W8A8) or dequantized to bf16 (cuBLAS); the engine alone, no HTTP. In parentheses: how many times faster int8 is. Decode at a 512-token context. Thoughts written by int8 are slightly less accurate on hard items (docs/benchmarks.md).</sub>
+
 - **Speed:** int8 is 1.44-1.75x faster in prefill and 1.25-1.44x in decode.
 - **Through the server:** JevBench runs at 30.7 requests/s from 64 clients, against 16.9 for bf16.
 - **Accuracy:** one-pass answers score the same. Thoughts written by bf16 are slightly more accurate (226.2 against
@@ -238,6 +240,8 @@ Two ways to use more GPUs, both giving the single GPU's answers, bit for bit (27
   <source media="(prefers-color-scheme: dark)" srcset="images/several-gpus-dark.svg">
   <img src="images/several-gpus.svg" width="840" alt="Several GPUs, StartLux-Decision-v1.1-27B on H200s, StartLux-Prism int8, JevBench. Read-outs from many clients, requests per second: one GPU 30.9; 2 GPUs with TP 2, 43.3 (1.40x); 4 GPUs with TP 4, 54.0 (1.75x); 4 GPUs as DP 2 x TP 2, 86.0 (2.78x); 4 GPUs as DP 4, 121.1 (3.92x). One request at a time with thoughts, mean ms per item: one GPU 1,209; TP 2, 902; TP 4, 768; DP 2 x TP 2, 902; DP 4 as one GPU plus about 1 ms for the router.">
 </picture>
+
+<sub><b>Several GPUs: StartLux-Decision-v1.1-27B on H200s.</b> StartLux-Prism int8, JevBench. Data parallelism (DP: whole servers behind the router) for throughput, tensor parallelism (TP: one model split over the GPUs) for the time per request. Every configuration answers as one GPU does, bit for bit; one GPU in light violet, for scale. Read-outs: the most requests/s over 32 to 256 clients (one GPU and TP: from 64 clients). With thoughts: the 231 items one at a time, 67 of them thinking. Second H200 server (NVSwitch), 2026-10-14.</sub>
 
 They combine (`startlux_prism.dp --tp 2`: tensor-parallel servers behind the router). Four H200s each way:
 
