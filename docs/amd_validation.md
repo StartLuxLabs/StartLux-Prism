@@ -4,6 +4,7 @@
 
 - Radeon AI PRO R9700, gfx1201, 32 GB, one visible GPU per process.
 - Workspace-provided ROCm 10.1.0 / HIP 7.16.26385; Python 3.13.13.
+- Standalone vision reference: Transformers 5.16.1; independent block oracle: gguf 0.19.0.
 - Torch `2.14.0+rocm10.1.0`; paired Triton
   `3.8.0+git669b31ac.rocm10.1.0`.
 - Main GGUF SHA-256:
@@ -64,6 +65,32 @@ There is no claim of full-model bit equality between AMD and NVIDIA.
 
 ## Trimmed patch recheck
 
-The integration recheck applies the separate graph-capture and default-budget
-fixes before exercising AutoThink. Results for this exact checkout are added
-after the checks complete; the numerical limitation above remains open.
+Rechecked on 2026-10-24, applying #17 and #18 to the trimmed backend. The
+integration checkout was `4875c36` (initial backend `6af596d` plus the two fixes),
+with production-core SHA-256
+`8d8502376f43c11a20eefe5a50d0acd9f1041a97f7a487deb8d158251c2fbd02`.
+The core stayed unchanged throughout these checks. Subsequent changes package
+CLI entry points safely and record results; they do not change the engine/kernels.
+
+| Trimmed-core check | Result |
+|---|---|
+| CPU guard/planner and independent gguf-py dequantization | passed |
+| Exact GPU arithmetic and Q4/Q6 projections | passed |
+| Actual 27B four-scene graph/cache regression | exact, including eviction; 3 repetitions per eager/graph scene |
+| Actual 27B decode | 2 x 8 tokens, teacher-forcing 8/8 each; exact batch isolation and seeded sampling |
+| Actual 27B vision | 23 scenes, 52/52 answers; image/cache/graph/mixed batches exact |
+| Independent vision tower | all 9 resolutions/aspect ratios bit-identical |
+| Frozen 501-row probability comparison | unchanged: every case value equals the prototype; original gates still fail |
+| Actual server HTTP | never/readme3/wide33, omitted/oversized thought budgets, invalid inputs, recovery, 4 clients x 16 requests passed |
+
+The HTTP recheck uses the upstream server without the prototype's added queue or
+readout-only features. It is a short integration check, not a new 30-minute run.
+All computations used one selected R9700 while existing jobs continued running.
+
+Five public CLI files are import-safe and their help entry points pass without a
+GPU. A malformed oracle is rejected before model initialization. After packaging
+those entry points, the public streamed-oracle and comparator were also run on
+the fixed yes/no anchor: prompt tokens match the frozen anchor, maximum FP32
+logit difference is 1.62e-5, and candidate probabilities match the prototype. Its
+original precision gate remains failed, as expected; it is not counted as a
+release pass.
