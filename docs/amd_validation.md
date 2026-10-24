@@ -1,0 +1,69 @@
+# Experimental gfx1201 validation
+
+## Scope and identity
+
+- Radeon AI PRO R9700, gfx1201, 32 GB, one visible GPU per process.
+- Workspace-provided ROCm 10.1.0 / HIP 7.16.26385; Python 3.13.13.
+- Torch `2.14.0+rocm10.1.0`; paired Triton
+  `3.8.0+git669b31ac.rocm10.1.0`.
+- Main GGUF SHA-256:
+  `245f89a8fbd95d0fccae02aba1a1a63448bab41c308920ad6de247e3b3752588`.
+- Projector SHA-256:
+  `b6ff3c746a642ac44ea14f679f3a6e788a8b7c2cb4474378fa895e86f1b937eb`.
+
+The environment came from an immutable local foundation image; no public image
+availability or other PyTorch/ROCm combinations are claimed. NVIDIA execution
+has not been tested here. All GPU timings were collected alongside other jobs.
+
+## Original prototype evidence
+
+The broader prototype predates the trimmed upstream patch and includes local
+launchers and service features that are deliberately not part of this PR.
+These results are supporting context, not a claim that those auxiliary features
+are in the patch or a substitute for rechecking its exact integration checkout.
+
+| Check | Prototype result |
+|---|---|
+| FP32 add/multiply/divide/FMA/rint | 1024 values per operation equal to CPU arithmetic |
+| W4A8 | Q4/Q6, K=256/512/5120, M=1/7/33/65, N=33, live padding, two epilogues equal to CPU reference |
+| Actual 27B cache/graphs | cache off/miss/hit/eviction and eager/graphs agree exactly on four scenes |
+| Decode | 2 sequences x 8 tokens; teacher-forcing top-1 8/8 each; alone/batch logits and seeded draws agree |
+| Vision tower | 9 resolutions/aspect ratios agree bit-for-bit with the same-weight Transformers tower |
+| Actual 27B vision | 23 synthetic scenes, 52/52 answers; 1/2/8 images, cache/graphs/mixed batches agree |
+| Capacity | 256 through 8192 prefill tokens finite; 8193 refused; no decoder/head in the 8K check |
+| Mixed service load | 1800.09 seconds, 10,560 requests, 0 unexpected errors, 307 thoughts and 103 image requests |
+| Memory during mixed load | 23,240,195,584 bytes allocated after warm-up; final growth 0 bytes; 40 snapshots stable |
+
+The mixed service run is primarily repeated short requests with warm caches;
+image cache hits are not cold vision latency. It used a bounded-request helper
+from the local prototype, which is not part of this backend contribution. No
+exclusive-GPU speedup or overall 30% performance improvement is claimed.
+
+## Frozen numerical limit
+
+The independent reference uses plain PyTorch FP32 operations, original GGUF
+weights and identical prompt tokens. It streams one layer on the same selected
+card, sequentially with the candidate. A CPU anchor agreed within 1.62e-5 logits.
+The frozen 501-row oracle SHA-256 is
+`1a7da606458b5310c630172208f7c2c05b489fdab13afc2fe3cbef6139ba7aa8`.
+
+| Measure | Prototype result | Local candidate threshold |
+|---|---:|---:|
+| Probability MAE | 0.00310922 | <= 0.001 |
+| Probability P99 | 0.0232160 | <= 0.01 |
+| Maximum probability error | 0.0354659 | report |
+| All decisions matching | 483/501 | report |
+| Reference margin > 0.02 | 452/457 = 98.9059% | >= 99.5% |
+
+All three candidate thresholds fail and remain unchanged. Thirteen flips are
+near ties; five exceed margin 0.02. This is a numerical regression set, not 501
+independent graded evaluation tasks. An independent INT8-activation-only
+diagnostic already shows nontrivial error, but BF16 intermediates, GDN chunking,
+embedding/head conversion and implementation differences need further analysis.
+There is no claim of full-model bit equality between AMD and NVIDIA.
+
+## Trimmed patch recheck
+
+The integration recheck applies the separate graph-capture and default-budget
+fixes before exercising AutoThink. Results for this exact checkout are added
+after the checks complete; the numerical limitation above remains open.

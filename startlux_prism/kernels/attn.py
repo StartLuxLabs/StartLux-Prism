@@ -26,7 +26,8 @@ import os
 
 import triton
 import triton.language as tl
-from triton.language.extra.cuda import libdevice
+from ..backends import math as libdevice
+from ..backends import is_hip
 
 # Query tile, key tile, warps, stages of the tree attention, per GPU model.  head_dim 256: on the RTX 5090 q, K and V
 # tiles of 32 (three K/V stages) stay under sm_120's 99 KB of shared memory, and 4 warps x 3 stages is 1.3-1.4x faster
@@ -36,7 +37,8 @@ from triton.language.extra.cuda import libdevice
 # the same whatever its batch.  The head's blocks (one query each) keep the RTX 5090's tiles on every GPU.
 # STARTLUX_PRISM_ATTN_<NAME> overrides.
 LAUNCH = dict(BM=32, BN=32, WARPS=4, STAGES=3)
-LAUNCH_BY_GPU = {"h200": dict(BM=128, BN=64, WARPS=8, STAGES=2)}
+LAUNCH_BY_GPU = {"h200": dict(BM=128, BN=64, WARPS=8, STAGES=2),
+                 "gfx1201": dict(BM=16, BN=32, WARPS=4, STAGES=1)}
 
 
 @functools.lru_cache(None)
@@ -251,7 +253,9 @@ def tree_attention(qbuf, qkv, kv, attn_layer, out, blocks, n_blocks, max_blocks,
     bm); read: the head's blocks of one query each (LAUNCH's tiles).  bidir: each query reads all of its segment's
     own tokens (the module docstring)."""
     H, HKV, HD = cfg.n_head, cfg.n_kv_head, cfg.head_dim
-    bm, bn, warps, stages = (LAUNCH[k] if read else launch(k) for k in ("BM", "BN", "WARPS", "STAGES"))
+    # The NVIDIA read tile also exceeds RDNA's LDS limit at head_dim=256.
+    bm, bn, warps, stages = (LAUNCH[k] if read and not is_hip() else launch(k)
+                              for k in ("BM", "BN", "WARPS", "STAGES"))
     _tree_attention_kernel[(max_blocks, H)](
         qbuf, qkv, qkv.stride(0), kv, attn_layer * kv.stride(0), kv.stride(1), kv.stride(2), out,
         blocks, n_blocks, ranges, *_k8_args(k8, attn_layer, kv), H=H, HKV=HKV, HD=HD, BM=bm, BN=bn,

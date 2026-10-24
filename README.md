@@ -49,6 +49,12 @@ HTTP time, median of 5 runs, model loading excluded.
 - **One GPU or several.** Data parallelism for throughput (3.92× on four H200s) and tensor parallelism (`--tp 2` or
   `4`) for latency.
 
+## Experimental AMD support
+
+A single-GPU ROCm W4A8 backend for R9700 (`gfx1201`) is available experimentally.
+See [AMD setup, validation and numerical limitations](docs/amd.md). This does not
+extend the NVIDIA accuracy or performance claims above to AMD.
+
 ## Installation
 
 | Component | Requirement |

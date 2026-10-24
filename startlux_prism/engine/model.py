@@ -41,6 +41,7 @@ import torch
 
 from .. import gguf_weights, jevfmt as J
 from .. import progress as P
+from ..backends import architecture, is_hip, require_single_gpu
 from ..kernels import attn as KA
 from ..kernels import cuda_ext as CX
 from ..kernels import elementwise as KE
@@ -144,6 +145,15 @@ class Options:
 class Engine:
     def __init__(self, gguf_path, model_dir, options=None, device="cuda"):
         self.opt = options or Options()
+        require_single_gpu(self.opt.tp)
+        if is_hip():
+            if architecture() != "gfx1201":
+                raise ValueError("The experimental ROCm model profile is currently limited to gfx1201")
+            if self.opt.precision != "w4a8":
+                raise ValueError("The current ROCm model path is w4a8 from Q4_K_M; "
+                                 "bf16/int8 whole-model paths are not qualified on this single-GPU profile")
+            self.opt.pdl = 0
+            self.opt.l2_prefetch = 0
         self.device = torch.device(device)
         self.tp = None                               # tensor parallelism (startlux_prism/tp.py): this rank's group
         if self.opt.tp > 1:
@@ -166,6 +176,9 @@ class Engine:
         if mode not in ("causal", "bidirectional"):
             raise ValueError(f"prompt_attention {self.opt.prompt_attention!r}: causal, bidirectional or auto")
         self.bidir = mode == "bidirectional"
+        if is_hip() and self.bidir:
+            raise ValueError("The experimental ROCm profile is qualified for causal AutoThink prompts only; "
+                             "Instant/bidirectional prompts require separate qualification")
         if self.bidir:                               # every prompt whole: nothing to share or cache
             self.opt = dataclasses.replace(self.opt, share=False, prefix_cache=0)
         self.vision = None
@@ -545,6 +558,14 @@ class Engine:
     def _allocate(self, T, lean=False):
         """Buffers for T-token batches (self.max_tokens = T); lean: none for the prefix cache and decoding sequences."""
         o, dev = self.opt, self.device
+        if is_hip():
+            def size(x):
+                return sum(size(v) for v in x.values()) if isinstance(x, dict) else x.numel() * x.element_size()
+            needed = size(self._make_buffers(T, "meta", lean))
+            free, _ = torch.cuda.mem_get_info(dev)
+            if needed + (2 << 30) > free:
+                raise RuntimeError(f"ROCm buffer budget needs {needed / 2**30:.2f} GiB plus 2 GiB reserve; "
+                                   f"only {free / 2**30:.2f} GiB free. Reduce tokens, prefix cache or think slots.")
         m = self._make_buffers(T, dev, lean)
         self.max_tokens = T
         self.state, self.conv_state, self.trans, self.kv = m["state"], m["conv_state"], m["trans"], m["kv"]
@@ -910,7 +931,7 @@ class Engine:
         cache = self.cache if self.opt.share else None
         plan = B.plan_batch(groups, self.sys_len, self.kv_scratch0, self.root_kv, share=self.opt.share, cache=cache,
                             system=self.system, max_inserts=MAX_INSERTS - len(keep), max_trans=self.opt.max_trans,
-                            bm=KA.launch("BM"), keep=keep, whole=self.bidir)
+                            bm=KA.launch("BM"), keep=keep, whole=self.bidir, canonical_head=is_hip() and not self.bidir)
         try:
             if plan.feats and self.vision is None:
                 raise ValueError("this engine has no vision tower: it reads text only")
@@ -1036,7 +1057,8 @@ class Engine:
         for start, image, j0, n in feats:
             f = done.get(image.digest)
             if f is None:
-                f = done[image.digest] = self.vision.encode(image)
+                f = done[image.digest] = (self.vision.encode(image, graphs=self.opt.graphs)
+                                         if is_hip() else self.vision.encode(image))
             rows.append(torch.arange(start, start + n, dtype=torch.int64, device=self.device))
             xs.append(f[j0:j0 + n].float())
         return torch.cat(rows), torch.cat(xs), len(done)

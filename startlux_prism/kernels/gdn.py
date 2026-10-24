@@ -350,7 +350,8 @@ def conv_prep(proj, convw, hist, conv_arena, gdn_layer, dt_bias, a, q, k, v, g, 
 # 32-request batch with value tiles twice as wide (the profiler's kernel times).  A tile only splits independent value
 # columns, so every choice gives the same bits.  STARTLUX_PRISM_<NAME> overrides.
 LAUNCH = dict(INTRA_WARPS=4, OUT_BV=64, OUT_WARPS=4, OUT_NS=2, HREC_BV=32, HREC_NS=3, HREC_WARPS=4)
-LAUNCH_BY_GPU = {"h200": dict(OUT_BV=128, OUT_NS=1, HREC_BV=64, HREC_NS=2)}
+LAUNCH_BY_GPU = {"h200": dict(OUT_BV=128, OUT_NS=1, HREC_BV=64, HREC_NS=2),
+                 "gfx1201": dict(INTRA_WARPS=8, OUT_BV=32, OUT_NS=1, HREC_BV=16, HREC_NS=1)}
 
 
 @functools.lru_cache(None)

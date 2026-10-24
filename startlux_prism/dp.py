@@ -226,6 +226,9 @@ def wait_health(w, timeout, every=20):
 
 
 def main():
+    from .backends import is_hip
+    if is_hip():
+        raise SystemExit("ROCm Prism is single-GPU only; use startlux_prism.server instead of dp")
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     ap.add_argument("--gpus", required=True, help="GPUs, one worker each (--tp of them with --tp), e.g. 0,1,2,3")
     ap.add_argument("--tp", type=int, default=1,

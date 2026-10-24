@@ -24,6 +24,7 @@ import triton
 import triton.language as tl
 
 from .quant import _tp_sync
+from ..backends import math as libdevice
 
 
 @triton.jit
@@ -123,7 +124,7 @@ def _head_quant_kernel(h_ptr, w_ptr, q_ptr, s_ptr, n_ptr, eps, HID: tl.constexpr
     y = h * tl.rsqrt(tl.sum(h * h, 0) / HID + eps) * tl.load(w_ptr + c, mask=m, other=0.0)
     yg = tl.reshape(y, (HP // G, G))
     scale = tl.maximum(tl.max(tl.abs(yg), 1), 1e-10) / 127.0
-    q = tl.extra.cuda.libdevice.rint(yg / scale[:, None]).to(tl.int8)
+    q = libdevice.rint(yg / scale[:, None]).to(tl.int8)
     gi = tl.arange(0, HP // G)
     cc = gi[:, None] * G + tl.arange(0, G)[None, :]
     tl.store(q_ptr + r * HID + cc, q, mask=cc < HID)

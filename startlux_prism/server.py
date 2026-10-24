@@ -49,6 +49,7 @@ import torch
 
 from . import images as I
 from . import progress as P
+from .backends import architecture, is_hip, require_single_gpu
 from .decide import Decider, request_controls
 from .engine.model import Engine, Options, group
 from .httpserve import serve
@@ -181,20 +182,22 @@ def main():
                          "~/.cache/startlux-prism/calib/<model file>-<size>-v1.pt, under $STARTLUX_PRISM_CACHE if set)")
     ap.add_argument("--host", default="127.0.0.1")
     ap.add_argument("--port", type=int, default=8092)
-    ap.add_argument("--max-tokens", type=int, default=0,
+    ap.add_argument("--max-tokens", type=int, default=2048 if is_hip() else 0,
                     help="longest batch in tokens (activation buffers are sized for it; up to 131072); 0: the largest "
                          "that fits --mem-fraction of the GPU next to the weights and the prefix cache")
     ap.add_argument("--mem-fraction", type=float, default=0.9, help="share of the GPU's memory for --max-tokens 0")
-    ap.add_argument("--graph-max-tokens", type=int, default=0,
+    ap.add_argument("--graph-max-tokens", type=int, default=512 if is_hip() else 0,
                     help="token buckets above this run without CUDA graphs (0: every bucket has one)")
     ap.add_argument("--budget", type=int, default=8192,
                     help="tokens per batched pass when requests queue (a longer request still runs alone)")
-    ap.add_argument("--no-graphs", action="store_true")
+    ap.add_argument("--no-graphs", action="store_true", default=is_hip())
+    ap.add_argument("--graphs", dest="no_graphs", action="store_false",
+                    help="enable GPU graphs explicitly (ROCm defaults to eager)")
     ap.add_argument("--name", help="model name in answers (default: the GGUF file's, e.g. StartLux-Decision-9B (StartLux-Prism))")
     ap.add_argument("--no-direct", action="store_true", help="always go through the scheduler thread")
-    ap.add_argument("--prefix-cache", type=int, default=64,
+    ap.add_argument("--prefix-cache", type=int, default=4 if is_hip() else 64,
                     help="prefix cache entries: evidence states kept for later requests (48 MiB each; 0: off)")
-    ap.add_argument("--prefix-cache-tokens", type=int, default=65536,
+    ap.add_argument("--prefix-cache-tokens", type=int, default=4096 if is_hip() else 65536,
                     help="KV rows for the cached evidence (32 KiB each)")
     ap.add_argument("--prefix-cache-min", type=int, default=64, help="shortest evidence (tokens) worth caching")
     ap.add_argument("--attn-qk8", action="store_true",
@@ -214,12 +217,12 @@ def main():
                     help="Python GIL switch interval (s): how long a thread may hold the GIL while another waits")
     ap.add_argument("--think-mode", choices=("auto", "never", "always"),
                     help="AutoThink folders: default think_mode of a request (default: the folder's, auto)")
-    ap.add_argument("--max-think-budget", type=int, default=0,
+    ap.add_argument("--max-think-budget", type=int, default=256 if is_hip() else 0,
                     help="AutoThink folders: the largest think_budget a request may ask for (0: the folder's budget)")
-    ap.add_argument("--think-seqs", type=int, default=0,
+    ap.add_argument("--think-seqs", type=int, default=1 if is_hip() else 0,
                     help="AutoThink folders: thoughts generated at once (0: as many as fit the GPU, up to 64 - "
                          "64 for the 27B on an H200; engine/model.py Engine._auto_think)")
-    ap.add_argument("--think-kv-rows", type=int, default=0,
+    ap.add_argument("--think-kv-rows", type=int, default=4096 if is_hip() else 0,
                     help="AutoThink folders: KV rows of the thinking sequences (prompt + thought each; 0: think-seqs x "
                          "(budget + 1024))")
     ap.add_argument("--context-length", type=int, default=0,
@@ -237,6 +240,7 @@ def main():
                          "lower latency (startlux_prism/tp.py)")
     ap.add_argument("--gpus", default="", help="with --tp: the GPUs, e.g. 4,5 (default: the visible ones)")
     a = ap.parse_args()
+    require_single_gpu(a.tp, a.gpus)
     t_start = time.perf_counter()
     P.on()                                           # start-up progress on stdout (progress.py)
     from .vision import find_mmproj, is_mmproj
@@ -268,7 +272,7 @@ def main():
     gpu = torch.cuda.get_device_properties(0)
     label = {"auto_think": "v1.1 AutoThink", "instant": "v1.1 Instant, prompt read bidirectionally"}.get(kind, kind)
     P.step(f"StartLux-Prism: {os.path.basename(a.gguf)} ({label}) as "
-           f"{a.precision} on {gpu.name} (sm_{gpu.major}{gpu.minor}, {gpu.total_memory / 2**30:.0f} GiB)"
+           f"{a.precision} on {gpu.name} ({architecture()}, {gpu.total_memory / 2**30:.0f} GiB)"
            + (f" and {a.tp - 1} more (tensor parallel)" if a.tp > 1 else ""))
     thinks = kind == "auto_think" and a.precision in ("int8", "bf16", "w4a8")       # thoughts: engine/decode.py, think.py
     if thinks:
@@ -322,6 +326,8 @@ def main():
     models = json.dumps({"models": [{"name": a.name, "description": "StartLux-Decision typed decision model on "
                                      "StartLux-Prism", "release_date": "2026-10-01"}]}).encode()
     health = json.dumps({"status": "ok", "model": a.name, "precision": a.precision, "tp": a.tp,
+                         "backend": "rocm" if is_hip() else "cuda", "architecture": architecture(),
+                         "graphs": not a.no_graphs,
                          "max_tokens": engine.max_tokens,
                          "batch_tokens": budget, "kind": kind, "think_mode": defaults.think_mode if thinks else "never",
                          "none_check": none_check, "allow_none": allow_none, "images": engine.vision is not None,
