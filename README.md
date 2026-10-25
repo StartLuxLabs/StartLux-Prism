@@ -277,8 +277,9 @@ binary and config:
 The CUTLASS kernel is bit-identical to the Triton MXFP4 path on the same weights (`max |Δp| = 0` over 32 requests),
 so it changes latency, not decisions. Gains are largest on prefill and read-out; thought-heavy requests gain about
 14%, because decode dominates there. These 9B numbers use the research branch's smoothed-MLP calibration and the
-opt-in MXFP4 path; they are not the default configuration, and the model-side quantization and smoothing are not part
-of the generic kernel. The 9B model and one GPU were measured; 27B and multi-GPU were not. The 16 GB card is a test
+opt-in MXFP4 path; they are not the default configuration. The generic kernel and a weight-only GGUF converter are
+included; the model-side smoothing/calibration and engine loading are not. The 9B model and one GPU were measured; 27B
+and multi-GPU were not. The 16 GB card is a test
 bed, not a memory-size gate: the same kernel leaves the freed MLP memory for context or concurrency on 32 GB and
 larger Blackwell cards, but those runs are not measured yet. The kernel is not on the default path: build it with
 `scripts/build_mxfp4_cutlass.sh`, set `STARTLUX_PRISM_MXFP4_CUTLASS=1`, and see [Blackwell MXFP4](docs/blackwell.md)

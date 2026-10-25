@@ -29,6 +29,24 @@ The CUTLASS path needs the CUTLASS scale layout. `cutlass_prepare(w)` repacks th
 scales once (about 3.1 MB for a 24576x4096 gate|up, 1.6 MB for a 4096x12288 down) and leaves
 the packed weight bytes untouched. Activation scales are repacked per call.
 
+## Weight quantization
+
+`pack(w, mode)` is the weight scheme: the e2m1 grid (0, +-0.5, +-1, +-1.5, +-2, +-3, +-4, +-6), one e8m0
+exponent per 32 inputs, chosen by `max` (the smallest power of two that keeps the block's maximum on the
+grid) or `mse` (the better of that exponent and one below it).  The packed layout is `q` uint8 [n, k/2]
+and `s` uint8 [n, k/32].
+
+A GGUF converter is in `startlux_prism/tools/quantize_mxfp4.py`:
+
+```bash
+python -m startlux_prism.tools.quantize_mxfp4 MODEL.gguf MODEL-mxfp4.pt --mode max
+```
+
+It packs the MLP, attention and GDN projections one at a time and writes
+`{"<layer>.<group>": {"q", "s", "n", "k"}}`; `--layers 0,1` limits a test run.  Load one with
+`mxfp4.MX4(d["q"].cuda(), d["s"].cuda(), d["n"], d["k"])`.  This is weight-only: smoothing, calibration
+and folding scales into norms are model-specific and are not part of this package.
+
 ## Build
 
 CUTLASS 4.8.x and CUDA 12.8 or newer:
