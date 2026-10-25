@@ -1,9 +1,10 @@
 # Blackwell MXFP4 GEMM
 
 An optional MXFP4 (e2m1 weights and activations, one e8m0 scale per 32 inputs, fp32
-accumulate) projection kernel for Blackwell GeForce. It uses CUTLASS 4.8's block-scaled
-`mma.sync` on SM120/SM121 and falls back to the pure-Triton `tl.dot_scaled` kernel when the
-shared library is absent or the GPU is not SM120/SM121.
+accumulate) projection kernel for Blackwell, not for one memory size. The CUTLASS launcher runs
+on SM120/SM121 (GeForce and RTX PRO); SM100 is compile-checked and SM103 is planned. It falls back
+to the pure-Triton `tl.dot_scaled` kernel when the shared library is absent or the GPU is not
+SM120/SM121.
 
 No model change is required: `startlux_prism/kernels/mxfp4.py` exposes packing, activation
 quantization, and a GEMM over row-major `[N, K]` weights. The CUTLASS launcher is built from
@@ -69,8 +70,8 @@ dequantized product, batch invariance, and throughput. On the RTX 5060 Ti:
 
 ## Performance
 
-RTX 5060 Ti, 16 GB, idle beside the server. Per-GEMM speedup of CUTLASS over Triton with the
-same packed inputs:
+RTX 5060 Ti, 16 GB, idle beside the server. The 16 GB card is the validation card; the kernel has
+no VRAM-size gate. Per-GEMM speedup of CUTLASS over Triton with the same packed inputs:
 
 | projection (N, K) | M=1 | M=64 | M=1024 | M=4096 |
 |---|---|---|---|---|
@@ -98,7 +99,9 @@ Caveats:
 - The Triton baseline in the per-GEMM table is this package's `pick` heuristic, not a tuned
   per-shape table. At large `M` a tuned Triton table narrows the gap; the engine A/B below
   used one. The down projection at small `M` is close to parity (1.03x-1.09x).
-- Numbers are from the 9B model. The 27B and multi-GPU paths were not measured.
+- Numbers are from the 9B model on a 16 GB card. The 27B and multi-GPU paths were not measured.
+  On 32 GB and larger Blackwell cards the same kernel frees the same MLP memory for longer context
+  or more concurrent requests, but those runs are not measured yet; no code path checks VRAM size.
 
 ## Architecture support
 

@@ -260,9 +260,11 @@ engine and the raw numbers: [benchmarks](docs/benchmarks.md).
 
 ## Blackwell MXFP4
 
-Blackwell GeForce (sm_120/sm_121) has native MXFP4 tensor-core instructions. The opt-in CUTLASS MXFP4 GEMM in
-[`docs/blackwell.md`](docs/blackwell.md) uses them for the projections, with a plain-Triton fallback. On a 9B
-AutoThink model, one 16 GB RTX 5060 Ti, 32k context, FP8 KV, same binary and config:
+Blackwell has native MXFP4 tensor-core instructions. The opt-in CUTLASS MXFP4 GEMM in
+[`docs/blackwell.md`](docs/blackwell.md) uses them for the projections, with a plain-Triton fallback. It is not a
+16 GB feature: the launcher covers SM120/SM121 today, SM100 is compile-checked and SM103 is planned; the 16 GB RTX
+5060 Ti below is the validation card, not the target. On a 9B AutoThink model, that card, 32k context, FP8 KV, same
+binary and config:
 
 | workload | baseline | MXFP4 | gain |
 |---|---:|---:|---:|
@@ -276,9 +278,11 @@ The CUTLASS kernel is bit-identical to the Triton MXFP4 path on the same weights
 so it changes latency, not decisions. Gains are largest on prefill and read-out; thought-heavy requests gain about
 14%, because decode dominates there. These 9B numbers use the research branch's smoothed-MLP calibration and the
 opt-in MXFP4 path; they are not the default configuration, and the model-side quantization and smoothing are not part
-of the generic kernel. The 9B model and one GPU were measured; 27B and multi-GPU were not. The kernel is not on the
-default path: build it with `scripts/build_mxfp4_cutlass.sh`, set `STARTLUX_PRISM_MXFP4_CUTLASS=1`, and see
-[Blackwell MXFP4](docs/blackwell.md) for the layout, API, and the SM100/SM103 plan.
+of the generic kernel. The 9B model and one GPU were measured; 27B and multi-GPU were not. The 16 GB card is a test
+bed, not a memory-size gate: the same kernel leaves the freed MLP memory for context or concurrency on 32 GB and
+larger Blackwell cards, but those runs are not measured yet. The kernel is not on the default path: build it with
+`scripts/build_mxfp4_cutlass.sh`, set `STARTLUX_PRISM_MXFP4_CUTLASS=1`, and see [Blackwell MXFP4](docs/blackwell.md)
+for the layout, API, and the SM100/SM103 plan.
 
 ## Accuracy
 
