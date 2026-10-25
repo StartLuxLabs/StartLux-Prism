@@ -194,7 +194,7 @@ The [live comparison](#live-comparison-video-understanding) sends this kind of r
 
 | GPU | Architecture | Status |
 |---|---|---|
-| H200 | Hopper, sm_90a | Tuned GEMM tables: int8 on warpgroup MMA with TMA, W4A8 |
+| H200 | Hopper, sm_90a | Tuned GEMM tables: int8 and W4A8 on warpgroup MMA with TMA (W4A8 from 128 rows) |
 | RTX 5090 | Blackwell, sm_120 | Tuned GEMM tables: int8, W4A8 |
 | A800 | Ampere, sm_80 | Tuned GEMM tables: int8, W4A8 |
 | RTX 4090 | Ada, sm_89 | Tested without tables: int8 on the Triton kernel, W4A8 on its tile rule |
@@ -281,7 +281,8 @@ Every suite: [benchmarks](docs/benchmarks.md#accuracy-startlux-decision-v1s-eval
 - **A prefix cache** keeps evidence across requests: a follow-up question takes 5.4 ms instead of 54.
 - **int8 tensor cores with exact int32 sums**, so an answer does not depend on its batch, the number of GPUs or the
   cache.
-- **Kernels chosen per GPU** from measured tables. On Hopper the int8 GEMMs run on warpgroup MMA at 1,240-1,420 TOPS.
+- **Kernels chosen per GPU** from measured tables. On Hopper the int8 GEMMs run on warpgroup MMA at 1,240-1,420 TOPS,
+  W4A8's from 128 rows at 406-430.
 - **Thoughts decoded on the GPU** in CUDA graphs, between prefill batches, seeded per question.
 
 ## Documentation

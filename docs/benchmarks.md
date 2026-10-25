@@ -532,9 +532,11 @@ the int8 path's per-row W8A8 (`--precision int8` on the same file); llama.cpp on
 | llama.cpp b10639 | 1381.20 | 330.66 | 1811.97 | 2 (4) | 207/231 | 626.7 / 374.2 / 1564 | 1.4 / 1.4 / 1.3 | 3,946 ms, 0.25 req/s | 29,941 ms |
 
 W4A8 against llama.cpp on the same file: JevBench mean 4.0x, p50 8.5x, 5.0-5.6x its rate from 8-32 clients, 8k and 50k
-tokens 2.3x and 2.6x; every engine scores 207/231 here (the model card: 208). On the H200 W4A8 still runs its GEMMs on
-mma.sync (200-300 TOPS against the int8 path's 1,250 on wgmma: `docs/optimizations.md`, Open), so the file's own
-4-bit weights are 3.8x slower than requantizing them, which matches the Q8_0 file's int8 speed and score.
+tokens 2.3x and 2.6x; every engine scores 207/231 here (the model card: 208). In these runs W4A8 ran its GEMMs on
+mma.sync on the H200 (200-300 TOPS against the int8 path's 1,250 on wgmma), so the file's own 4-bit weights were 3.8x
+slower than requantizing them, which matches the Q8_0 file's int8 speed and score. Since 2026-10-25 its GEMMs from 128
+rows run on wgmma at 406-430 TOPS (`docs/optimizations.md`): measured on the v1.1 27B, one-pass latency 1.16-1.55x
+lower and JevBench from 64 clients 1.5x the rate; the rows above are from before.
 
 ## Q4_K_M files: W4A8
 
@@ -543,7 +545,7 @@ mma.sync (200-300 TOPS against the int8 path's 1,250 on wgmma: `docs/optimizatio
   <img src="images/q4km.svg" width="760" alt="Q4_K_M files, JevBench mean ms per item, StartLux-Prism W4A8 against llama.cpp on the same file: 4B on an RTX 5090 19.7 against 135.8; 9B on an RTX 5090 32.1 against 160.3; 27B on an RTX 5090 112.7 against 439.3; 27B on an H200 155.2 against 626.7.">
 </picture>
 
-<sub><b>StartLux-Decision-v1 Q4_K_M files: StartLux-Prism W4A8 against llama.cpp.</b> Each engine on the same Q4_K_M GGUF file: StartLux-Prism on the file's own 4-bit weights (int8 activations, int8 tensor cores), llama.cpp b10639. JevBench, one request at a time. Scores on the same files: 201, 200, 207, 207 of 231 for StartLux-Prism; 201, 200, 206, 207 for llama.cpp. On the H200 the W4A8 GEMMs still run on mma.sync, not on Hopper's warpgroup MMA.</sub>
+<sub><b>StartLux-Decision-v1 Q4_K_M files: StartLux-Prism W4A8 against llama.cpp.</b> Each engine on the same Q4_K_M GGUF file: StartLux-Prism on the file's own 4-bit weights (int8 activations, int8 tensor cores), llama.cpp b10639. JevBench, one request at a time. Scores on the same files: 201, 200, 207, 207 of 231 for StartLux-Prism; 201, 200, 206, 207 for llama.cpp. On the H200 the W4A8 GEMMs ran on mma.sync here (since 2026-10-25 they run on Hopper's warpgroup MMA from 128 rows: `docs/optimizations.md`).</sub>
 
 StartLux-Decision-v1's Q4_K_M GGUFs (`StartLux-Decision-4B-Q4_K_M.gguf` 2.71 GB, `-9B-Q4_K_M.gguf` 5.63 GB,
 `-27B-Q4_K_M.gguf` 16.55 GB; Q4_K with Q6_K for some tensors) run on
@@ -829,7 +831,8 @@ second):
 Up to 8 thoughts at once, a step on the 4-bit file takes about as long as on the Q8_0 file, though it reads 17.8 GB
 instead of 27: at a few rows the W4A8 GEMMs stream the 27B's shapes at 1.2-2.7 TB/s, W8A8 at 1.2-3.3. At 64 thoughts
 the W4A8 GEMMs' arithmetic sets the pace (mma.sync on Hopper, [Q4_K_M files](#q4_k_m-files-w4a8)), and the read-outs
-without thoughts take 3.8x the Q8_0 file's time on the H200 (154 against 41 ms), for the same reason.
+without thoughts took 3.8x the Q8_0 file's time on the H200 (154 against 41 ms), for the same reason (from 128 rows
+the W4A8 GEMMs run on wgmma since 2026-10-25, 1.4-1.5x faster read-outs on the v1.1 27B; decode steps unchanged).
 
 ## StartLux-Decision-v1.1-27B-AutoThink against its official engine
 

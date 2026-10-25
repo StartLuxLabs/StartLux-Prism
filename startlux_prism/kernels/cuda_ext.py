@@ -56,7 +56,7 @@ def load():
     # so that the library holds one build (on Hopper an sm_90 build next to the sm_90a one would lack the wgmma kernel)
     base = arch.rstrip("a")                     # "90a" -> TORCH_CUDA_ARCH_LIST "9.0a", "120" -> "12.0"
     os.environ.setdefault("TORCH_CUDA_ARCH_LIST", f"{base[:-1]}.{base[-1]}{arch[len(base):]}")
-    sources = ("w8a8_gemm.cu", "w8a8_wgmma.cu", "w4a8_gemm.cu", "l2_prefetch.cu")
+    sources = ("w8a8_gemm.cu", "w8a8_wgmma.cu", "w4a8_gemm.cu", "w4a8_wgmma.cu", "l2_prefetch.cu")
     built = _built("startlux_prism_ext", [os.path.join(CSRC, f) for f in sources])
     P.step(f"CUDA kernels: {'loading the extension built before' if built else 'compiling the extension'} for "
            f"sm_{arch}" + ("" if built else " - the first start with this GPU and these sources, a few minutes"))

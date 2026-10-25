@@ -287,7 +287,18 @@ CUDA_CFGS = {  # csrc/w4a8_gemm.cu: cfg id -> (BM, BN, warps); 13-16: K groups (
     0: (16, 64, 2), 1: (32, 64, 2), 2: (64, 64, 4), 3: (64, 128, 8), 4: (128, 64, 8), 5: (128, 128, 16), 6: (16, 32, 1),
     7: (32, 128, 4), 8: (128, 128, 8), 9: (128, 128, 8), 10: (64, 128, 4), 11: (128, 64, 4), 12: (64, 64, 2),
     13: (16, 32, 8), 14: (16, 32, 4), 15: (32, 32, 8), 16: (32, 32, 4),
-    17: (8, 4, 4), 18: (8, 8, 4), 19: (8, 16, 4)}   # 17-19: GEMV (up to 8 rows; a warp's own 1, 2 or 4 columns)
+    17: (8, 4, 4), 18: (8, 8, 4), 19: (8, 16, 4),   # 17-19: GEMV (up to 8 rows; a warp's own 1, 2 or 4 columns)
+    20: (128, 128, 12), 21: (64, 128, 8)}           # 20-21: Hopper's warpgroup MMA (csrc/w4a8_wgmma.cu)
+WGMMA_CFGS = (20, 21)
+
+
+def wgmma_ok(M, N, K, w=None):
+    """csrc/w4a8_wgmma.cu runs this product: a Hopper GPU with the sm_90a build, and the operands its TMA copies take
+    (K a multiple of 256, M and N of 4, 16-byte aligned values)."""
+    from . import cuda_ext as CX
+    if not CX.has_wgmma() or K % 256 or M % 4 or N % 4:
+        return False
+    return w is None or all(t is None or t.data_ptr() % 16 == 0 for t in (w.q, w.sc, w.mn, w.d, w.dm))
 
 
 @functools.lru_cache(None)
@@ -311,6 +322,8 @@ def pick_cuda(M, N, kind, K=None):
     entries = _table().get((kind, N, K))
     if entries:
         return next((c for m, c in entries if m >= M), entries[-1][1])
+    if M >= 128 and K is not None and wgmma_ok(M, N, K):   # Hopper: its warpgroup MMA, 1.4-2.1x the rule's from
+        return 20, 3                                         # 128 rows (the 27B's shapes on the H200)
     return pick_rule(M, N, kind)
 
 
@@ -343,6 +356,12 @@ def gemm(xq, a, xs, w: W4, out, n_rows, epi=0, cfg=None, pdl=0):
     w4a8.pick_cuda; pdl: launched to overlap the kernel before (programmatic dependent launch, 1-3: csrc)."""
     from . import cuda_ext as CX
     c, stages = cfg or pick_cuda(xq.shape[0], w.n, w.kind, w.k)
+    if c in WGMMA_CFGS and cfg is None and not wgmma_ok(xq.shape[0], w.n, w.k, w):
+        c, stages = pick_rule(xq.shape[0], w.n, w.kind)     # operands its TMA copies cannot take (alignment)
+    if c in WGMMA_CFGS:
+        CX.load().w4a8_wgmma(xq, a, xs, w.q, w.sc, w.mn, w.d, w.dm, out, n_rows, 0 if w.kind == "q4k" else 1, epi,
+                             CUDA_CFGS[c][0], stages)
+        return
     CX.load().w4a8_gemm(xq, a, xs, w.q, w.sc, w.mn, w.d, w.dm, out, n_rows, 0 if w.kind == "q4k" else 1, epi, c,
                         stages, int(pdl))
 

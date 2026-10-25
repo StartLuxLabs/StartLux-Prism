@@ -41,7 +41,8 @@ model (`kernels/gemm_table_<gpu>.json`):
   PDL or thread-block clusters (Hopper's); tables measured on the A800, none yet for the RTX 30 and 40 series (there
   the int8 GEMMs run the Triton kernel and W4A8 picks its tiles by rule).
 - **H200:** warpgroup-MMA kernels with TMA copies and warp specialization (`csrc/w8a8_wgmma.cu`: 1,240-1,420 TOPS at
-  4,000-8,000 tokens, where mma.sync reaches about 530 and cuBLASLt's int8 870-910).
+  4,000-8,000 tokens, where mma.sync reaches about 530 and cuBLASLt's int8 870-910; W4A8 from 128 rows,
+  `csrc/w4a8_wgmma.cu`: 406-430 TOPS, where its mma.sync kernels reach 200-270).
 
 Every choice gives the same bits, so it changes only the speed.
 
@@ -54,7 +55,8 @@ int8 weights halve the weight stream that bounds short requests.
   fp32 residual stream.
 - **Q4_K_M files** keep their 4-bit weights: the W4A8 GEMM unpacks Q4_K / Q6_K blocks next to the MMA, with int8
   activations per 256 inputs (`csrc/w4a8_gemm.cu`); a decode step's single row runs a GEMV of its own (dp4a, a warp
-  per column), with the same arithmetic in the same order.
+  per column), with the same arithmetic in the same order. On Hopper, from 128 rows, a warpgroup-MMA kernel expands
+  each stage of weights into two int8 planes whose int32 sums give the super-block's exactly (`csrc/w4a8_wgmma.cu`).
 
 **Last layer at the read positions only.** Keys and values are computed for every token; queries, attention output,
 MLP, norm and the 26 letter rows only where answers are read.
