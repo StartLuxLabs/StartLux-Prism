@@ -1,6 +1,7 @@
 # Experimental ROCm single-GPU backend
 
-This is an experimental W4A8 path for Radeon AI PRO R9700 (`gfx1201`, 32 GB).
+This is an experimental single-GPU backend for Radeon AI PRO R9700 (`gfx1201`, 32 GB).
+W4A8 remains the automatic Q4_K_M profile; compressed W4A16 is an explicit option.
 The initial checkpoint is `StartLux-Decision-v1.1-27B-AutoThink-Q4_K_M.gguf`
 (16,547,400,096 bytes). Other architectures and full-model BF16/W8A8 are not
 qualified. ROCm tensor/data parallelism is deliberately rejected.
@@ -37,6 +38,10 @@ can differ from management-tool indices. The process must see exactly one GPU;
 inside it the device is `cuda:0`, including on ROCm. There is no machine-specific
 card reservation policy in the backend.
 
+For a Docker service, configure network access explicitly. Host networking keeps
+this loopback URL reachable from the host. With bridge networking, publish the
+port and bind the server to a reachable container interface instead.
+
 The conservative ROCm defaults are 2,048 packed tokens, four prefix slots with
 4,096 KV rows, one thinking sequence, a 256-token thought limit and eager mode.
 Packed capacity includes system/evidence/question tokens. The buffer preflight
@@ -51,6 +56,21 @@ on the selected R9700 showed little additional benefit from graphs.
 For images, pass the matching `mmproj-*-F16.gguf` with `--mmproj`. Small-image
 1/2/8-image checks do not imply support for eight maximum-resolution images.
 The 8K prefill capacity check does not qualify 8K AutoThink.
+
+## Explicit W4A16 profile
+
+Change the launch argument to `--precision w4a16` to select the separately measured
+FP16-activation profile. It retains compressed weights and the full Q8 generation
+head. It changes projection/intermediate/embedding numerical semantics and passes
+the local frozen FP32 readout thresholds. Single-sequence decode remains slower
+than the optimized W4A8 path, and several engineering speed goals are unmet.
+See [the W4A16 scope, measurements and reproduction commands](amd_w4a16.md).
+
+The W4A8 controls and FP32 limitation below describe W4A8. For W4A16,
+`STARTLUX_PRISM_AMD_W4A16=auto` selects the qualified table and `reference` restores
+its original FP16 projection implementation. The measured component setting is
+`STARTLUX_PRISM_AMD_Q_COMPONENTS=all` (the default). Keep precision profiles
+separate when comparing outputs and speedups.
 
 ## Kernels and numerical scope
 
@@ -81,7 +101,7 @@ gfx1201 resource settings. Canonical evidence boundaries preserve GDN chunk
 roundings when sharing/cache changes; the NVIDIA planner default is unchanged.
 Q8 head/embedding conversion uses a smaller temporary chunk on HIP only.
 
-**The independent FP32 readout gate is unmet.** The prototype's frozen 501-row
+**The W4A8 independent FP32 readout gate is unmet.** The prototype's frozen 501-row
 comparison produced MAE 0.003109, P99 0.023216, and 452/457 (98.906%) matching
 decisions where reference margin exceeds 0.02. Local candidate thresholds were
 0.001, 0.01 and 99.5%; these are not upstream's established acceptance criteria.

@@ -100,3 +100,20 @@ the fixed yes/no anchor: prompt tokens match the frozen anchor, maximum FP32
 logit difference is 1.62e-5, and candidate probabilities match the prototype. Its
 original precision gate remains failed, as expected; it is not counted as a
 release pass.
+
+
+## Separate compressed W4A16 profile (2026-10-26)
+
+The historical W4A8 figures above remain unchanged. The explicit W4A16 profile
+passes the unchanged frozen 501-case readout thresholds and the additional
+20-case set, with all probabilities matching its own frozen profile. Its final
+source also reproduces the W4A8 probabilities and fixed decode tokens unchanged.
+
+The W4A16 integration completed independent operator, request-isolation,
+graph/cache, teacher-forcing/seeded decode, vision, full HTTP, 1800-second mixed
+service and launch/stop checks. The original invalid cross-request diagnostic
+call and its corrected grouped rerun are retained in the workspace execution log.
+Several speed goals remain unmet; passing the local numerical set does not
+establish general model quality or production support. See the
+[profile-specific report](amd_w4a16.md) and
+[round-level evidence](../bench/results/r9700_w4a16_20261026.json).

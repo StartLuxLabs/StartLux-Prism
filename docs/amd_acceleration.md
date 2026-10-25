@@ -5,6 +5,10 @@ Radeon AI PRO R9700. It does not establish production numerical qualification.
 The original W4A8 FP32 probability gate remains unmet; see
 [validation scope](amd_validation.md). The mixed sustained run has passed; enhanced HTTP has also completed. Cold/hot JIT startup measurements have completed.
 
+This report retains the strict W4A8 measurements. The separate compressed
+[W4A16 profile](amd_w4a16.md) has its own numerical and service qualification;
+its results are not included in the W4A8 speedup percentages below.
+
 ## Qualified first combination
 
 The implementation uses an offline table to select packed signed-byte dot4,

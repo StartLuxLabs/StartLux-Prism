@@ -52,6 +52,9 @@ HTTP time, median of 5 runs, model loading excluded.
 ## Experimental AMD support
 
 A single-GPU ROCm W4A8 backend for R9700 (`gfx1201`) is available experimentally.
+An explicit compressed [W4A16 profile](docs/amd_w4a16.md) passes the local FP32
+readout checks and has separate performance/service evidence. Automatic Q4_K_M
+precision remains W4A8; both profiles are experimental.
 See [AMD setup and numerical limitations](docs/amd.md) and the
 [measured R9700 acceleration report](docs/amd_acceleration.md). This does not extend
 the NVIDIA accuracy or performance claims above to AMD.
@@ -224,7 +227,7 @@ Endpoints: `POST /v1/systemone` (also `/v1/decisions`), `GET /v1/models`, `GET /
 
 | Server flag | Default | Description |
 |---|---|---|
-| `--precision` | `auto` | `int8` for Q8_0 files, `w4a8` for Q4_K_M files, `bf16` as the reference |
+| `--precision` | `auto` | `int8` for Q8_0 files, `w4a8` for Q4_K_M files, `bf16` as the reference; `w4a16` is an explicit experimental ROCm option |
 | `--gpus`, `--tp` | | The GPUs; the GPUs per model (2 or 4 for the 27B) |
 | `--max-tokens` | from free memory | The largest batch (131,072 tokens for the 27B on an H200); longer requests get HTTP 422 |
 | `--prefix-cache-tokens` | 65,536 | KV rows kept for evidence that comes again |
