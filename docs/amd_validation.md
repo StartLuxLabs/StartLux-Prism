@@ -1,5 +1,9 @@
 # Experimental gfx1201 validation
 
+This page preserves the original prototype and trimmed-backend checks. The later
+kernel changes and final integration measurements are recorded separately in
+[the acceleration report](amd_acceleration.md).
+
 ## Scope and identity
 
 - Radeon AI PRO R9700, gfx1201, 32 GB, one visible GPU per process.
@@ -14,7 +18,9 @@
 
 The environment came from an immutable local foundation image; no public image
 availability or other PyTorch/ROCm combinations are claimed. NVIDIA execution
-has not been tested here. All GPU timings were collected alongside other jobs.
+has not been tested here. The original checks below ran while other jobs were
+active; the acceleration report separately records whether the selected GPU
+itself was shared.
 
 ## Original prototype evidence
 

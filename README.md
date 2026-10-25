@@ -52,8 +52,9 @@ HTTP time, median of 5 runs, model loading excluded.
 ## Experimental AMD support
 
 A single-GPU ROCm W4A8 backend for R9700 (`gfx1201`) is available experimentally.
-See [AMD setup, validation and numerical limitations](docs/amd.md). This does not
-extend the NVIDIA accuracy or performance claims above to AMD.
+See [AMD setup and numerical limitations](docs/amd.md) and the
+[measured R9700 acceleration report](docs/amd_acceleration.md). This does not extend
+the NVIDIA accuracy or performance claims above to AMD.
 
 ## Installation
 
