@@ -105,6 +105,9 @@ def readout(h, norm, letters, out, n, R, eps):
 
 
 def embed(ids, embed_q8, h, n_tok, T):
+    if hasattr(embed_q8, "kind"):
+        from .amd_w4a16 import embed as compressed_embed
+        return compressed_embed(ids, embed_q8, h, n_tok, T)
     HID = h.shape[1]
     _embed_kernel[(T,)](ids, embed_q8.qs, embed_q8.d, h, n_tok, HID=HID, HP=_p2(HID), QK=32, num_warps=4)
 

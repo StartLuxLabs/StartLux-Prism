@@ -95,9 +95,9 @@ def _qkv_norm_rope_kernel(qkv_ptr, P, qn_ptr, kn_ptr, pos_ptr, kvrow_ptr, inv_fr
         rot = tl.where(d < half, y * c - yp * s, y * c + yp * s)
         y = tl.where(d < ROT, rot, y)
         if j < H:
-            tl.store(qbuf_ptr + (t * H + j) * HD + d, y.to(tl.bfloat16))
+            tl.store(qbuf_ptr + (t * H + j) * HD + d, y.to(qkv_ptr.dtype.element_ty))
         else:
-            tl.store(kv_ptr + kv_layer_off + (j - H) * kv_head_stride + row * HD + d, y.to(tl.bfloat16))
+            tl.store(kv_ptr + kv_layer_off + (j - H) * kv_head_stride + row * HD + d, y.to(qkv_ptr.dtype.element_ty))
             if K8:              # the same key as int8, one scale per token and kv head
                 sc = tl.maximum(tl.max(tl.abs(y), 0), 1e-10) / 127.0
                 tl.store(k8_ptr + k8_layer_off + (j - H) * k8_head_stride + row * HD + d,
@@ -129,7 +129,7 @@ def _attend_range(acc, m_i, l_i, q, kv_ptr, k_base, v_base, start, length, q0, r
         p = tl.exp(s - m_use[:, None])
         l_i = l_i * alpha + tl.sum(p, 1)
         v = tl.load(kv_ptr + v_base + (start + kb + n)[:, None] * HD + d[None, :], mask=km[:, None], other=0.0)
-        acc = acc * alpha[:, None] + tl.dot(p.to(tl.bfloat16), v)
+        acc = acc * alpha[:, None] + tl.dot(p.to(kv_ptr.dtype.element_ty), v)
         m_i = m_new
     return acc, m_i, l_i
 
@@ -156,7 +156,7 @@ def _attend_range_q8(acc, m_i, l_i, q8, qs, kv_ptr, k8_ptr, k8_base, k8s_ptr, k8
         p = tl.exp(s - m_use[:, None])
         l_i = l_i * alpha + tl.sum(p, 1)
         v = tl.load(kv_ptr + v_base + (start + kb + n)[:, None] * HD + d[None, :], mask=km[:, None], other=0.0)
-        acc = acc * alpha[:, None] + tl.dot(p.to(tl.bfloat16), v)
+        acc = acc * alpha[:, None] + tl.dot(p.to(kv_ptr.dtype.element_ty), v)
         m_i = m_new
     return acc, m_i, l_i
 
@@ -222,7 +222,7 @@ def _tree_attention_kernel(qbuf_ptr, qkv_ptr, P, kv_ptr, kv_layer_off, kv_kind_s
     o = acc / l_i[:, None]
     gate = tl.load(qkv_ptr + (t0 + rows)[:, None] * P + h * 2 * HD + HD + d[None, :], mask=qm[:, None], other=0.0)
     o = o * (1.0 / (1.0 + tl.exp(-gate.to(tl.float32))))
-    tl.store(out_ptr + (t0 + rows)[:, None] * (H * HD) + h * HD + d[None, :], o.to(tl.bfloat16), mask=qm[:, None])
+    tl.store(out_ptr + (t0 + rows)[:, None] * (H * HD) + h * HD + d[None, :], o.to(out_ptr.dtype.element_ty), mask=qm[:, None])
 
 
 def _k8_args(k8, attn_layer, like):

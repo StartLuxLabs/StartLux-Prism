@@ -149,7 +149,7 @@ class Engine:
         if is_hip():
             if architecture() != "gfx1201":
                 raise ValueError("The experimental ROCm model profile is currently limited to gfx1201")
-            if self.opt.precision != "w4a8":
+            if self.opt.precision not in ("w4a8", "w4a16"):
                 raise ValueError("The current ROCm model path is w4a8 from Q4_K_M; "
                                  "bf16/int8 whole-model paths are not qualified on this single-GPU profile")
             self.opt.pdl = 0
@@ -190,7 +190,12 @@ class Engine:
                 raise ValueError(f"{self.opt.mmproj}: projects to {self.vision.cfg.out}, the decoder's hidden size is "
                                  f"{self.cfg.hidden}")
         self.int8 = False
-        self.w4 = self.opt.precision == "w4a8"
+        self.w4 = self.opt.precision in ("w4a8", "w4a16")
+        self.w4a16 = self.opt.precision == "w4a16"
+        self.q_components = os.environ.get("STARTLUX_PRISM_AMD_Q_COMPONENTS", "all")
+        if self.w4a16 and self.q_components not in ("activation", "intermediates", "all"):
+            raise ValueError("Unknown research precision component selection")
+        self.fp16_intermediates = self.w4a16 and self.q_components != "activation"
         if self.tp is not None:                      # int8 shards straight from the Q8_0 values: no bf16 copy
             self._tp_weights(w)
             self.tp.setup(self.cfg.hidden, 2 * self.cfg.n_layer)   # the fused all-reduces' symmetric buffers
@@ -213,7 +218,7 @@ class Engine:
         if self.opt.precision == "int8" and self.tp is None:
             amax = self._load_or_calibrate(w)
             self._int8_weights(w, amax)
-        elif self.opt.precision not in ("bf16", "w4a8", "int8"):
+        elif self.opt.precision not in ("bf16", "w4a8", "w4a16", "int8"):
             raise ValueError(f"precision {self.opt.precision!r}")
         del w
         torch.cuda.empty_cache()
@@ -272,7 +277,9 @@ class Engine:
         segments of one kind each; norms as they are (no smoothing)."""
         dev, cfg = self.device, self.cfg
         self.embed = w.embed.to(dev)
-        if not isinstance(self.embed, gguf_weights.Q8):
+        if self.w4a16 and self.q_components == "all":
+            self.embed = KW4.repack(self.embed)
+        elif not isinstance(self.embed, gguf_weights.Q8):
             self.embed = self.embed.as_q8()
         self.letters = w.output.dequant(torch.float32, torch.tensor(self.tok.letters)).to(dev)
         self.out_norm = w.out_norm.to(dev)
@@ -429,7 +436,7 @@ class Engine:
         """Every device buffer of a T-token engine, for this precision's forward (bf16-only buffers for the bf16 path,
         int8 activations for the int8 one): {name: tensor}.  dev "meta" sizes them without memory."""
         cfg, o, R = self.cfg, self.opt, self.opt.max_read
-        f32, bf, i32 = torch.float32, torch.bfloat16, torch.int32
+        f32, bf, i32 = torch.float32, (torch.float16 if self.fp16_intermediates else torch.bfloat16), torch.int32
         z = lambda *s, dtype=f32: torch.zeros(*s, dtype=dtype, device=dev)  # noqa: E731
         HV, HK, D = cfg.v_heads, cfg.k_heads, cfg.gdn_dim
         n_gdn, n_attn = len(self.gdn_index), len(self.attn_index)
@@ -462,8 +469,8 @@ class Engine:
             K = max(cfg.ffn, cfg.value_dim, cfg.hidden, cfg.n_head * cfg.head_dim)
             # int8 activations as the int8 path, with one scale per 256 inputs and the sum of every 32 (Q4_K's mins,
             # split in two bytes: kernels/w4a8.py quantize_ref)
-            buf.update(aq=z(T * K, dtype=torch.int8), as_=z(T * K // 256), xs=z(T * K // 16, dtype=torch.int8),
-                       aqr=z(R * K, dtype=torch.int8), asr=z(R * K // 256), xsr=z(R * K // 16, dtype=torch.int8))
+            buf.update(aq=z(T * K, dtype=torch.float16 if self.w4a16 else torch.int8), as_=z(T * K // 256), xs=z(T * K // 16, dtype=torch.int8),
+                       aqr=z(R * K, dtype=torch.float16 if self.w4a16 else torch.int8), asr=z(R * K // 256), xsr=z(R * K // 16, dtype=torch.int8))
         elif self.int8:
             K = max(cfg.ffn, cfg.value_dim, cfg.hidden)
             # int8 activations: one flat buffer per side, viewed as [rows, K] row-major for each projection's K (the

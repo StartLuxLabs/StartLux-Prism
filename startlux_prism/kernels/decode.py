@@ -170,7 +170,7 @@ def _head_norm_bf16_kernel(h_ptr, w_ptr, out_ptr, n_ptr, eps, HID: tl.constexpr,
     m = c < HID
     h = tl.load(h_ptr + r * HID + c, mask=m, other=0.0)
     y = h * tl.rsqrt(tl.sum(h * h, 0) / HID + eps) * tl.load(w_ptr + c, mask=m, other=0.0)
-    tl.store(out_ptr + r * HID + c, y.to(tl.bfloat16), mask=m)
+    tl.store(out_ptr + r * HID + c, y.to(out_ptr.dtype.element_ty), mask=m)
 
 
 @triton.jit
@@ -240,7 +240,7 @@ def _attn_part_kernel(q_ptr, kv_ptr, k_base0, kind_stride, head_stride, kvs_ptr,
             pr = tl.exp(sc - m_new[:, None])
             l_i = l_i * alpha + tl.sum(pr, 1)
             v = tl.load(kv_ptr + v_base + rows[:, None] * HD + d[None, :], mask=km[:, None], other=0.0)
-            acc = acc * alpha[:, None] + tl.dot(pr.to(tl.bfloat16), v)
+            acc = acc * alpha[:, None] + tl.dot(pr.to(kv_ptr.dtype.element_ty), v)
             m_i = m_new
         o = ((b64 * HKV + g) * MAXS + s) * G + r
         tl.store(pm_ptr + o * 2, m_i, mask=rm)
@@ -275,7 +275,7 @@ def _attn_combine_kernel(qkv_ptr, P, kvl_ptr, pm_ptr, pa_ptr, out_ptr, out_strid
         acc += w * tl.load(pa_ptr + o * HD + d)
     gate = tl.load(qkv_ptr + b64 * P + h * 2 * HD + HD + d).to(tl.float32)
     o = acc / l * (1.0 / (1.0 + tl.exp(-gate)))
-    tl.store(out_ptr + b64 * out_stride + h * HD + d, o.to(tl.bfloat16))
+    tl.store(out_ptr + b64 * out_stride + h * HD + d, o.to(out_ptr.dtype.element_ty))
 
 
 ATTN_SPLIT = 512                    # keys per split: fixed, so a row's result does not depend on the batch

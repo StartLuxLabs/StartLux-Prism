@@ -316,18 +316,22 @@ def _store_g(y, q_ptr, s_ptr, xs_ptr, row, M, K: tl.constexpr, KP: tl.constexpr)
     """y [KP] fp32 (zero past K) -> row `row` of q int8 [M, K], s fp32 [K / 256, M] and xs int8 [K / 256, M, 16]: per
     256 inputs the scale and the sums S of the eight groups of 32 (|S| <= 32 * 127), split as eight S & 63 then eight
     S >> 6 (super-block-major, as the GEMM reads them)."""
-    yg = tl.reshape(y, (KP // 256, 256))
-    scale = libdevice.div_rn(tl.maximum(tl.max(tl.abs(yg), 1), 1e-10), 127.0)     # IEEE divisions, as the reference
-    qv = libdevice.rint(libdevice.div_rn(yg, scale[:, None])).to(tl.int8)
-    gi = tl.arange(0, KP // 256)
-    c = gi[:, None] * 256 + tl.arange(0, 256)[None, :]
-    tl.store(q_ptr + row * K + c, qv, mask=c < K)
-    tl.store(s_ptr + gi * M + row, scale, mask=gi < K // 256)
-    si = tl.arange(0, KP // 32)
-    sums = tl.sum(tl.reshape(qv.to(tl.int32), (KP // 32, 32)), 1)
-    o = ((si // 8) * M + row) * 16 + si % 8
-    tl.store(xs_ptr + o, (sums & 63).to(tl.int8), mask=si < K // 32)
-    tl.store(xs_ptr + o + 8, (sums >> 6).to(tl.int8), mask=si < K // 32)
+    if q_ptr.dtype.element_ty == tl.float16:
+        c = tl.arange(0, KP)
+        tl.store(q_ptr + row * K + c, y, c < K)
+    else:
+        yg = tl.reshape(y, (KP // 256, 256))
+        scale = libdevice.div_rn(tl.maximum(tl.max(tl.abs(yg), 1), 1e-10), 127.0)     # IEEE divisions, as the reference
+        qv = libdevice.rint(libdevice.div_rn(yg, scale[:, None])).to(tl.int8)
+        gi = tl.arange(0, KP // 256)
+        c = gi[:, None] * 256 + tl.arange(0, 256)[None, :]
+        tl.store(q_ptr + row * K + c, qv, mask=c < K)
+        tl.store(s_ptr + gi * M + row, scale, mask=gi < K // 256)
+        si = tl.arange(0, KP // 32)
+        sums = tl.sum(tl.reshape(qv.to(tl.int32), (KP // 32, 32)), 1)
+        o = ((si // 8) * M + row) * 16 + si % 8
+        tl.store(xs_ptr + o, (sums & 63).to(tl.int8), mask=si < K // 32)
+        tl.store(xs_ptr + o + 8, (sums >> 6).to(tl.int8), mask=si < K // 32)
 
 
 @triton.jit

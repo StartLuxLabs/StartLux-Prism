@@ -354,6 +354,9 @@ def gemm(xq, a, xs, w: W4, out, n_rows, epi=0, cfg=None, pdl=0):
     """xq int8 [M, K], a fp32 [K / 256, M], xs int8 [K / 256, M, 16] (Q4_K's mins; quantize_ref), w W4 [N, K] ->
     out [M, N]: bf16 (epi 0) or added into fp32 (epi 1).  The CUDA kernel (csrc/w4a8_gemm.cu); cfg (id, stages) or
     w4a8.pick_cuda; pdl: launched to overlap the kernel before (programmatic dependent launch, 1-3: csrc)."""
+    if torch.version.hip is not None and xq.dtype == torch.float16:
+        from .amd_w4a16 import gemm as fp16_gemm
+        return fp16_gemm(xq, w, out, n_rows, epi)
     if torch.version.hip is not None:
         if cfg is not None:
             raise ValueError("CUDA cfg IDs cannot be used by ROCm W4A8 kernels")
