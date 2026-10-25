@@ -1,7 +1,8 @@
 """The engine's batch tables executed in plain PyTorch fp32, as the kernels read them: conv taps from the history table
 (packed rows, saved conv rows of a persistent slot, or zero), linear-attention segments scanned in two waves from
 their parent's state, attention over the (a, b, own-causal) key ranges, the last layer at the read rows.  Compared with
-the reference running every prompt alone, it checks the planner and the table semantics without a GPU.
+the reference running every prompt alone, it checks the planner and the table semantics without a GPU.  An Instant
+model (prompt read bidirectionally) is planned whole and read over all of each segment's own rows, as its engine does.
 
     python tests/emulate.py MODEL.gguf MODEL_DIR [JEVBENCH_PUBLIC_DIR]
 """
@@ -22,8 +23,8 @@ from startlux_prism.reference import (Reference, apply_rope, gdn_chunked, l2norm
 
 
 class Emulator:
-    def __init__(self, weights, tok):
-        self.w, self.cfg, self.tok = weights, weights.config, tok
+    def __init__(self, weights, tok, bidir=False):
+        self.w, self.cfg, self.tok, self.bidir = weights, weights.config, tok, bidir
         cfg = self.cfg
         self.gdn = [i for i in range(cfg.n_layer) if not cfg.is_attention(i)]
         self.att = [i for i in range(cfg.n_layer) if cfg.is_attention(i)]
@@ -34,7 +35,8 @@ class Emulator:
         self.letters = weights.output.dequant(torch.float32, torch.tensor(tok.letters))
         ids = tok.system_ids
         self.sys_len, self.root_kv = len(ids), (0, len(ids))
-        self.run(B.plan_prefix(ids), head=False)
+        if not bidir:                    # whole prompts never read the system text's state
+            self.run(B.plan_prefix(ids), head=False)
 
     def run(self, plan, head=True):
         cfg, W, t = self.cfg, self.w, plan.tables
@@ -110,9 +112,10 @@ class Emulator:
                 out = torch.zeros(len(rows), H, HD)
                 for qi, r in enumerate(rows):
                     si = next(i for i, s in enumerate(plan.segs) if s.start <= r < s.start + len(s.tokens))
-                    a0, al, b0, bl, own, _ = (int(v) for v in t["ranges"][si])
+                    a0, al, b0, bl, own, own_len = (int(v) for v in t["ranges"][si])
                     own_idx = r - plan.segs[si].start
-                    keys = list(range(a0, a0 + al)) + list(range(b0, b0 + bl)) + list(range(own, own + own_idx + 1))
+                    seen = own_len if self.bidir else own_idx + 1
+                    keys = list(range(a0, a0 + al)) + list(range(b0, b0 + bl)) + list(range(own, own + seen))
                     K = torch.stack([self.kv[(ai, kr)][0] for kr in keys])          # [n_k, HKV, HD]
                     V = torch.stack([self.kv[(ai, kr)][1] for kr in keys])
                     K, V = K.repeat_interleave(H // HKV, 1), V.repeat_interleave(H // HKV, 1)
@@ -135,8 +138,9 @@ def main():
     torch.set_num_threads(16)
     tok = Tokenizer(model_dir)
     w = gguf_weights.load(gguf)
-    emu = Emulator(w, tok)
-    ref = Reference(w, device="cpu")
+    bidir = tok.kind == "instant" or not w.config.causal
+    emu = Emulator(w, tok, bidir)
+    ref = Reference(w, device="cpu", bidirectional=bidir)
     ref.set_letters(tok.letters)
     import suites
     fixed = suites.fixed()
@@ -148,8 +152,9 @@ def main():
     # all three requests in one batch: three trees (shared evidence each), plus one unrelated single question
     single = rows_for(tok, [J.from_systemone({"x": "unrelated"}, {"type": "noul", "instructions": "Is it?"})], ["s"])
     groups.append(single)
-    plan = B.plan_batch([[r.ids for r in g] for g in groups], emu.sys_len, 64, emu.root_kv)
-    print("plan:", plan.counts, "tokens", plan.n_tok, "vs flat", sum(len(r.ids) - emu.sys_len for g in groups for r in g))
+    plan = B.plan_batch([[r.ids for r in g] for g in groups], emu.sys_len, 64, emu.root_kv, whole=bidir)
+    print("plan:", plan.counts, "tokens", plan.n_tok, "vs flat", sum(len(r.ids) - emu.sys_len for g in groups for r in g),
+          "(whole prompts, bidirectional)" if bidir else "")
     got = emu.run(plan)
     worst, i = 0.0, 0
     for g in groups:

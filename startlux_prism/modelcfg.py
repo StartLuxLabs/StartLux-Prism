@@ -6,10 +6,10 @@
     instant     v1.1 Instant: config.json "jev_prompt_attention": "bidirectional" (a GGUF of it carries
                 qwen35.attention.causal = false): the prompt is read bidirectionally in the full-attention layers
 
-StartLux-Prism answers in one pass (think_mode "never") and runs the prompt causally, so it serves v1 and AutoThink folders
-and refuses Instant ones.  What the kind changes in the request handling (decide.py): v1 folders answer exactly as
-StartLux-Decision v1 does; v1.1 folders follow v1.1 (none_check on by default, the knock-out rule for long choice lists,
-the read-out's order of operations).
+StartLux-Prism serves all three: it reads the prompt causally, or bidirectionally for Instant folders (engine/model.py,
+prompt_attention), and Instant folders answer in one pass as v1.1 has them.  What the kind changes in the request
+handling (decide.py): v1 folders answer exactly as StartLux-Decision v1 does; v1.1 folders follow v1.1 (none_check on by
+default, the knock-out rule for long choice lists, the read-out's order of operations).
 """
 from __future__ import annotations
 

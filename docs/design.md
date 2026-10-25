@@ -22,6 +22,12 @@ cached state. Every linear-attention layer's recurrent state and conv tail sits 
 layers' keys and values in reserved KV-arena rows. Entries are looked up by exact token match (and the images'
 digests) and evicted least recently used. The pass that computes new evidence writes the entry on the way.
 
+**Instant models read the prompt both ways.** In v1.1 Instant's full-attention layers (one in four) every prompt
+token reads the whole prompt, the tokens after it included; the linear-attention layers and their convolutions stay
+causal. Questions cannot then branch off a shared evidence state: each question is one whole segment (the system
+text, the evidence and the question), with no system-text state and no prefix cache. The attention kernel takes the
+mask as a compile-time switch (`BIDIR` in `kernels/attn.py`), so the causal kernels are unchanged.
+
 **Batch-invariant numerics.** Which GEMM kernel, tile and K split runs depends on the batch's size, but every one of
 them gives an element the same bits: exact int32 sums, then the same explicitly rounded scale and add, with split-K
 partials kept in int32. The rest of the pass is per segment and per row. So a request's probabilities do not depend on

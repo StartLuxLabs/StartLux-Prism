@@ -188,7 +188,7 @@ The [live comparison](#live-comparison-video-understanding) sends this kind of r
 |---|---|---|---|
 | StartLux-Decision v1 | 4B, 9B, 27B | Q8_0 as int8 (W8A8), Q4_K_M as W4A8 | One read-out per question |
 | StartLux-Decision v1.1 AutoThink | 4B, 9B, 27B | Q8_0 as int8 (W8A8), Q4_K_M as W4A8 | Thoughts, `none_probability`, images |
-| StartLux-Decision v1.1 Instant | | | Not supported yet (bidirectional attention over the prompt) |
+| StartLux-Decision v1.1 Instant | 4B, 9B, 27B | Q8_0 as int8 (W8A8), Q4_K_M as W4A8 | One pass per question, the prompt read both ways (no shared evidence), images |
 
 `--precision bf16` runs the same weights dequantized, on cuBLAS, as the reference for parity tests.
 

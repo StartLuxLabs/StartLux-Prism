@@ -16,6 +16,11 @@ enough is always split at the head: when the evidence is cached its questions st
 values (no evidence segment at all); otherwise the evidence is a segment that writes its state into a new cache slot
 and its keys and values into the cache's KV rows, and the questions follow it in wave 1.
 
+Whole rows (`whole`, StartLux-Decision v1.1 Instant models): the prompt is read bidirectionally in the full-attention
+layers, so a token's state depends on the tokens after it and nothing can be shared - not the system text, not the
+evidence between questions, not a cache entry.  Every row is then one segment computed from position 0 and the zero
+state, and the attention kernels read all of a segment's own tokens (kernels/attn.py).
+
 Images (images.py): a group whose rows carry M-RoPE positions and images gets them sliced into its segments.  The
 "pos" table holds a token's position when it is the same on all three axes (every text token), else -1 - k, k its row
 of the "mrope" table [n, 3] (time, height, width; image tokens); the image tokens' "ids" are -1 (the embedding kernel
@@ -86,7 +91,7 @@ class Plan:
 
 
 def plan_batch(groups, sys_len, kv_scratch0, root_kv=(0, 0), share=True, cache=None, system=None, max_inserts=16,
-               max_trans=64, bm=BM, keep=()):
+               max_trans=64, bm=BM, keep=(), whole=False):
     """groups: per request, a Group (or a plain list of token rows: head unknown).  All rows start with the system
     text (sys_len tokens, `system`; a row that does not is computed whole from the zero state).  cache: a PrefixCache
     (see the module docstring).  Returns a Plan whose tables index packed tokens 0..n_tok-1; KV rows of this batch
@@ -100,7 +105,12 @@ def plan_batch(groups, sys_len, kv_scratch0, root_kv=(0, 0), share=True, cache=N
     kv_row0, pos, images) for a prompt with images (Group's pos and images for one row): computed whole from
     position 0, the recurrent state and conv tail into persistent slot `slot`, the keys and values into KV rows
     kv_row0.. (not scratch); nothing is read.  They are the plan's last segments (conv-tail saves count against
-    max_inserts' table like cache entries)."""
+    max_inserts' table like cache entries).
+
+    whole: every row is one segment from position 0 and the zero state; sharing and the cache are off (the module
+    docstring)."""
+    if whole:
+        share, cache = False, None
     segs, read_seg = [], []
     trans = 0
     inserted, fresh = [], {}                    # fresh: evidence key -> the segment computing it in this batch
@@ -139,9 +149,10 @@ def plan_batch(groups, sys_len, kv_scratch0, root_kv=(0, 0), share=True, cache=N
 
     for rows, head, pos, images in groups:
         cut = lambda i, a, b=None: part(pos, images, i, a, b)        # noqa: E731
-        if system is not None and any(len(r) <= sys_len or not np.array_equal(r[:sys_len], system) for r in rows):
-            # the prompt's tokens leave the system text's before it ends (BPE merged across the boundary, e.g. evidence
-            # that starts with a newline): compute it whole, without the cached system state
+        if whole or (system is not None
+                     and any(len(r) <= sys_len or not np.array_equal(r[:sys_len], system) for r in rows)):
+            # whole rows; or the prompt's tokens leave the system text's before it ends (BPE merged across the
+            # boundary, e.g. evidence that starts with a newline): compute it whole, without the cached system state
             for i, r in enumerate(rows):
                 read_seg.append(len(segs))
                 segs.append(Seg(r, 0, -1, ZERO_SLOT, no_root=True, **cut(i, 0)))
@@ -302,12 +313,13 @@ def _layout(segs, read_seg, kv0, root_kv, n_trans, kw=4, bm=BM):
                 back = kw - 1 - r
                 code = s.start + L - back if L >= back else source(si, back - L)
                 saves.append((s.save_conv, r, code))
-    # attention: ranges per segment (a: system prefix, b: parent, own causal) and query blocks
+    # attention: ranges per segment (a: system prefix, b: parent, own: causal, or all of it when bidirectional) and
+    # query blocks
     ranges, blocks = [], []
     for si, s in enumerate(segs):
         a = (0, 0) if s.no_root else root_kv
         b = (segs[s.parent].kv_start, len(segs[s.parent].tokens)) if s.parent >= 0 else s.kv_parent
-        ranges.append((a[0], a[1], b[0], b[1], s.kv_start, 0))
+        ranges.append((a[0], a[1], b[0], b[1], s.kv_start, len(s.tokens)))
         for q0 in range(0, len(s.tokens), bm):
             blocks.append((s.start + q0, min(bm, len(s.tokens) - q0), si, q0))
     read = [segs[si].start + len(segs[si].tokens) - 1 for si in read_seg]

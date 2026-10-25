@@ -24,6 +24,10 @@ StartLux-Decision v1.1 AutoThink folders (int8 or bf16) think as v1.1 does (thin
 request controls, return_details with v1.1's details and timing_ms): thoughts are generated on the GPU
 (engine/decode.py) by think.ThinkScheduler, this scheduler with decode steps interleaved between the batches.
 
+StartLux-Decision v1.1 Instant folders answer in one pass with the prompt read bidirectionally (engine/model.py): every
+question's prompt is computed whole, so a request whose prompts hold more tokens than one pass takes is split over
+several passes (Engine.parts), and a request that asks for a thought is refused as v1.1 refuses it.
+
 --tp N --gpus a,b,...: one model over N GPUs (tensor parallelism, int8; startlux_prism/tp.py).  This process is rank 0 and
 serves as above; the other ranks are processes it starts, which replay its passes and decode steps on their shards.
 """
@@ -158,7 +162,10 @@ class Backend:
 
     def letter_logits(self, rows):
         t0 = time.perf_counter()
-        logits, last = self.sched.submit(group(rows))
+        logits = []
+        for part in self.sched.engine.parts(rows):       # one, unless a bidirectional engine's request is too long
+            got, last = self.sched.submit(group(part))
+            logits += got
         self.last = dict(last, submit_to_result_ms=round((time.perf_counter() - t0) * 1000, 3))
         return logits
 
@@ -257,12 +264,10 @@ def main():
     from .gguf import GGUFFile
     from .modelcfg import folder_kind
     kind = folder_kind(a.model_dir, GGUFFile(a.gguf).meta)
-    if kind == "instant":
-        sys.exit("this is a StartLux-Decision v1.1 Instant model (its prompt is read bidirectionally): StartLux-Prism runs "
-                 "prompts causally and does not serve it yet")
     sys.setswitchinterval(a.switch_interval)
     gpu = torch.cuda.get_device_properties(0)
-    P.step(f"StartLux-Prism: {os.path.basename(a.gguf)} ({'v1.1 AutoThink' if kind == 'auto_think' else kind}) as "
+    label = {"auto_think": "v1.1 AutoThink", "instant": "v1.1 Instant, prompt read bidirectionally"}.get(kind, kind)
+    P.step(f"StartLux-Prism: {os.path.basename(a.gguf)} ({label}) as "
            f"{a.precision} on {gpu.name} (sm_{gpu.major}{gpu.minor}, {gpu.total_memory / 2**30:.0f} GiB)"
            + (f" and {a.tp - 1} more (tensor parallel)" if a.tp > 1 else ""))
     thinks = kind == "auto_think" and a.precision in ("int8", "bf16", "w4a8")       # thoughts: engine/decode.py, think.py
@@ -348,7 +353,7 @@ def main():
                     req.get("state"), req["questions"], marks, ctl.allow_none, ctl.none_check, ctl=ctl,
                     images=req.get("images"))
             else:
-                ctl = request_controls(req)
+                ctl = request_controls(req, kind)
                 answers, usage = Decider(tok, backend, none_check, allow_none, images).decide(
                     req.get("state"), req["questions"], marks, ctl["allow_none"], ctl["none_check"], req.get("images"))
             timings = dict(backend.last or {})

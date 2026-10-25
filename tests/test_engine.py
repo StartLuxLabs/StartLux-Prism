@@ -4,7 +4,8 @@
 
 For every request: letter logits of each question from the engine (tree batch: shared evidence computed once) and from
 the reference (each prompt alone, fp32, exact Q8_0 weights); reports the largest logit and probability differences and
-whether the decision agrees.  Also checks the engine without evidence sharing and with graphs against eager.
+whether the decision agrees.  Also checks the engine without evidence sharing and with graphs against eager.  An
+Instant model (prompt read bidirectionally) is checked against the bidirectional reference; its engine shares nothing.
 """
 import argparse
 import json
@@ -51,8 +52,9 @@ def main():
     # the same process, its 5 GiB would not fit
     eng = Engine(a.gguf, a.model_dir, Options(max_tokens=a.max_tokens, graphs=not a.no_graphs, precision=a.precision,
                                               calib=a.calib, prefix_cache=0))
-    print(f"engine loaded in {eng.load_s:.1f} s, system prefix {eng.sys_len} tokens", flush=True)
-    ref = Reference(gguf_weights.load(a.gguf), chunked=True)
+    print(f"engine loaded in {eng.load_s:.1f} s, system prefix {eng.sys_len} tokens, prompt read "
+          f"{'bidirectionally' if eng.bidir else 'causally'}", flush=True)
+    ref = Reference(gguf_weights.load(a.gguf), chunked=True, bidirectional=eng.bidir)
     ref.set_letters(eng.tok.letters)
     worst_logit, worst_p, agree, total = 0.0, 0.0, 0, 0
     nondet = [0]
