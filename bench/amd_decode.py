@@ -124,4 +124,3 @@ if args.paired:
 result.update(exact_tokens_across_repeats_graphs_and_batch=True,memory=dict(allocated=torch.cuda.memory_allocated(),
  reserved=torch.cuda.memory_reserved(),peak_allocated=torch.cuda.max_memory_allocated()))
 (out/'decode.json').write_text(json.dumps(result,indent=2)+'\n');print('PASS decode performance and token equality',flush=True)
-
