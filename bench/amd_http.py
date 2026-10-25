@@ -6,6 +6,7 @@ repo=Path(__file__).resolve().parents[1]
 p=argparse.ArgumentParser(description=__doc__)
 p.add_argument('--gguf',required=True);p.add_argument('--model-dir',required=True);p.add_argument('--out',required=True)
 p.add_argument('--port',type=int,default=18092)
+p.add_argument('--precision',choices=['w4a8','w4a16'],default='w4a8')
 a=p.parse_args();a.gguf=str(Path(a.gguf).resolve());a.model_dir=str(Path(a.model_dir).resolve());out=Path(a.out).resolve();out.mkdir(parents=True,exist_ok=True)
 sys.path[:0]=[str(repo/'bench'),str(repo)]
 import run_http as H
@@ -32,7 +33,7 @@ import run_prefix as P
 
 model=Path(a.model_dir)
 cmd=[sys.executable,'-m','startlux_prism.server','--gguf',a.gguf,
- '--model-dir',str(model),'--precision','w4a8','--host','127.0.0.1','--port',str(a.port),'--max-tokens','8192',
+ '--model-dir',str(model),'--precision',a.precision,'--host','127.0.0.1','--port',str(a.port),'--max-tokens','8192',
  '--budget','8192','--graph-max-tokens','2048','--no-graphs','--prefix-cache','4','--prefix-cache-tokens','4096',
  '--think-mode','never','--max-think-budget','256','--think-seqs','1','--think-kv-rows','12288',
  '--context-length','8192','--mmproj','none','--tp','1']

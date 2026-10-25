@@ -16,6 +16,7 @@ import vision_suite
 
 p=argparse.ArgumentParser();p.add_argument('--gguf',required=True);p.add_argument('--model-dir',required=True)
 p.add_argument('--output',required=True);p.add_argument('--port',type=int,default=18092)
+p.add_argument('--precision',choices=['w4a8','w4a16'],default='w4a8')
 p.add_argument('--seconds',type=int,default=0);p.add_argument('--requests',type=int,default=0)
 p.add_argument('--graphs',action='store_true');p.add_argument('--readout-only',action='store_true')
 p.add_argument('--mmproj',default='none');p.add_argument('--max-tokens',type=int,default=2048)
@@ -31,7 +32,7 @@ def http(body=None,path='/v1/systemone'):
         with urllib.request.urlopen(request,timeout=600) as r:return r.status,json.load(r)
     except urllib.error.HTTPError as e:return e.code,json.load(e)
 cmd=[sys.executable,'-m','startlux_prism.server','--gguf',a.gguf,'--model-dir',a.model_dir,'--port',str(a.port),
-     '--host','127.0.0.1','--precision','w4a8','--max-tokens',str(a.max_tokens),'--prefix-cache','4','--prefix-cache-tokens','4096',
+     '--host','127.0.0.1','--precision',a.precision,'--max-tokens',str(a.max_tokens),'--prefix-cache','4','--prefix-cache-tokens','4096',
      '--think-seqs','1','--max-think-budget','256','--think-kv-rows','4096','--context-length',str(a.max_tokens),
      '--mmproj',a.mmproj,'--graph-max-tokens','512']
 cmd+=['--graphs'] if a.graphs else ['--no-graphs']
