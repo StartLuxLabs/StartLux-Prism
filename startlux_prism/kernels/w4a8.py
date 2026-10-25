@@ -357,7 +357,12 @@ def gemm(xq, a, xs, w: W4, out, n_rows, epi=0, cfg=None, pdl=0):
     if torch.version.hip is not None:
         if cfg is not None:
             raise ValueError("CUDA cfg IDs cannot be used by ROCm W4A8 kernels")
-        implementation = os.getenv("STARTLUX_PRISM_AMD_GEMM", "gemv")
+        implementation = os.getenv("STARTLUX_PRISM_AMD_GEMM", "auto")
+        if implementation in ("auto", "dispatch", "decode", "prefill"):
+            from .amd_w4a8_dispatch import run
+            if run(xq, a, xs, w, out, n_rows, epi, implementation):
+                return
+            implementation = "gemv"
         if implementation == "gemv":
             if xq.shape[0] <= 8:
                 from .amd_w4a8 import gemv
