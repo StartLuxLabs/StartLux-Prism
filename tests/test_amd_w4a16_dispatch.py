@@ -30,3 +30,10 @@ def test_precision_dispatch_requires_qualified_dtype_and_layout():
         assert D.pick(x, w, output[:, ::2], 0) is None
         assert D.pick(x[:, ::2], w, output[:, :8], 0) is None
         assert D.pick(x[:2], w, output[:2, :8], 0) is None
+
+
+def test_precision_projection_rejects_cuda_cfg_ids():
+    from startlux_prism.kernels import w4a8 as W
+    with patch.object(torch.version, 'hip', 'test-hip'):
+        with pytest.raises(ValueError, match='CUDA cfg IDs'):
+            W.gemm(torch.empty(1, 256, dtype=torch.float16), None, None, None, None, None, cfg=(0, 2))
