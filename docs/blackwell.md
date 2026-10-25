@@ -40,12 +40,17 @@ A GGUF converter is in `startlux_prism/tools/quantize_mxfp4.py`:
 
 ```bash
 python -m startlux_prism.tools.quantize_mxfp4 MODEL.gguf MODEL-mxfp4.pt --mode max
+python -m startlux_prism.tools.quantize_mxfp4 MODEL.gguf MODEL-mxfp4-smooth.pt \
+  --smooth int8_calib.pt --alpha 0.5
 ```
 
 It packs the MLP, attention and GDN projections one at a time and writes
-`{"<layer>.<group>": {"q", "s", "n", "k"}}`; `--layers 0,1` limits a test run.  Load one with
-`mxfp4.MX4(d["q"].cuda(), d["s"].cuda(), d["n"], d["k"])`.  This is weight-only: smoothing, calibration
-and folding scales into norms are model-specific and are not part of this package.
+`{"<layer>.<group>": (q, s), "<layer>.s_<group>": scale}`; `--layers 0,1` limits a test run.  Load one with
+`q, s = blob["0.gu"]; mxfp4.MX4(q.cuda(), s.cuda(), q.shape[0], q.shape[1] * 2)`.  The `--smooth` path is the
+SmoothQuant-style scheme used for the 9B numbers: `W * s`, with the matching activation division folded into
+the preceding norm or applied at runtime; for `down`, `1/s_down` is folded into the `up` rows.  On the 9B model,
+layer 0's packed `q`/`s` and `s_gu` match the research `mlp_smooth.pt` exactly.  The engine-side folding and
+loading remain outside this package.
 
 ## Build
 
@@ -96,10 +101,10 @@ no VRAM-size gate. Per-GEMM speedup of CUTLASS over Triton with the same packed 
 | gate|up (24576, 4096) | 1.41x | 1.44x | 1.60x | 1.63x |
 | down (4096, 12288) | 1.03x | 1.09x | 1.53x | 1.60x |
 
-At the end-to-end level, on StartLux-Decision-v1.1-9B-AutoThink with the research branch's
-smoothed-MLP calibration, 32k context, FP8 KV, `think_seqs=4`, and the same binary/config.  The
-engine integration and calibration are not part of this PR; these numbers show what the kernel
-does when wired in, not an out-of-the-box result:
+At the end-to-end level, on StartLux-Decision-v1.1-9B-AutoThink with the smoothed calibration above,
+32k context, FP8 KV, `think_seqs=4`, and the same binary/config.  The converter can produce that
+weight file, but the engine-side scale folding and loading are not part of this PR; these numbers
+show what the kernel does when wired in, not an out-of-the-box result:
 
 | workload | Triton | CUTLASS | |
 |---|---|---|---|

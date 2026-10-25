@@ -101,6 +101,17 @@ def test_batch_invariance():
     assert same
 
 
+def test_smooth_scale():
+    from startlux_prism.tools.quantize_mxfp4 import smooth_scale
+
+    act = torch.tensor([0.01, 1.0, 4.0])
+    w = torch.tensor([[1.0, 2.0, 3.0], [0.5, 1.0, 1.5]])
+    s = smooth_scale(act, w, 0.5)
+    assert s.shape == (3,) and torch.isfinite(s).all()
+    assert s.min() >= 1e-3 and s.max() <= 1e3
+    log("smooth scale:", [round(v, 3) for v in s.tolist()])
+
+
 def test_cutlass():
     if not K.cutlass_enabled():
         log("cutlass: not enabled or .so missing, skip")
@@ -155,6 +166,7 @@ if __name__ == "__main__":
     test_act()
     test_gemm(a.quick)
     test_batch_invariance()
+    test_smooth_scale()
     test_cutlass()
     bench(a.quick)
     log("all OK")
