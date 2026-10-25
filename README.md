@@ -258,6 +258,27 @@ Against every other engine compared on v1 (SGLang, vLLM, llama.cpp, StartLux-Dec
 JevK5), StartLux-Prism has the lowest latency (1.6-2.3× below the next) and 1.6-2.4× their throughput. Methods, every
 engine and the raw numbers: [benchmarks](docs/benchmarks.md).
 
+## Blackwell MXFP4
+
+Blackwell GeForce (sm_120/sm_121) has native MXFP4 tensor-core instructions. The opt-in CUTLASS MXFP4 GEMM in
+[`docs/blackwell.md`](docs/blackwell.md) uses them for the projections, with a plain-Triton fallback. On a 9B
+AutoThink model, one 16 GB RTX 5060 Ti, 32k context, FP8 KV, same binary and config:
+
+| workload | baseline | MXFP4 | gain |
+|---|---:|---:|---:|
+| 1,799-token prefill, p50 (int8 → CUTLASS) | 272.6 ms | **192.6 ms** | **1.42×** |
+| 32 read-out items, mean (Triton MXFP4 → CUTLASS) | 104.8 ms | **89.9 ms** | **1.17×** |
+| 1,799-token read-out, p50 (Triton MXFP4 → CUTLASS) | 222.1 ms | **192.6 ms** | **1.15×** |
+| 8 thoughts, 4 clients, budget 512 (Triton MXFP4 → CUTLASS) | 27.6 s | **24.3 s** | **1.14×** |
+| GPU memory at 1k (int8 two-copy → MXFP4 single-copy) | 13.6 GB | **8.0 GB** | **−41%** |
+
+The CUTLASS kernel is bit-identical to the Triton MXFP4 path on the same weights (`max |Δp| = 0` over 32 requests),
+so it changes latency, not decisions. Gains are largest on prefill and read-out; thought-heavy requests gain about
+14%, because decode dominates there. The 9B model and one GPU were measured; 27B and multi-GPU are not enabled. The
+kernel is not on the default path: build it with `scripts/build_mxfp4_cutlass.sh`, set
+`STARTLUX_PRISM_MXFP4_CUTLASS=1`, and see [Blackwell MXFP4](docs/blackwell.md) for the layout, API, and the SM100/
+SM103 plan.
+
 ## Accuracy
 
 StartLux-Decision-v1.1-27B-AutoThink with thoughts: StartLux-Prism int8 from the Q8_0 file, and W4A8 from the Q4_K_M
@@ -293,6 +314,7 @@ Every suite: [benchmarks](docs/benchmarks.md#accuracy-startlux-decision-v1s-eval
 | [Benchmarks](docs/benchmarks.md) | Methods, setups and results against the official engine and six other engines |
 | [Design](docs/design.md) | How the engine works, with a map of the code |
 | [Optimization log](docs/optimizations.md) | What was measured, kept and dropped |
+| [Blackwell MXFP4](docs/blackwell.md) | The optional CUTLASS MXFP4 GEMM: layout, build, validation, performance, SM120/121/SM100/SM103 support |
 | [Correctness and tests](docs/testing.md) | How answers are checked against the reference, and how to run the tests |
 
 ## Acknowledgements
