@@ -39,6 +39,9 @@ Files run here: `StartLux-Decision-v1.1-27B-AutoThink-Q8_0.gguf` (28.60 GB, SHA-
 **Precision** (`--precision`): `int8` (W8A8, the fast path: the default for Q8_0 files), `bf16` (the same weights
 dequantized, on cuBLAS: the reference) or `w4a8` (a Q4_K_M file's own 4-bit weights: its default).
 
+**KV cache:** `--kv-fp8` stores keys and values as e4m3 bytes with one fp32 scale per token and KV head, half the
+bf16 KV memory.  It is the flag that keeps the 9B's 32k context inside 16 GB.
+
 **Several GPUs** (the same flags):
 
 ```bash
