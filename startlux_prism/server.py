@@ -174,11 +174,15 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--gguf", required=True)
     ap.add_argument("--model-dir", required=True)
-    ap.add_argument("--precision", default="auto", choices=("auto", "bf16", "int8", "w4a8"),
-                    help="auto: w4a8 for a k-quant file (Q4_K_M: its own 4-bit weights), int8 (W8A8) for Q8_0")
+    ap.add_argument("--precision", default="auto", choices=("auto", "bf16", "int8", "w4a8", "mxfp4"),
+                    help="auto: w4a8 for a k-quant file (Q4_K_M: its own 4-bit weights), int8 (W8A8) for Q8_0; "
+                         "mxfp4: MLP in MXFP4, the rest W8A8 from a Q8_0 file")
     ap.add_argument("--calib", default="",
-                    help="int8: the activation ranges file, computed and saved on the first start (default: "
+                    help="int8/mxfp4: the activation ranges file (default: "
                          "~/.cache/startlux-prism/calib/<model file>-<size>-v1.pt, under $STARTLUX_PRISM_CACHE if set)")
+    ap.add_argument("--mxfp4-side", default="",
+                    help="mxfp4: smoothed MLP side file (default: model-dir/mxfp4/mlp_smooth.pt, then mlp.pt, then "
+                         "pack the GGUF's MLP without smoothing)")
     ap.add_argument("--host", default="127.0.0.1")
     ap.add_argument("--port", type=int, default=8092)
     ap.add_argument("--max-tokens", type=int, default=0,
@@ -252,8 +256,14 @@ def main():
     from . import calib as CAL
     if a.precision == "auto":
         a.precision = CAL.auto_precision(a.gguf)
-    if a.precision == "int8" and not a.calib:
+    if a.precision in ("int8", "mxfp4") and not a.calib:
         a.calib = CAL.default_path(a.gguf)
+    if a.precision == "mxfp4":
+        if CAL.auto_precision(a.gguf) != "int8":
+            sys.exit("--precision mxfp4 needs a Q8_0 file (the rest runs W8A8); use int8 or w4a8 for k-quant files")
+        if not os.path.isfile(a.calib):
+            sys.exit(f"--precision mxfp4 needs the int8 calibration file {a.calib!r}; pass --calib FILE "
+                     "(python -m startlux_prism.calib MODEL.gguf MODEL_DIR FILE)")
     if a.tp > 1:
         if a.precision != "int8":
             sys.exit(f"--tp runs the int8 path (a Q8_0 file), not {a.precision}")
@@ -270,7 +280,7 @@ def main():
     P.step(f"StartLux-Prism: {os.path.basename(a.gguf)} ({label}) as "
            f"{a.precision} on {gpu.name} (sm_{gpu.major}{gpu.minor}, {gpu.total_memory / 2**30:.0f} GiB)"
            + (f" and {a.tp - 1} more (tensor parallel)" if a.tp > 1 else ""))
-    thinks = kind == "auto_think" and a.precision in ("int8", "bf16", "w4a8")       # thoughts: engine/decode.py, think.py
+    thinks = kind == "auto_think" and a.precision in ("int8", "bf16", "w4a8", "mxfp4")  # thoughts: engine/decode.py
     if thinks:
         from . import think as TH
         auto = TH.folder_auto_think(a.model_dir)
@@ -279,7 +289,8 @@ def main():
             a.think_kv_rows = a.think_kv_rows or a.think_seqs * (max_budget + 1024)
     engine = Engine(a.gguf, a.model_dir, Options(precision=a.precision, max_tokens=a.max_tokens, graphs=not a.no_graphs,
                                                   graph_max_tokens=a.graph_max_tokens, mem_fraction=a.mem_fraction,
-                                                  calib=a.calib, prefix_cache=a.prefix_cache,
+                                                  calib=a.calib, mxfp4_side=a.mxfp4_side,
+                                                  prefix_cache=a.prefix_cache,
                                                   prefix_cache_tokens=a.prefix_cache_tokens,
                                                   prefix_cache_min=a.prefix_cache_min, attn_qk8=a.attn_qk8,
                                                   think_seqs=(a.think_seqs or -1) if thinks else 0,

@@ -45,11 +45,13 @@ from ..kernels import attn as KA
 from ..kernels import cuda_ext as CX
 from ..kernels import elementwise as KE
 from ..kernels import gdn as KG
+from ..kernels import mxfp4 as KQ4
 from ..kernels import quant as KQ
 from ..kernels import w4a8 as KW4
 from ..kernels import w8a8 as KW
 from ..prompt import Tokenizer, rows_for
 from . import batch as B
+from . import mxfp4 as MX4E
 from .prefix_cache import PrefixCache
 
 assert B.CHUNK == KG.CHUNK
@@ -109,7 +111,8 @@ class Batch:
 
 @dataclasses.dataclass
 class Options:
-    precision: str = "bf16"         # "bf16", "int8" (W8A8 from Q8_0) or "w4a8" (a Q4_K_M file's own weights)
+    precision: str = "bf16"         # "bf16", "int8" (W8A8 from Q8_0), "w4a8" (a Q4_K_M file's own weights),
+                                    # or "mxfp4" (MLP MXFP4, the rest W8A8 from Q8_0)
     max_tokens: int = 0             # largest token bucket (activation buffers are sized for it); 0: the largest that
                                     # fits mem_fraction of the GPU after weights and prefix cache (as SGLang / vLLM)
     mem_fraction: float = 0.9       # share of the GPU's memory the engine may use when max_tokens is 0
@@ -119,6 +122,9 @@ class Options:
     graphs: bool = True
     share: bool = True              # questions of a request share their common evidence
     calib: str = ""                 # int8: activation ranges file (computed and saved there when missing)
+    mxfp4_side: str = ""            # mxfp4: side file with (q,s) MLP weights and s_gu; "" uses
+                                    # model_dir/mxfp4/mlp_smooth.pt or mlp.pt, else packs the GGUF
+    mlp_chunk: int = 4096           # mxfp4: tokens per MLP block (bounds the temporary bf16/SwiGLU buffers)
     prefix_cache: int = 64          # prefix cache entries (48 MiB of recurrent state each); 0: no prefix cache
     prefix_cache_tokens: int = 65536  # KV-arena rows for the cached evidence (32 KiB each)
     prefix_cache_min: int = 64      # evidence shorter than this is recomputed, not cached
@@ -145,6 +151,7 @@ class Engine:
     def __init__(self, gguf_path, model_dir, options=None, device="cuda"):
         self.opt = options or Options()
         self.device = torch.device(device)
+        self.model_dir = model_dir
         self.tp = None                               # tensor parallelism (startlux_prism/tp.py): this rank's group
         if self.opt.tp > 1:
             from .. import tp as TP
@@ -178,26 +185,38 @@ class Engine:
                                  f"{self.cfg.hidden}")
         self.int8 = False
         self.w4 = self.opt.precision == "w4a8"
+        self.mxfp4 = self.opt.precision == "mxfp4"
+        self.int8_rest = self.mxfp4 and bool(self.opt.calib) and os.path.isfile(self.opt.calib)
+        if self.mxfp4 and not self.int8_rest:
+            raise ValueError("precision mxfp4 needs a Q8_0 file and an int8 calibration file (--calib FILE)")
+        self.mlp_chunk = max(0, self.opt.mlp_chunk) if self.mxfp4 else 0
         if self.tp is not None:                      # int8 shards straight from the Q8_0 values: no bf16 copy
             self._tp_weights(w)
             self.tp.setup(self.cfg.hidden, 2 * self.cfg.n_layer)   # the fused all-reduces' symmetric buffers
+        elif self.mxfp4:                             # MLP MXFP4, the rest W8A8 straight from Q8_0
+            self._int8_skeleton(w)
         elif self.w4:                                # the file's k-quant values as they are: no bf16 copy, no calibration
             self._w4_weights(w)
         else:
             self._bf16_weights(w)
             # lean when these buffers go again below (int8: after the calibration; bf16: sized from free memory): no
             # prefix-cache or decoding slots and rows, which next to the bf16 weights did not fit a 32 GB GPU
-            lean = self.opt.precision == "int8" or not self.opt.max_tokens
+            lean = self.opt.precision in ("int8", "mxfp4") or not self.opt.max_tokens
             if not lean and self.opt.think_seqs < 0:     # bf16 at a given size: these are the final buffers
                 self._auto_think()
-            self._allocate(min(self.opt.max_tokens or CALIB_TOKENS, CALIB_TOKENS) if self.opt.precision == "int8"
-                           else (self.opt.max_tokens or CALIB_TOKENS), lean=lean)
+            self._allocate(min(self.opt.max_tokens or CALIB_TOKENS, CALIB_TOKENS) if self.opt.precision in (
+                "int8", "mxfp4") else (self.opt.max_tokens or CALIB_TOKENS), lean=lean)
         self.body_graphs, self.head_graphs, self._pool = {}, {}, None
+        self._cnt_cache = {}
         self._rec = None
         self._n_live = self._r_live = 0              # the staged batch's tokens and reads (set by _stage_tables)
         self._prefix_pass = False
         self._side, self._side_used = None, False     # L2 prefetch stream (short int8 passes)
-        if self.opt.precision == "int8" and self.tp is None:
+        if self.mxfp4:
+            amax = self._load_or_calibrate(w)
+            self._int8_weights(w, amax, mlp=False)
+            self._mxfp4_mlp_weights(w)
+        elif self.opt.precision == "int8" and self.tp is None:
             amax = self._load_or_calibrate(w)
             self._int8_weights(w, amax)
         elif self.opt.precision not in ("bf16", "w4a8", "int8"):
@@ -285,8 +304,35 @@ class Engine:
         self.inv_freq = (1.0 / (cfg.rope_theta ** (torch.arange(0, cfg.rope_dim, 2, dtype=torch.float64) /
                                                    cfg.rope_dim))).to(torch.float32).to(dev)
 
-    def _int8_weights(self, w, amax):
-        """Replace the bf16 projections by W8A8 ones (SmoothQuant with the calibrated activation ranges)."""
+    def _int8_skeleton(self, w):
+        """The small W8A8 tensors without the bf16 projections.  With a --calib file the int8 weights
+        are built straight from the GGUF's Q8_0 values, so the 18.7 GB bf16 MLP is never resident."""
+        dev, cfg = self.device, self.cfg
+        self.embed = w.embed.to(dev)
+        if not isinstance(self.embed, gguf_weights.Q8):
+            self.embed = self.embed.as_q8()
+        self.letters = w.output.dequant(torch.float32, torch.tensor(self.tok.letters)).to(dev)
+        self.out_norm = w.out_norm.to(dev)
+        self.layers, self.gdn_index, self.attn_index = [], {}, {}
+        for i, l in enumerate(w.layers):
+            d = {"attn_norm": l.attn_norm.to(dev), "post_norm": l.post_norm.to(dev)}
+            if cfg.is_attention(i):
+                self.attn_index[i] = len(self.attn_index)
+                d.update(q_norm=l.q_norm.to(dev), k_norm=l.k_norm.to(dev))
+            else:
+                self.gdn_index[i] = len(self.gdn_index)
+                d.update(conv=l.conv.to(dev).contiguous(), dt_bias=l.dt_bias.to(dev), a=l.a.to(dev),
+                         ssm_norm=l.ssm_norm.to(dev))
+            self.layers.append(d)
+        if not cfg.is_attention(cfg.n_layer - 1):
+            raise ValueError("expected the last layer to be full attention")
+        self.qn = cfg.n_head * cfg.head_dim * 2
+        self.inv_freq = (1.0 / (cfg.rope_theta ** (torch.arange(0, cfg.rope_dim, 2, dtype=torch.float64) /
+                                                   cfg.rope_dim))).to(torch.float32).to(dev)
+
+    def _int8_weights(self, w, amax, mlp=True):
+        """Replace the bf16 projections by W8A8 ones (SmoothQuant with the calibrated activation ranges).
+        mlp=False leaves gu/down for the MXFP4 MLP (mxfp4 precision)."""
         dev, cfg = self.device, self.cfg
 
         def quant(qs, act, norm=None):
@@ -297,8 +343,10 @@ class Engine:
             d = self.layers[i]
             for k in ("gu", "down", "inp", "out", "qkv", "o"):
                 d.pop(k, None)
-            d["gu_q"], d["gu_s"], d["post_norm_s"] = quant((l.ffn_gate, l.ffn_up), amax[(i, "gu")], d["post_norm"])
-            d["down_q"], d["down_s"], d["down_inv"] = quant((l.ffn_down,), amax[(i, "down")])
+            if mlp:
+                d["gu_q"], d["gu_s"], d["post_norm_s"] = quant((l.ffn_gate, l.ffn_up), amax[(i, "gu")],
+                                                                d["post_norm"])
+                d["down_q"], d["down_s"], d["down_inv"] = quant((l.ffn_down,), amax[(i, "down")])
             if cfg.is_attention(i):
                 d["qkv_q"], d["qkv_s"], d["attn_norm_s"] = quant((l.wq, l.wk, l.wv), amax[(i, "qkv")], d["attn_norm"])
                 d["o_q"], d["o_s"], d["o_inv"] = quant((l.wo,), amax[(i, "o")])
@@ -309,6 +357,17 @@ class Engine:
             torch.cuda.empty_cache()
             bar.update(i + 1)
         self.int8 = True
+
+    def _mxfp4_mlp_weights(self, w):
+        """Add the MXFP4 gate|up and down, and fold 1/s_gu into post_norm.  The rest is the W8A8 path
+        above; the thought decoder uses the same MXFP4 MLP (engine/decode.py)."""
+        mlp = MX4E.load_mlp(w, self.cfg, self.device, self.model_dir, self.opt.mxfp4_side)
+        for i, d in enumerate(self.layers):
+            gu, dn, s_gu = mlp[i]
+            d["gu_mx4"], d["down_mx4"] = gu, dn
+            d["post_norm_fp4"] = d["post_norm"] / s_gu
+        del mlp
+        torch.cuda.empty_cache()
 
     def _tp_weights(self, w):
         """Tensor parallel: this rank's shard of the W8A8 weights, straight from the GGUF's Q8_0 values (no bf16 copy,
@@ -437,11 +496,12 @@ class Engine:
             # these rows on the stride's divisibility, which can change their layouts and so the order of their sums
             P = -(-P // 16) * 16
         mixw = max(cfg.value_dim, cfg.n_head * cfg.head_dim)
+        Tm = self.mlp_chunk or T
         buf = dict(
             h=z(T, cfg.hidden), proj=z(T, P, dtype=bf), q=z(T, HK, D, dtype=bf), k=z(T, HK, D, dtype=bf),
             v=z(T, HV, D, dtype=bf), g=z(T, HV), beta=z(T, HV), w=z(T, HV, D, dtype=bf), u=z(T, HV, D, dtype=bf),
             gc=z(T, HV), vnew=z(T, HV, D, dtype=bf), hc=z(max_chunks(T), HV, D, D, dtype=bf), o=z(T, HV, D),
-            mix=z(T, mixw, dtype=bf), qbuf=z(T, cfg.n_head, cfg.head_dim, dtype=bf), gu=z(T, 2 * cfg.ffn, dtype=bf),
+            mix=z(T, mixw, dtype=bf), qbuf=z(T, cfg.n_head, cfg.head_dim, dtype=bf), gu=z(Tm, 2 * cfg.ffn, dtype=bf),
             hr=z(R, cfg.hidden), qgr=z(R, self.qn, dtype=bf), qr=z(R, cfg.n_head, cfg.head_dim, dtype=bf),
             mixr=z(R, cfg.n_head * cfg.head_dim, dtype=bf), gur=z(R, 2 * cfg.ffn, dtype=bf),
             logits=z(R, len(self.tok.letters)))
@@ -468,6 +528,13 @@ class Engine:
         else:
             buf.update(x=z(T, cfg.hidden, dtype=bf), delta=z(T, cfg.hidden, dtype=bf), act=z(T, cfg.ffn, dtype=bf),
                        xr=z(R, cfg.hidden, dtype=bf), deltar=z(R, cfg.hidden, dtype=bf), actr=z(R, cfg.ffn, dtype=bf))
+        if self.mxfp4:                               # MLP: bf16 norm inputs and their MXFP4 blocks
+            buf.update(x=z(Tm, cfg.hidden, dtype=bf), act=z(Tm, cfg.ffn, dtype=bf),
+                       xr=z(R, cfg.hidden, dtype=bf), actr=z(R, cfg.ffn, dtype=bf),
+                       aq4=z(Tm, cfg.hidden // 2, dtype=torch.uint8), as4=z(Tm, cfg.hidden // 32, dtype=torch.uint8),
+                       fq4=z(Tm, cfg.ffn // 2, dtype=torch.uint8), fs4=z(Tm, cfg.ffn // 32, dtype=torch.uint8),
+                       aq4r=z(R, cfg.hidden // 2, dtype=torch.uint8), as4r=z(R, cfg.hidden // 32, dtype=torch.uint8),
+                       fq4r=z(R, cfg.ffn // 2, dtype=torch.uint8), fs4r=z(R, cfg.ffn // 32, dtype=torch.uint8))
         out["buf"] = buf
         # every per-batch table is a view of one flat int32 buffer, so a batch's structure goes to the device in one
         # copy from a pinned staging buffer
@@ -693,6 +760,14 @@ class Engine:
     def _rows(flat, n, k):
         return flat[:n * k].view(n, k)
 
+    def _cnt(self, n):
+        """A device int32 row count for a chunk (created outside CUDA graph capture, cached)."""
+        t = self._cnt_cache.get(n)
+        if t is None:
+            t = torch.tensor([n], dtype=torch.int32, device=self.device)
+            self._cnt_cache[n] = t
+        return t
+
     def _prefetch(self, T, tensors):
         """Short passes: start L2 prefetches of `tensors` on a side stream (forked from here, joined at the end of
         the pass, so the main stream never waits for it).  Prefetches change no result."""
@@ -799,6 +874,87 @@ class Engine:
         KQ.fold(b["hr"], parts, pend, c["read"], R)
         self._readout(b["hr"][:R], R)
 
+    def _body_mxfp4_i8(self, T):
+        """W8A8 everywhere except the MLP, which is MXFP4 (the clean A/B against int8: the same Q8_0 weights elsewhere)."""
+        cfg, b, c, L = self.cfg, self.buf, self.cnt, self.layers
+        h, n, parts = b["h"], cfg.n_layer, b.get("parts")
+        aq, as_ = b["aq"], b["as_"]
+        pend = None
+        KE.embed(self.tab["ids"], self.embed, h, c["tok"], T)
+        try:
+            self._body_layers_mxfp4(T, cfg, b, c, L, h, n, parts, aq, as_, pend)
+        finally:
+            self._join_side()
+
+    def _body_layers_mxfp4(self, T, cfg, b, c, L, h, n, parts, aq, as_, pend):
+        pd = self.opt.pdl_mode if 0 < T <= self.opt.pdl else 0
+        for i in range(n):
+            lw = L[i]
+            xq = self._rows(aq, T, cfg.hidden)
+            KQ.norm_q8(h, lw["attn_norm_s"], xq, as_, c["tok"], T, cfg.eps, parts=parts, pending=pend)
+            if i in self.gdn_index:
+                proj = b["proj"][:T, :lw["inp_q"].shape[0]]
+                KW.gemm(xq, as_, lw["inp_q"], lw["inp_s"], proj, c["tok"], cfg.hidden, pdl=pd)
+                self._prefetch(T, [lw["gu_mx4"].q])
+                self._gdn_core(i, proj, T)
+                mq = self._rows(aq, T, cfg.value_dim)
+                self._q8_input(KQ.gated_norm_q8, T, b["o"], proj, cfg.conv_dim, lw["ssm_norm"], lw["out_inv"], mq,
+                               as_, c["tok"], T, cfg)
+                pend = self._out_proj(mq, as_, lw["out_q"], lw["out_s"], h, c["tok"], parts, pd, T)
+            else:
+                proj = b["proj"][:T, :lw["qkv_q"].shape[0]]
+                if i == n - 1:
+                    KW.gemm(xq, as_, lw["qkv_q"][self.qn:], lw["qkv_s"][self.qn:], proj[:, self.qn:], c["tok"],
+                            cfg.hidden, pdl=pd)
+                    self._attn_core(i, proj, T, slots="kv")
+                    return
+                KW.gemm(xq, as_, lw["qkv_q"], lw["qkv_s"], proj, c["tok"], cfg.hidden, pdl=pd)
+                self._prefetch(T, [lw["gu_mx4"].q])
+                mix = self._attn_core(i, proj, T)
+                mq = self._rows(aq, T, cfg.n_head * cfg.head_dim)
+                self._q8_input(KQ.rows_q8, T, mix, lw["o_inv"], mq, as_, c["tok"], T)
+                pend = self._out_proj(mq, as_, lw["o_q"], lw["o_s"], h, c["tok"], parts, pd, T)
+            KQ.fold(h, parts, pend, c["tok"], T)
+            if self.mlp_chunk and T > self.mlp_chunk:
+                for t0 in range(0, T, self.mlp_chunk):
+                    rows = min(self.mlp_chunk, T - t0)
+                    self._mlp_mxfp4(lw, b, h[t0:t0 + rows], rows, cfg, self._cnt(rows))
+            else:
+                self._mlp_mxfp4(lw, b, h, T, cfg, c["tok"])
+            pend = None
+
+    def _mlp_mxfp4(self, lw, b, out_h, rows, cfg, tok):
+        """One layer's MLP over `rows` tokens: norm -> FP4 gate|up -> SwiGLU -> FP4 down (added into out_h)."""
+        KE.add_norm(out_h, None, lw["post_norm_fp4"], b["x"][:rows], tok, rows, cfg.eps, add=False)
+        KQ4.quantize_act(b["x"][:rows], b["aq4"][:rows], b["as4"][:rows])
+        KQ4.gemm(b["aq4"][:rows], b["as4"][:rows], lw["gu_mx4"], b["gu"][:rows], rows, epi=0)
+        KE.swiglu(b["gu"], b["act"], tok, rows)
+        KQ4.quantize_act(b["act"][:rows], b["fq4"][:rows], b["fs4"][:rows])
+        KQ4.gemm(b["fq4"][:rows], b["fs4"][:rows], lw["down_mx4"], out_h, rows, epi=1)
+
+    def _head_mxfp4_i8(self, R):
+        cfg, b, t, c = self.cfg, self.buf, self.tab, self.cnt
+        lw, parts = self.layers[cfg.n_layer - 1], b.get("parts")
+        aq, as_ = b["aqr"], b["asr"]
+        KE.gather_rows(b["h"], t["read"], b["hr"], c["read"], R)
+        xq = self._rows(aq, R, cfg.hidden)
+        KQ.norm_q8(b["hr"], lw["attn_norm_s"], xq, as_, c["read"], R, cfg.eps)
+        qg = b["qgr"][:R]
+        pd = self.opt.pdl_mode if 0 < R <= self.opt.pdl else 0
+        KW.gemm(xq, as_, lw["qkv_q"][:self.qn], lw["qkv_s"][:self.qn], qg, c["read"], cfg.hidden, pdl=pd)
+        self._head_attention(qg, R)
+        mq = self._rows(aq, R, cfg.n_head * cfg.head_dim)
+        self._q8_input(KQ.rows_q8, R, b["mixr"], lw["o_inv"], mq, as_, c["read"], R)
+        pend = self._out_proj(mq, as_, lw["o_q"], lw["o_s"], b["hr"], c["read"], parts, pd, R)
+        KQ.fold(b["hr"], parts, pend, c["read"], R)
+        KE.add_norm(b["hr"], None, lw["post_norm_fp4"], b["xr"], c["read"], R, cfg.eps, add=False)
+        KQ4.quantize_act(b["xr"][:R], b["aq4r"][:R], b["as4r"][:R])
+        KQ4.gemm(b["aq4r"][:R], b["as4r"][:R], lw["gu_mx4"], b["gur"][:R], R, epi=0)
+        KE.swiglu(b["gur"], b["actr"], c["read"], R)
+        KQ4.quantize_act(b["actr"][:R], b["fq4r"][:R], b["fs4r"][:R])
+        KQ4.gemm(b["fq4r"][:R], b["fs4r"][:R], lw["down_mx4"], b["hr"], R, epi=1)
+        self._readout(b["hr"][:R], R)
+
     def _act(self, n, k, read=False):
         """W4A8 activations of n rows and k inputs: int8 [n, k], and super-block-major scales [k / 256, n] and split
         sums [k / 256, n, 16] (kernels/w4a8.py quantize_ref)."""
@@ -859,10 +1015,12 @@ class Engine:
         self._readout(b["hr"][:R], R)
 
     def _body(self, T):
-        (self._body_w4 if self.w4 else self._body_int8 if self.int8 else self._body_bf16)(T)
+        (self._body_mxfp4_i8 if self.mxfp4 else
+         self._body_w4 if self.w4 else self._body_int8 if self.int8 else self._body_bf16)(T)
 
     def _head(self, R):
-        (self._head_w4 if self.w4 else self._head_int8 if self.int8 else self._head_bf16)(R)
+        (self._head_mxfp4_i8 if self.mxfp4 else
+         self._head_w4 if self.w4 else self._head_int8 if self.int8 else self._head_bf16)(R)
 
     # ------------------------------------------------------------------ system text
     @torch.no_grad()

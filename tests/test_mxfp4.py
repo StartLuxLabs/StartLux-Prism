@@ -5,6 +5,7 @@
 import argparse
 import os
 import sys
+import tempfile
 import time
 
 import torch
@@ -147,6 +148,29 @@ def test_reference():
     assert rel < 2e-2, rel
 
 
+def test_side_file():
+    from startlux_prism.engine import mxfp4 as E
+
+    old = os.environ.pop("STARTLUX_PRISM_MXFP4_MLP", None)
+    try:
+        with tempfile.TemporaryDirectory() as d:
+            os.makedirs(os.path.join(d, "mxfp4"))
+            path = os.path.join(d, "mxfp4", "mlp_smooth.pt")
+            open(path, "wb").close()
+            assert E.side_file(d) == path
+            assert E.side_file(d, path) == path
+            try:
+                E.side_file(d, os.path.join(d, "missing.pt"))
+            except FileNotFoundError:
+                pass
+            else:
+                raise AssertionError("an explicit missing side file must raise")
+    finally:
+        if old is not None:
+            os.environ["STARTLUX_PRISM_MXFP4_MLP"] = old
+    log("side-file selection: OK")
+
+
 def test_cutlass():
     if not K.cutlass_enabled():
         log("cutlass: not enabled or .so missing, skip")
@@ -203,6 +227,7 @@ if __name__ == "__main__":
     test_batch_invariance()
     test_smooth_scale()
     test_reference()
+    test_side_file()
     test_cutlass()
     bench(a.quick)
     log("all OK")
