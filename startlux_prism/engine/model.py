@@ -598,6 +598,8 @@ class Engine:
         self._stage_np = [x.numpy() for x in self._stage]
         self._logits_host = [torch.zeros(R, len(self.tok.letters)).pin_memory() for _ in range(2)]
         self._done = [torch.cuda.Event() for _ in range(2)]
+        self._timed_events = ([(torch.cuda.Event(enable_timing=True), torch.cuda.Event(enable_timing=True))
+                               for _ in range(2)] if is_hip() else None)
 
     def _stage_tables(self, plan, slot):
         """Plan tables -> pinned staging buffer `slot` (numpy writes: no torch call, no GIL release)."""
@@ -974,6 +976,8 @@ class Engine:
         n = b.n_tabs if b.n_tabs >= 0 else self._tabs.numel()
         if self.tp is not None:
             return self._launch_tp(b, n)
+        if self._timed_events is not None:
+            self._timed_events[b.slot][0].record()
         self._tabs[:n].copy_(self._stage[b.slot][:n], non_blocking=True)
         body_graph = self.opt.graphs and b.T <= (self.opt.graph_max_tokens or self.max_tokens)
         if b.plan.feats:
@@ -997,6 +1001,8 @@ class Engine:
             self._head(b.R)
         n = b.plan.counts["read"]
         self._logits_host[b.slot][:n].copy_(self.buf["logits"][:n], non_blocking=True)
+        if self._timed_events is not None:
+            self._timed_events[b.slot][1].record()
         self._done[b.slot].record()
         return b
 
@@ -1072,6 +1078,11 @@ class Engine:
         self.last = {"tokens": p.n_tok, "bucket": b.T, "read": p.counts["read"], "read_bucket": b.R,
                      "segments": p.counts["segs"], "host_ms": round((b.t_staged - b.t0) * 1000, 3),
                      "gpu_ms": round((t - b.t_launch) * 1000, 3)}
+        # Keep gpu_ms for API compatibility; it has always been host wall time.
+        self.last["launch_to_logits_ms"] = self.last["gpu_ms"]
+        if self._timed_events is not None:
+            start, end = self._timed_events[b.slot]
+            self.last["stream_elapsed_ms"] = round(start.elapsed_time(end), 3)
         if b.images:
             self.last["images"] = b.images
         return logits
@@ -1099,6 +1110,30 @@ class Engine:
         if self.vision is not None:
             self.vision.warm_up()
         torch.cuda.synchronize()
+
+    @torch.no_grad()
+    def warm_up_eager(self, buckets=None, reads=None):
+        """Compile common eager buckets with zero live work, preserving all existing state.
+
+        This creates no graphs and performs no online autotuning. A saved live-count
+        table is restored even if compilation fails, so warm-up is safe after load.
+        """
+        bodies = buckets or [x for x in TOKEN_BUCKETS if x <= self.max_tokens]
+        heads = reads or [x for x in READ_BUCKETS if x <= self.opt.max_read]
+        saved = self.counts.clone()
+        bar = P.Bar("eager kernels", len(bodies) + len(heads), "batch shapes")
+        try:
+            self.counts.zero_()
+            for i, T in enumerate(bodies):
+                self._body(T)
+                bar.update(i + 1)
+            for i, R in enumerate(heads):
+                self._head(R)
+                bar.update(len(bodies) + i + 1)
+            torch.cuda.synchronize()
+        finally:
+            self.counts.copy_(saved)
+            torch.cuda.synchronize()
 
     def letter_logits(self, rows):
         """Decider backend: the rows of one request (prompt.Row); a bidirectional engine's request may take several

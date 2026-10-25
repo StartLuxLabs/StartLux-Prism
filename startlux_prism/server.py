@@ -71,7 +71,7 @@ class Scheduler:
             try:
                 if self.q.empty() and not self.pending:
                     out = self.engine.run([rows])
-                    last = dict(self.engine.last, direct=True)
+                    last = dict(self.engine.last, direct=True, queue_to_prepare_ms=0.0, batch_groups=1)
                     s = self.stats
                     s["batches"] += 1
                     s["groups"] += 1
@@ -82,6 +82,7 @@ class Scheduler:
             finally:
                 self.gpu.release()
         f = Future()
+        f.prism_submitted_at = time.perf_counter()
         self.q.put((rows, f, sum(len(r) for r in rows)))
         return f.result()
 
@@ -144,7 +145,10 @@ class Scheduler:
         i = 0
         t = time.perf_counter()
         for rows, f, _ in batch:
-            f.set_result((out[i:i + len(rows)], last))
+            per_request = dict(last, batch_groups=len(batch),
+                               queue_to_prepare_ms=round(max(0.0, b.t0 - f.prism_submitted_at) * 1000, 3),
+                               finish_to_result_ms=round((time.perf_counter() - t) * 1000, 3))
+            f.set_result((out[i:i + len(rows)], per_request))
             i += len(rows)
         last["finish_to_result_ms"] = round((time.perf_counter() - t) * 1000, 3)
         s = self.stats
@@ -301,6 +305,8 @@ def main():
     t0 = time.perf_counter()
     if not a.no_graphs:
         engine.warm_up()
+    elif is_hip():
+        engine.warm_up_eager()
     budget = min(a.budget or engine.max_tokens, engine.max_tokens)      # a smaller GPU / larger model: fewer tokens
     none_check = {"auto": kind != "v1", "on": True, "off": False}[a.none_check]
     allow_none = {"auto": kind != "v1", "on": True, "off": False}[a.allow_none]
