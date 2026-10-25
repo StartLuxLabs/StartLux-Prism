@@ -50,7 +50,8 @@ It packs the MLP, attention and GDN projections one at a time and writes
 SmoothQuant-style scheme used for the 9B numbers: `W * s`, with the matching activation division folded into
 the preceding norm or applied at runtime; for `down`, `1/s_down` is folded into the `up` rows.  On the 9B model,
 layer 0's MLP `gu`/`down` and GDN `inp`/`out` packed `q`/`s` and `s_*` match the research
-`mlp_smooth.pt`/`full_smooth.pt` exactly.  The engine-side folding and loading remain outside this package.
+`mlp_smooth.pt`/`full_smooth.pt` exactly.  The production engine-side wiring remains outside this package;
+`startlux_prism/tools/mxfp4_reference.py` shows the folding and one MLP block.
 
 ## Build
 
@@ -142,6 +143,25 @@ the same. SM103's naive builder does not compile: its FP4 Ultra path needs
 `KernelTmaWarpSpecialized{1,2}SmBlockScaledMxNvf4UltraVs16Sm103`, and A/B as
 `cute::tuple<ElementA, ElementSFA>` (CUTLASS example 89). That is a separate instantiation,
 not an architecture-tag switch.
+
+## Reference engine integration (model-specific)
+
+`startlux_prism/tools/mxfp4_reference.py` is reference code, not imported by the engine.  It loads a
+smoothed side file, folds `1/s` into the preceding norm, keeps `1/s` for the `o`/`out` intermediate, and runs
+one MLP block with `quantize_act` + `gemm`:
+
+```python
+from startlux_prism.tools import mxfp4_reference as R
+blob, weight, scale = R.load_side("MODEL-mxfp4-smooth.pt")
+post_norm_fp4 = R.fold_norm(post_norm, scale(i, "gu", hidden))
+gu, down = weight(i, "gu"), weight(i, "down")
+out = R.mlp(x, post_norm_fp4, gu, down)
+```
+
+For attention, use `R.fold_norm(attn_norm, scale(i, "qkv", hidden))`; for GDN use `s_inp`; for their output
+projections use `R.output_inv(scale(i, "o" or "out", dim))` on the bf16 intermediate.  CUDA graphs, the int8
+copies for the thought decoder, and the full attention/GDN wiring stay in the engine; this module is the
+minimal scale-handling reference.
 
 ## Engine integration
 

@@ -112,6 +112,41 @@ def test_smooth_scale():
     log("smooth scale:", [round(v, 3) for v in s.tolist()])
 
 
+def test_reference():
+    from startlux_prism.tools import mxfp4_reference as R
+
+    torch.manual_seed(5)
+    M, H, F = 8, 256, 512
+    x = torch.randn(M, H, device="cuda", dtype=torch.bfloat16)
+    norm = torch.randn(H, device="cuda") * 0.1 + 1.0
+    s_gu = torch.exp(torch.randn(H, device="cuda") * 0.1)
+    gu_w = torch.randn(2 * F, H, device="cuda") * 0.02
+    down_w = torch.randn(H, F, device="cuda") * 0.02
+    gu0 = K.pack((gu_w * s_gu).float().cpu())
+    dn0 = K.pack(down_w.float().cpu())
+    gu = K.MX4(gu0.q.cuda(), gu0.s.cuda(), 2 * F, H)
+    dn = K.MX4(dn0.q.cuda(), dn0.s.cuda(), H, F)
+    pn = R.fold_norm(norm, s_gu)
+    out = R.mlp(x, pn, gu, dn)
+
+    h = R.rms_norm(x, pn)
+    aq = torch.empty(M, H // 2, dtype=torch.uint8, device="cuda")
+    as_ = torch.empty(M, H // 32, dtype=torch.uint8, device="cuda")
+    K.quantize_act(h, aq, as_)
+    hq = K.dequant_packed(aq.cpu(), as_.cpu()).cuda().float()
+    g = (hq @ K.dequant_packed(gu.q.cpu(), gu.s.cpu()).cuda().float().T).to(torch.bfloat16)
+    f = gu.n // 2
+    act = torch.nn.functional.silu(g[:, :f]) * g[:, f:]
+    fq = torch.empty(M, f // 2, dtype=torch.uint8, device="cuda")
+    fs = torch.empty(M, f // 32, dtype=torch.uint8, device="cuda")
+    K.quantize_act(act, fq, fs)
+    ref = x.float() + (K.dequant_packed(fq.cpu(), fs.cpu()).cuda().float()
+                       @ K.dequant_packed(dn.q.cpu(), dn.s.cpu()).cuda().float().T)
+    rel = (out.float() - ref).norm() / ref.norm()
+    log(f"reference MLP: rel {rel:.5f}")
+    assert rel < 2e-2, rel
+
+
 def test_cutlass():
     if not K.cutlass_enabled():
         log("cutlass: not enabled or .so missing, skip")
@@ -167,6 +202,7 @@ if __name__ == "__main__":
     test_gemm(a.quick)
     test_batch_invariance()
     test_smooth_scale()
+    test_reference()
     test_cutlass()
     bench(a.quick)
     log("all OK")
