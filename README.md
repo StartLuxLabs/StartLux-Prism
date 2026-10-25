@@ -218,6 +218,7 @@ Endpoints: `POST /v1/systemone` (also `/v1/decisions`), `GET /v1/models`, `GET /
 | Server flag | Default | Description |
 |---|---|---|
 | `--precision` | `auto` | `int8` for Q8_0 files, `w4a8` for Q4_K_M files, `bf16` as the reference; `mxfp4` runs the MLP in MXFP4 with the rest W8A8 |
+| `--kv-fp8` | off | e4m3 keys and values, one fp32 scale per token and KV head: half the bf16 KV memory |
 | `--gpus`, `--tp` | | The GPUs; the GPUs per model (2 or 4 for the 27B) |
 | `--max-tokens` | from free memory | The largest batch (131,072 tokens for the 27B on an H200); longer requests get HTTP 422 |
 | `--prefix-cache-tokens` | 65,536 | KV rows kept for evidence that comes again |
@@ -279,7 +280,8 @@ so it changes latency, not decisions. Gains are largest on prefill and read-out;
 14%, because decode dominates there. These 9B numbers use the research branch's smoothed-MLP calibration and the
 opt-in MXFP4 path; they are not the default configuration. The generic kernel and a GGUF converter are included,
 including the optional smoothed calibration, and `--precision mxfp4` runs the MLP in the engine with the rest W8A8.
-FP8 KV and full-FP4 attention/GDN are separate; a model-specific reference module shows the scale folding. The 9B model
+FP8 KV is included (`--kv-fp8`); full-FP4 attention/GDN is separate, and a model-specific reference module shows the
+scale folding. The 9B model
 and one GPU were measured; 27B and multi-GPU were not. The 16 GB card is a test
 bed, not a memory-size gate: the same kernel leaves the freed MLP memory for context or concurrency on 32 GB and
 larger Blackwell cards, but those runs are not measured yet. The kernel is not on the default path: build it with

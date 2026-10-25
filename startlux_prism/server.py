@@ -204,6 +204,8 @@ def main():
     ap.add_argument("--attn-qk8", action="store_true",
                     help="int8 attention scores: up to 3%% faster on long prompts, probabilities ~17%% further from the "
                          "fp32 reference on average, same decisions on JevBench (docs/optimizations.md)")
+    ap.add_argument("--kv-fp8", action="store_true",
+                    help="e4m3 keys and values (1 byte, one fp32 scale per token and kv head): half the bf16 KV memory")
     ap.add_argument("--overlap-tokens", type=int, default=1024,
                     help="queue the next pass behind the running one once this many prompt tokens are waiting")
     ap.add_argument("--none-check", choices=("auto", "on", "off"), default="auto",
@@ -293,6 +295,7 @@ def main():
                                                   prefix_cache=a.prefix_cache,
                                                   prefix_cache_tokens=a.prefix_cache_tokens,
                                                   prefix_cache_min=a.prefix_cache_min, attn_qk8=a.attn_qk8,
+                                                  kv_fp8=a.kv_fp8,
                                                   think_seqs=(a.think_seqs or -1) if thinks else 0,
                                                   think_kv_rows=a.think_kv_rows if thinks else 0,
                                                   think_rows_each=max_budget + 1024 if thinks else 0,

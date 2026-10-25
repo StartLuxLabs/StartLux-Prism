@@ -104,8 +104,8 @@ no VRAM-size gate. Per-GEMM speedup of CUTLASS over Triton with the same packed 
 
 At the end-to-end level, on StartLux-Decision-v1.1-9B-AutoThink with the smoothed calibration above,
 32k context, FP8 KV, `think_seqs=4`, and the same binary/config.  The MXFP4 MLP engine path and the
-converter are in this PR; the FP8 KV arena is a separate research change.  These numbers show the kernel
-on that configuration, not a promise that every context fits on 16 GB without FP8 KV:
+converter and the FP8 KV arena are in this PR.  These numbers are the measured 9B configuration; the same
+`--kv-fp8` flag is what keeps 32k inside 16 GB:
 
 | workload | Triton | CUTLASS | |
 |---|---|---|---|
@@ -149,7 +149,7 @@ not an architecture-tag switch.
 The real engine path is `Options(precision="mxfp4")` / `--precision mxfp4`: it builds the W8A8
 attention/GDN weights from a Q8_0 file, loads the MLP side file, folds `post_norm / s_gu`, and runs the
 MXFP4 MLP in prefill, the read-out head, and the thought decoder.  It is still MLP-only; full-FP4
-attention/GDN and the FP8 KV arena are separate research paths.
+attention/GDN remains a separate research path; `--kv-fp8` is included.
 
 `startlux_prism/tools/mxfp4_reference.py` is the compact reference for the same scale handling; it is not
 imported by the engine and runs one MLP block:
@@ -169,18 +169,20 @@ this module is the minimal scale-handling reference.
 
 ## Engine integration
 
-`--precision mxfp4` is opt-in and runs the MLP in MXFP4 with the rest W8A8:
+`--precision mxfp4` is opt-in and runs the MLP in MXFP4 with the rest W8A8; `--kv-fp8` gives the
+32k/16 GB KV cache:
 
 ```bash
 python -m startlux_prism.server --gguf MODEL.gguf --model-dir MODEL_DIR --precision mxfp4 \
-  --calib int8_calib.pt --mxfp4-side MODEL_DIR/mxfp4/mlp_smooth.pt
+  --calib int8_calib.pt --mxfp4-side MODEL_DIR/mxfp4/mlp_smooth.pt --kv-fp8
 ```
 
 The side file is optional: without one, the engine packs the GGUF's MLP (weight-only, scale 1).  A Q8_0
 file and the int8 calibration file are required.  The engine loads the side file once, folds
 `post_norm / s_gu`, keeps the W8A8 attention/GDN path, and uses the MXFP4 MLP in prefill, the read-out
 head and the thought decoder.  It falls back to Triton when the CUTLASS `.so` is missing or the GPU is not
-SM120/SM121.  FP8 KV and full-FP4 attention/GDN are separate experiments, not part of this path.
+SM120/SM121.  `--kv-fp8` stores the KV cache as e4m3 bytes with one fp32 scale per token and KV head;
+full-FP4 attention/GDN remains a separate experiment.
 
 The C ABI is intentionally small: `mxfp4_sfb_bytes`, `mxfp4_sfa_bytes`,
 `mxfp4_prepare_sfb`, `mxfp4_prepare_sfa`, and `mxfp4_gemm`. The shared library keeps one

@@ -51,8 +51,9 @@ def launch(name):
 def _qkv_norm_rope_kernel(qkv_ptr, P, qn_ptr, kn_ptr, pos_ptr, kvrow_ptr, inv_freq_ptr, qbuf_ptr, kv_ptr,
                           kv_layer_off, kv_kind_stride, kv_head_stride, n_tok_ptr, eps,
                           k8_ptr, k8_layer_off, k8_head_stride, k8s_ptr, k8s_layer_off, k8s_head_stride, mrope_ptr,
+                          kv8s_ptr, kv8s_layer_off, kv8s_kind_stride, kv8s_head_stride,
                           H: tl.constexpr, HKV: tl.constexpr, HD: tl.constexpr, ROT: tl.constexpr, SLOT0: tl.constexpr,
-                          K8: tl.constexpr, MROPE: tl.constexpr):
+                          K8: tl.constexpr, MROPE: tl.constexpr, KVF8: tl.constexpr):
     """One program per (token, head slot): slots 0..H-1 queries, then HKV keys, then HKV values; the grid covers
     slots SLOT0.. (keys and values only for the last layer, whose queries run at the read positions).  MROPE: positions
     below 0 name a row of the mrope table (module docstring)."""
@@ -95,7 +96,13 @@ def _qkv_norm_rope_kernel(qkv_ptr, P, qn_ptr, kn_ptr, pos_ptr, kvrow_ptr, inv_fr
         if j < H:
             tl.store(qbuf_ptr + (t * H + j) * HD + d, y.to(tl.bfloat16))
         else:
-            tl.store(kv_ptr + kv_layer_off + (j - H) * kv_head_stride + row * HD + d, y.to(tl.bfloat16))
+            if KVF8:
+                sc = tl.maximum(tl.max(tl.abs(y), 0), 1e-10) / 448.0
+                tl.store(kv_ptr + kv_layer_off + (j - H) * kv_head_stride + row * HD + d,
+                         (y / sc).to(tl.float8e4nv).to(tl.uint8, bitcast=True))
+                tl.store(kv8s_ptr + kv8s_layer_off + (j - H) * kv8s_head_stride + row, sc)
+            else:
+                tl.store(kv_ptr + kv_layer_off + (j - H) * kv_head_stride + row * HD + d, y.to(tl.bfloat16))
             if K8:              # the same key as int8, one scale per token and kv head
                 sc = tl.maximum(tl.max(tl.abs(y), 0), 1e-10) / 127.0
                 tl.store(k8_ptr + k8_layer_off + (j - H) * k8_head_stride + row * HD + d,
@@ -103,19 +110,33 @@ def _qkv_norm_rope_kernel(qkv_ptr, P, qn_ptr, kn_ptr, pos_ptr, kvrow_ptr, inv_fr
                 tl.store(k8s_ptr + k8s_layer_off + (j - H) * k8s_head_stride + row, sc)
     else:
         val = tl.load(qkv_ptr + t * P + H * 2 * HD + HKV * HD + (j - H - HKV) * HD + d)
-        tl.store(kv_ptr + kv_layer_off + kv_kind_stride + (j - H - HKV) * kv_head_stride + row * HD + d, val)
+        if KVF8:
+            vf = val.to(tl.float32)
+            sc = tl.maximum(tl.max(tl.abs(vf), 0), 1e-10) / 448.0
+            tl.store(kv_ptr + kv_layer_off + kv_kind_stride + (j - H - HKV) * kv_head_stride + row * HD + d,
+                     (vf / sc).to(tl.float8e4nv).to(tl.uint8, bitcast=True))
+            tl.store(kv8s_ptr + kv8s_layer_off + kv8s_kind_stride + (j - H - HKV) * kv8s_head_stride + row, sc)
+        else:
+            tl.store(kv_ptr + kv_layer_off + kv_kind_stride + (j - H - HKV) * kv_head_stride + row * HD + d, val)
 
 
 @triton.jit
-def _attend_range(acc, m_i, l_i, q, kv_ptr, k_base, v_base, start, length, q0, rows,
-                  CAUSAL: tl.constexpr, HD: tl.constexpr, BN: tl.constexpr, SCALE: tl.constexpr):
+def _attend_range(acc, m_i, l_i, q, kv_ptr, k_base, v_base, kv8s_ptr, k8s_base, v8s_base, start, length, q0, rows,
+                  CAUSAL: tl.constexpr, HD: tl.constexpr, BN: tl.constexpr, SCALE: tl.constexpr,
+                  KVF8: tl.constexpr):
     """Online-softmax update with keys/values at arena rows start .. start+length-1.  CAUSAL: query row i (own index
-    q0 + i) sees key indices <= q0 + i."""
+    q0 + i) sees key indices <= q0 + i.  KVF8: the arena holds e4m3 bytes and one fp32 scale per row."""
     d = tl.arange(0, HD)
     n = tl.arange(0, BN)
     for kb in range(0, length, BN):
         km = (kb + n) < length
-        k = tl.load(kv_ptr + k_base + (start + kb + n)[:, None] * HD + d[None, :], mask=km[:, None], other=0.0)
+        if KVF8:
+            kq = tl.load(kv_ptr + k_base + (start + kb + n)[:, None] * HD + d[None, :], mask=km[:, None], other=0)
+            kf = kq.to(tl.float8e4nv, bitcast=True).to(tl.float32)
+            ks = tl.load(kv8s_ptr + k8s_base + start + kb + n, mask=km, other=0.0)
+            k = (kf * ks[:, None]).to(tl.bfloat16)
+        else:
+            k = tl.load(kv_ptr + k_base + (start + kb + n)[:, None] * HD + d[None, :], mask=km[:, None], other=0.0)
         s = tl.dot(q, tl.trans(k)) * SCALE
         ok = km[None, :]
         if CAUSAL:
@@ -126,7 +147,13 @@ def _attend_range(acc, m_i, l_i, q, kv_ptr, k_base, v_base, start, length, q0, r
         alpha = tl.exp(m_i - m_use)
         p = tl.exp(s - m_use[:, None])
         l_i = l_i * alpha + tl.sum(p, 1)
-        v = tl.load(kv_ptr + v_base + (start + kb + n)[:, None] * HD + d[None, :], mask=km[:, None], other=0.0)
+        if KVF8:
+            vq = tl.load(kv_ptr + v_base + (start + kb + n)[:, None] * HD + d[None, :], mask=km[:, None], other=0)
+            vf = vq.to(tl.float8e4nv, bitcast=True).to(tl.float32)
+            vs = tl.load(kv8s_ptr + v8s_base + start + kb + n, mask=km, other=0.0)
+            v = (vf * vs[:, None]).to(tl.bfloat16)
+        else:
+            v = tl.load(kv_ptr + v_base + (start + kb + n)[:, None] * HD + d[None, :], mask=km[:, None], other=0.0)
         acc = acc * alpha[:, None] + tl.dot(p.to(tl.bfloat16), v)
         m_i = m_new
     return acc, m_i, l_i
@@ -163,8 +190,9 @@ def _attend_range_q8(acc, m_i, l_i, q8, qs, kv_ptr, k8_ptr, k8_base, k8s_ptr, k8
 def _tree_attention_kernel(qbuf_ptr, qkv_ptr, P, kv_ptr, kv_layer_off, kv_kind_stride, kv_head_stride, out_ptr,
                            blocks_ptr, n_blocks_ptr, ranges_ptr,
                            k8_ptr, k8_layer_off, k8_head_stride, k8s_ptr, k8s_layer_off, k8s_head_stride,
+                           kv8s_ptr, kv8s_layer_off, kv8s_kind_stride, kv8s_head_stride,
                            H: tl.constexpr, HKV: tl.constexpr, HD: tl.constexpr, BM: tl.constexpr, BN: tl.constexpr,
-                           SCALE: tl.constexpr, Q8: tl.constexpr, BIDIR: tl.constexpr):
+                           SCALE: tl.constexpr, Q8: tl.constexpr, KVF8: tl.constexpr, BIDIR: tl.constexpr):
     """Per (query block, head).  Block rows (4 ints): (first token, n queries, segment, own index of the first query).
     Range rows per segment (6 ints): (a_start, a_len, b_start, b_len, own_start, own_len).  BIDIR: every query reads
     the segment's own_len tokens; else query i of the block reads its own tokens up to q0 + i."""
@@ -184,6 +212,8 @@ def _tree_attention_kernel(qbuf_ptr, qkv_ptr, P, kv_ptr, kv_layer_off, kv_kind_s
     # x 256), where the layer offset alone still fits int32 and a 32-bit sum with the head and kind strides wraps
     k_base = kv_layer_off.to(tl.int64) + (h // (H // HKV)) * kv_head_stride
     v_base = k_base + kv_kind_stride
+    k8s_base = kv8s_layer_off.to(tl.int64) + (h // (H // HKV)) * kv8s_head_stride
+    v8s_base = k8s_base + kv8s_kind_stride
     acc = tl.zeros([BM, HD], dtype=tl.float32)
     m_i = tl.full([BM], float("-inf"), dtype=tl.float32)
     l_i = tl.zeros([BM], dtype=tl.float32)
@@ -207,16 +237,20 @@ def _tree_attention_kernel(qbuf_ptr, qkv_ptr, P, kv_ptr, kv_layer_off, kv_kind_s
             acc, m_i, l_i = _attend_range_q8(acc, m_i, l_i, q8, qs, kv_ptr, k8_ptr, k8b, k8s_ptr, k8sb, v_base,
                                              tl.load(r + 4), q0 + nq, q0, rows, CAUSAL=True, HD=HD, BN=BN)
     else:
-        acc, m_i, l_i = _attend_range(acc, m_i, l_i, q, kv_ptr, k_base, v_base, tl.load(r), tl.load(r + 1), 0, rows,
-                                      CAUSAL=False, HD=HD, BN=BN, SCALE=SCALE)
-        acc, m_i, l_i = _attend_range(acc, m_i, l_i, q, kv_ptr, k_base, v_base, tl.load(r + 2), tl.load(r + 3), 0,
-                                      rows, CAUSAL=False, HD=HD, BN=BN, SCALE=SCALE)
+        acc, m_i, l_i = _attend_range(acc, m_i, l_i, q, kv_ptr, k_base, v_base, kv8s_ptr, k8s_base, v8s_base,
+                                      tl.load(r), tl.load(r + 1), 0, rows,
+                                      CAUSAL=False, HD=HD, BN=BN, SCALE=SCALE, KVF8=KVF8)
+        acc, m_i, l_i = _attend_range(acc, m_i, l_i, q, kv_ptr, k_base, v_base, kv8s_ptr, k8s_base, v8s_base,
+                                      tl.load(r + 2), tl.load(r + 3), 0, rows,
+                                      CAUSAL=False, HD=HD, BN=BN, SCALE=SCALE, KVF8=KVF8)
         if BIDIR:
-            acc, m_i, l_i = _attend_range(acc, m_i, l_i, q, kv_ptr, k_base, v_base, tl.load(r + 4), tl.load(r + 5),
-                                          q0, rows, CAUSAL=False, HD=HD, BN=BN, SCALE=SCALE)
+            acc, m_i, l_i = _attend_range(acc, m_i, l_i, q, kv_ptr, k_base, v_base, kv8s_ptr, k8s_base, v8s_base,
+                                          tl.load(r + 4), tl.load(r + 5), q0, rows,
+                                          CAUSAL=False, HD=HD, BN=BN, SCALE=SCALE, KVF8=KVF8)
         else:
-            acc, m_i, l_i = _attend_range(acc, m_i, l_i, q, kv_ptr, k_base, v_base, tl.load(r + 4), q0 + nq, q0,
-                                          rows, CAUSAL=True, HD=HD, BN=BN, SCALE=SCALE)
+            acc, m_i, l_i = _attend_range(acc, m_i, l_i, q, kv_ptr, k_base, v_base, kv8s_ptr, k8s_base, v8s_base,
+                                          tl.load(r + 4), q0 + nq, q0, rows,
+                                          CAUSAL=True, HD=HD, BN=BN, SCALE=SCALE, KVF8=KVF8)
     o = acc / l_i[:, None]
     gate = tl.load(qkv_ptr + (t0 + rows)[:, None] * P + h * 2 * HD + HD + d[None, :], mask=qm[:, None], other=0.0)
     o = o * (1.0 / (1.0 + tl.exp(-gate.to(tl.float32))))
@@ -232,27 +266,33 @@ def _k8_args(k8, attn_layer, like):
 
 
 def qkv_norm_rope(qkv, q_norm, k_norm, pos, kvrow, inv_freq, qbuf, kv, attn_layer, n_tok, T, cfg, slots="all",
-                  k8=None, mrope=None):
+                  k8=None, mrope=None, kv8s=None, kv_mode=0):
     """slots: "all" (queries, keys, values), "kv" (keys and values), "q" (queries only).  k8: int8 key arenas to fill
     as well (see the module docstring), or None.  mrope: the [n, 3] int32 positions of the tokens whose pos is
     -1 - row (an engine with a vision tower), or None (no such tokens)."""
     H, HKV, HD = cfg.n_head, cfg.n_kv_head, cfg.head_dim
     slot0, n = {"all": (0, H + 2 * HKV), "kv": (H, 2 * HKV), "q": (0, H)}[slots]
+    kvs_args = ((kv, 0, 0, 0) if kv8s is None else
+                (kv8s, attn_layer * kv8s.stride(0), kv8s.stride(1), kv8s.stride(2)))
     _qkv_norm_rope_kernel[(T, n)](
         qkv, qkv.stride(0), q_norm, k_norm, pos, kvrow, inv_freq, qbuf, kv,
         attn_layer * kv.stride(0), kv.stride(1), kv.stride(2), n_tok, cfg.eps, *_k8_args(k8, attn_layer, kv),
-        mrope if mrope is not None else pos,
-        H=H, HKV=HKV, HD=HD, ROT=cfg.rope_dim, SLOT0=slot0, K8=k8 is not None, MROPE=mrope is not None, num_warps=4)
+        mrope if mrope is not None else pos, *kvs_args,
+        H=H, HKV=HKV, HD=HD, ROT=cfg.rope_dim, SLOT0=slot0, K8=k8 is not None, MROPE=mrope is not None,
+        KVF8=kv_mode == 16, num_warps=4)
 
 
 def tree_attention(qbuf, qkv, kv, attn_layer, out, blocks, n_blocks, max_blocks, ranges, cfg, k8=None, read=False,
-                   bidir=False):
+                   kv8s=None, kv_mode=0, bidir=False):
     """k8: int8 key arenas (scores on int8 tensor cores), or None.  Blocks of launch("BM") queries (batch.plan_batch's
     bm); read: the head's blocks of one query each (LAUNCH's tiles).  bidir: each query reads all of its segment's
     own tokens (the module docstring)."""
     H, HKV, HD = cfg.n_head, cfg.n_kv_head, cfg.head_dim
     bm, bn, warps, stages = (LAUNCH[k] if read else launch(k) for k in ("BM", "BN", "WARPS", "STAGES"))
+    kvs_args = ((kv, 0, 0, 0) if kv8s is None else
+                (kv8s, attn_layer * kv8s.stride(0), kv8s.stride(1), kv8s.stride(2)))
     _tree_attention_kernel[(max_blocks, H)](
         qbuf, qkv, qkv.stride(0), kv, attn_layer * kv.stride(0), kv.stride(1), kv.stride(2), out,
-        blocks, n_blocks, ranges, *_k8_args(k8, attn_layer, kv), H=H, HKV=HKV, HD=HD, BM=bm, BN=bn,
-        SCALE=HD ** -0.5, Q8=k8 is not None, BIDIR=bool(bidir), num_warps=warps, num_stages=stages)
+        blocks, n_blocks, ranges, *_k8_args(k8, attn_layer, kv), *kvs_args, H=H, HKV=HKV, HD=HD, BM=bm, BN=bn,
+        SCALE=HD ** -0.5, Q8=k8 is not None, KVF8=kv_mode == 16, BIDIR=bool(bidir), num_warps=warps,
+        num_stages=stages)

@@ -40,6 +40,9 @@ Files run here: `StartLux-Decision-v1.1-27B-AutoThink-Q8_0.gguf` (28.60 GB, SHA-
 dequantized, on cuBLAS: the reference), `w4a8` (a Q4_K_M file's own 4-bit weights: its default) or `mxfp4` (the MLP
 in MXFP4, the rest W8A8 from a Q8_0 file; needs `--calib` and, for the smoothed result, `--mxfp4-side`).
 
+**KV cache:** `--kv-fp8` stores keys and values as e4m3 bytes with one fp32 scale per token and KV head, half the
+bf16 KV memory.  It is the flag that keeps the 9B's 32k context inside 16 GB.
+
 **Several GPUs** (the same flags):
 
 ```bash
