@@ -77,8 +77,10 @@ same packed inputs:
 | gate|up (24576, 4096) | 1.41x | 1.44x | 1.60x | 1.63x |
 | down (4096, 12288) | 1.03x | 1.09x | 1.53x | 1.60x |
 
-At the end-to-end level, on StartLux-Decision-v1.1-9B-AutoThink, 32k context, FP8 KV,
-`think_seqs=4`, and the same binary/config:
+At the end-to-end level, on StartLux-Decision-v1.1-9B-AutoThink with the research branch's
+smoothed-MLP calibration, 32k context, FP8 KV, `think_seqs=4`, and the same binary/config.  The
+engine integration and calibration are not part of this PR; these numbers show what the kernel
+does when wired in, not an out-of-the-box result:
 
 | workload | Triton | CUTLASS | |
 |---|---|---|---|

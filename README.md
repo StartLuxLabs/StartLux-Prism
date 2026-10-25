@@ -274,10 +274,11 @@ AutoThink model, one 16 GB RTX 5060 Ti, 32k context, FP8 KV, same binary and con
 
 The CUTLASS kernel is bit-identical to the Triton MXFP4 path on the same weights (`max |Δp| = 0` over 32 requests),
 so it changes latency, not decisions. Gains are largest on prefill and read-out; thought-heavy requests gain about
-14%, because decode dominates there. The 9B model and one GPU were measured; 27B and multi-GPU are not enabled. The
-kernel is not on the default path: build it with `scripts/build_mxfp4_cutlass.sh`, set
-`STARTLUX_PRISM_MXFP4_CUTLASS=1`, and see [Blackwell MXFP4](docs/blackwell.md) for the layout, API, and the SM100/
-SM103 plan.
+14%, because decode dominates there. These 9B numbers use the research branch's smoothed-MLP calibration and the
+opt-in MXFP4 path; they are not the default configuration, and the model-side quantization and smoothing are not part
+of the generic kernel. The 9B model and one GPU were measured; 27B and multi-GPU were not. The kernel is not on the
+default path: build it with `scripts/build_mxfp4_cutlass.sh`, set `STARTLUX_PRISM_MXFP4_CUTLASS=1`, and see
+[Blackwell MXFP4](docs/blackwell.md) for the layout, API, and the SM100/SM103 plan.
 
 ## Accuracy
 
