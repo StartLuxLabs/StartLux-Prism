@@ -17,6 +17,12 @@ Precision:
          the output projections add straight into the fp32 residual stream.
 Everything else (linear attention, attention, norms) is the same Triton code in both.
 
+Prompt attention (Options.prompt_attention): causal, or bidirectional for StartLux-Decision v1.1 Instant models (their
+folder's config.json, or a GGUF marked non-causal), which read the prompt bidirectionally in the full-attention layers.
+A bidirectional engine computes every prompt whole (batch.plan_batch's `whole`: no system-text state, no evidence shared
+between questions, no prefix cache) and its attention reads each prompt's own tokens in both directions; the linear
+attention stays causal.  Everything else, graphs and precisions included, is the same.
+
 Images (Options.mmproj, vision.py): before the body graph of a batch with images, the vision tower encodes each image
 (PyTorch, bf16) and writes its features into the residual rows of the image's tokens, which the embedding kernel
 leaves alone; the attention layers turn image tokens with their three M-RoPE positions (an "mrope" table after the other
@@ -131,6 +137,8 @@ class Options:
     mmproj: str = ""                # the vision tower (llama.cpp mmproj GGUF) for prompts with images; "": text only
     tp: int = 1                     # tensor parallelism over this many GPUs (int8; startlux_prism/tp.py: the group must be
                                     # started in this process first)
+    prompt_attention: str = "auto"  # "causal" or "bidirectional" (the module docstring); "auto": bidirectional for a
+                                    # StartLux-Decision v1.1 Instant folder or a GGUF marked non-causal
 
 
 class Engine:
@@ -152,6 +160,14 @@ class Engine:
         w = gguf_weights.load(gguf_path)
         self.cfg = w.config
         self.tok = Tokenizer(model_dir)
+        mode = self.opt.prompt_attention
+        if mode == "auto":
+            mode = "bidirectional" if self.tok.kind == "instant" or not self.cfg.causal else "causal"
+        if mode not in ("causal", "bidirectional"):
+            raise ValueError(f"prompt_attention {self.opt.prompt_attention!r}: causal, bidirectional or auto")
+        self.bidir = mode == "bidirectional"
+        if self.bidir:                               # every prompt whole: nothing to share or cache
+            self.opt = dataclasses.replace(self.opt, share=False, prefix_cache=0)
         self.vision = None
         if self.opt.mmproj and (self.tp is None or self.tp.rank == 0):       # tensor parallel: rank 0 encodes images
             from ..vision import VisionTower
@@ -178,6 +194,7 @@ class Engine:
                            else (self.opt.max_tokens or CALIB_TOKENS), lean=lean)
         self.body_graphs, self.head_graphs, self._pool = {}, {}, None
         self._rec = None
+        self._n_live = self._r_live = 0              # the staged batch's tokens and reads (set by _stage_tables)
         self._prefix_pass = False
         self._side, self._side_used = None, False     # L2 prefetch stream (short int8 passes)
         if self.opt.precision == "int8" and self.tp is None:
@@ -602,7 +619,7 @@ class Engine:
         if slots == "all":
             mix = b["mix"][:T, :cfg.n_head * cfg.head_dim]
             KA.tree_attention(b["qbuf"], proj, self.kv, ai, mix, t["blocks"], c["blocks"], max_blocks(T),
-                              t["ranges"], cfg, k8=self.k8)
+                              t["ranges"], cfg, k8=self.k8, bidir=self.bidir)
             return mix
 
     # ------------------------------------------------------------------ forward: bf16
@@ -666,7 +683,7 @@ class Engine:
         KA.qkv_norm_rope(qg, lw["q_norm"], lw["k_norm"], t["read_pos"], t["read"], self.inv_freq, b["qr"], self.kv,
                          ai, c["read"], R, cfg, slots="q", k8=self.k8, mrope=t.get("mrope"))
         KA.tree_attention(b["qr"], qg, self.kv, ai, b["mixr"], t["read_blocks"], c["read"], R, t["ranges"], cfg,
-                          k8=self.k8, read=True)
+                          k8=self.k8, read=True, bidir=self.bidir)
 
     def _readout(self, hr, R):
         KE.readout(hr, self.out_norm, self.letters, self.buf["logits"], self.cnt["read"], R, self.cfg.eps)
@@ -854,6 +871,8 @@ class Engine:
         self.sys_len = len(ids)
         self.system = np.asarray(ids, dtype=np.int32)
         self.root_kv = (0, len(ids))
+        if self.bidir:                               # whole prompts never continue the system text's state
+            return
         self._upload(B.plan_prefix(ids, kv_row0=0, bm=KA.launch("BM")))
         self._prefix_pass = True
         try:
@@ -891,7 +910,7 @@ class Engine:
         cache = self.cache if self.opt.share else None
         plan = B.plan_batch(groups, self.sys_len, self.kv_scratch0, self.root_kv, share=self.opt.share, cache=cache,
                             system=self.system, max_inserts=MAX_INSERTS - len(keep), max_trans=self.opt.max_trans,
-                            bm=KA.launch("BM"), keep=keep)
+                            bm=KA.launch("BM"), keep=keep, whole=self.bidir)
         try:
             if plan.feats and self.vision is None:
                 raise ValueError("this engine has no vision tower: it reads text only")
@@ -1060,8 +1079,26 @@ class Engine:
         torch.cuda.synchronize()
 
     def letter_logits(self, rows):
-        """Decider backend: the rows of one request (prompt.Row)."""
-        return self.run([group(rows)])
+        """Decider backend: the rows of one request (prompt.Row); a bidirectional engine's request may take several
+        passes (parts)."""
+        return [z for p in self.parts(rows) for z in self.run([group(p)])]
+
+    def parts(self, rows):
+        """The rows of one request -> lists of rows, each one forward pass: all of them, unless the engine is
+        bidirectional and they hold more tokens or reads than one pass takes (its rows share nothing, so they may go
+        in separate passes).  Raises ValueError for a prompt longer than a pass."""
+        if not self.bidir:
+            return [rows]
+        out, cur, n = [], [], 0
+        for r in rows:
+            if len(r.ids) > self.max_tokens:
+                raise ValueError(f"a prompt of {len(r.ids)} tokens exceeds the engine's capacity ({self.max_tokens:,})")
+            if cur and (n + len(r.ids) > self.max_tokens or len(cur) == self.opt.max_read):
+                out.append(cur)
+                cur, n = [], 0
+            cur.append(r)
+            n += len(r.ids)
+        return out + [cur] if cur else out
 
     def cache_stats(self):
         return self.cache.summary() if self.cache is not None else {}

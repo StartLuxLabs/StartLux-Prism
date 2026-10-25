@@ -55,8 +55,8 @@ def main():
                 KA._tree_attention_kernel[(blocks.shape[0], H)](
                     q, qkv, qkv.stride(0), kv, 0, kv.stride(1), kv.stride(2), out, blocks, nb, ranges,
                     k8, 0, k8.stride(1), ksc, 0, ksc.stride(1),
-                    H=H, HKV=HKV, HD=HD, BM=bm, BN=bn, SCALE=HD ** -0.5, Q8=mode == "q8", num_warps=warps,
-                    num_stages=stages)
+                    H=H, HKV=HKV, HD=HD, BM=bm, BN=bn, SCALE=HD ** -0.5, Q8=mode == "q8", BIDIR=False,
+                    num_warps=warps, num_stages=stages)
             try:
                 f()
                 torch.cuda.synchronize()

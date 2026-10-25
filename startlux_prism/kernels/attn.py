@@ -3,7 +3,9 @@
 K/V of every token live in a KV arena [n_attn_layers, 2, HKV, MAXTOK, HD] (bf16), indexed by a per-token arena row, so a
 cached prefix (system text, kept evidence) is read in place by later batches.  A query segment attends to two earlier
 key ranges in full (a: the system prefix, b: its parent segment, possibly empty) and to its own tokens causally; no mask
-tensor is built.
+tensor is built.  Bidirectional (StartLux-Decision v1.1 Instant models, whose prompt is read bidirectionally in the
+full-attention layers): a segment attends to all of its own tokens instead.  Such segments are whole prompts from
+position 0 (batch.plan_batch's `whole`), so their a and b ranges are empty.
 
   qkv  [T, P] bf16   per head 2*HD rows (query HD, then output gate HD), then HKV*HD key rows, then HKV*HD value rows
   qkv_norm_rope: q -> rmsnorm(q_norm) -> RoPE -> qbuf [T, H, HD] bf16; k -> rmsnorm(k_norm) -> RoPE -> arena; v -> arena
@@ -162,9 +164,10 @@ def _tree_attention_kernel(qbuf_ptr, qkv_ptr, P, kv_ptr, kv_layer_off, kv_kind_s
                            blocks_ptr, n_blocks_ptr, ranges_ptr,
                            k8_ptr, k8_layer_off, k8_head_stride, k8s_ptr, k8s_layer_off, k8s_head_stride,
                            H: tl.constexpr, HKV: tl.constexpr, HD: tl.constexpr, BM: tl.constexpr, BN: tl.constexpr,
-                           SCALE: tl.constexpr, Q8: tl.constexpr):
+                           SCALE: tl.constexpr, Q8: tl.constexpr, BIDIR: tl.constexpr):
     """Per (query block, head).  Block rows (4 ints): (first token, n queries, segment, own index of the first query).
-    Range rows per segment (6 ints): (a_start, a_len, b_start, b_len, own_start, 0)."""
+    Range rows per segment (6 ints): (a_start, a_len, b_start, b_len, own_start, own_len).  BIDIR: every query reads
+    the segment's own_len tokens; else query i of the block reads its own tokens up to q0 + i."""
     ib = tl.program_id(0)
     h = tl.program_id(1)
     if ib >= tl.load(n_blocks_ptr):
@@ -197,15 +200,23 @@ def _tree_attention_kernel(qbuf_ptr, qkv_ptr, P, kv_ptr, kv_layer_off, kv_kind_s
                                          tl.load(r), tl.load(r + 1), 0, rows, CAUSAL=False, HD=HD, BN=BN)
         acc, m_i, l_i = _attend_range_q8(acc, m_i, l_i, q8, qs, kv_ptr, k8_ptr, k8b, k8s_ptr, k8sb, v_base,
                                          tl.load(r + 2), tl.load(r + 3), 0, rows, CAUSAL=False, HD=HD, BN=BN)
-        acc, m_i, l_i = _attend_range_q8(acc, m_i, l_i, q8, qs, kv_ptr, k8_ptr, k8b, k8s_ptr, k8sb, v_base,
-                                         tl.load(r + 4), q0 + nq, q0, rows, CAUSAL=True, HD=HD, BN=BN)
+        if BIDIR:
+            acc, m_i, l_i = _attend_range_q8(acc, m_i, l_i, q8, qs, kv_ptr, k8_ptr, k8b, k8s_ptr, k8sb, v_base,
+                                             tl.load(r + 4), tl.load(r + 5), q0, rows, CAUSAL=False, HD=HD, BN=BN)
+        else:
+            acc, m_i, l_i = _attend_range_q8(acc, m_i, l_i, q8, qs, kv_ptr, k8_ptr, k8b, k8s_ptr, k8sb, v_base,
+                                             tl.load(r + 4), q0 + nq, q0, rows, CAUSAL=True, HD=HD, BN=BN)
     else:
         acc, m_i, l_i = _attend_range(acc, m_i, l_i, q, kv_ptr, k_base, v_base, tl.load(r), tl.load(r + 1), 0, rows,
                                       CAUSAL=False, HD=HD, BN=BN, SCALE=SCALE)
         acc, m_i, l_i = _attend_range(acc, m_i, l_i, q, kv_ptr, k_base, v_base, tl.load(r + 2), tl.load(r + 3), 0,
                                       rows, CAUSAL=False, HD=HD, BN=BN, SCALE=SCALE)
-        acc, m_i, l_i = _attend_range(acc, m_i, l_i, q, kv_ptr, k_base, v_base, tl.load(r + 4), q0 + nq, q0, rows,
-                                      CAUSAL=True, HD=HD, BN=BN, SCALE=SCALE)
+        if BIDIR:
+            acc, m_i, l_i = _attend_range(acc, m_i, l_i, q, kv_ptr, k_base, v_base, tl.load(r + 4), tl.load(r + 5),
+                                          q0, rows, CAUSAL=False, HD=HD, BN=BN, SCALE=SCALE)
+        else:
+            acc, m_i, l_i = _attend_range(acc, m_i, l_i, q, kv_ptr, k_base, v_base, tl.load(r + 4), q0 + nq, q0,
+                                          rows, CAUSAL=True, HD=HD, BN=BN, SCALE=SCALE)
     o = acc / l_i[:, None]
     gate = tl.load(qkv_ptr + (t0 + rows)[:, None] * P + h * 2 * HD + HD + d[None, :], mask=qm[:, None], other=0.0)
     o = o * (1.0 / (1.0 + tl.exp(-gate.to(tl.float32))))
@@ -234,12 +245,14 @@ def qkv_norm_rope(qkv, q_norm, k_norm, pos, kvrow, inv_freq, qbuf, kv, attn_laye
         H=H, HKV=HKV, HD=HD, ROT=cfg.rope_dim, SLOT0=slot0, K8=k8 is not None, MROPE=mrope is not None, num_warps=4)
 
 
-def tree_attention(qbuf, qkv, kv, attn_layer, out, blocks, n_blocks, max_blocks, ranges, cfg, k8=None, read=False):
+def tree_attention(qbuf, qkv, kv, attn_layer, out, blocks, n_blocks, max_blocks, ranges, cfg, k8=None, read=False,
+                   bidir=False):
     """k8: int8 key arenas (scores on int8 tensor cores), or None.  Blocks of launch("BM") queries (batch.plan_batch's
-    bm); read: the head's blocks of one query each (LAUNCH's tiles)."""
+    bm); read: the head's blocks of one query each (LAUNCH's tiles).  bidir: each query reads all of its segment's
+    own tokens (the module docstring)."""
     H, HKV, HD = cfg.n_head, cfg.n_kv_head, cfg.head_dim
     bm, bn, warps, stages = (LAUNCH[k] if read else launch(k) for k in ("BM", "BN", "WARPS", "STAGES"))
     _tree_attention_kernel[(max_blocks, H)](
         qbuf, qkv, qkv.stride(0), kv, attn_layer * kv.stride(0), kv.stride(1), kv.stride(2), out,
         blocks, n_blocks, ranges, *_k8_args(k8, attn_layer, kv), H=H, HKV=HKV, HD=HD, BM=bm, BN=bn,
-        SCALE=HD ** -0.5, Q8=k8 is not None, num_warps=warps, num_stages=stages)
+        SCALE=HD ** -0.5, Q8=k8 is not None, BIDIR=bool(bidir), num_warps=warps, num_stages=stages)

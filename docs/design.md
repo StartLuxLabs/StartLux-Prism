@@ -22,6 +22,12 @@ cached state. Every linear-attention layer's recurrent state and conv tail sits 
 layers' keys and values in reserved KV-arena rows. Entries are looked up by exact token match (and the images'
 digests) and evicted least recently used. The pass that computes new evidence writes the entry on the way.
 
+**Instant models read the prompt both ways.** In v1.1 Instant's full-attention layers (one in four) every prompt
+token reads the whole prompt, the tokens after it included; the linear-attention layers and their convolutions stay
+causal. Questions cannot then branch off a shared evidence state: each question is one whole segment (the system
+text, the evidence and the question), with no system-text state and no prefix cache. The attention kernel takes the
+mask as a compile-time switch (`BIDIR` in `kernels/attn.py`), so the causal kernels are unchanged.
+
 **Batch-invariant numerics.** Which GEMM kernel, tile and K split runs depends on the batch's size, but every one of
 them gives an element the same bits: exact int32 sums, then the same explicitly rounded scale and add, with split-K
 partials kept in int32. The rest of the pass is per segment and per row. So a request's probabilities do not depend on
@@ -35,7 +41,8 @@ model (`kernels/gemm_table_<gpu>.json`):
   PDL or thread-block clusters (Hopper's); tables measured on the A800, none yet for the RTX 30 and 40 series (there
   the int8 GEMMs run the Triton kernel and W4A8 picks its tiles by rule).
 - **H200:** warpgroup-MMA kernels with TMA copies and warp specialization (`csrc/w8a8_wgmma.cu`: 1,240-1,420 TOPS at
-  4,000-8,000 tokens, where mma.sync reaches about 530 and cuBLASLt's int8 870-910).
+  4,000-8,000 tokens, where mma.sync reaches about 530 and cuBLASLt's int8 870-910; W4A8 from 128 rows,
+  `csrc/w4a8_wgmma.cu`: 406-430 TOPS, where its mma.sync kernels reach 200-270).
 
 Every choice gives the same bits, so it changes only the speed.
 
@@ -48,7 +55,8 @@ int8 weights halve the weight stream that bounds short requests.
   fp32 residual stream.
 - **Q4_K_M files** keep their 4-bit weights: the W4A8 GEMM unpacks Q4_K / Q6_K blocks next to the MMA, with int8
   activations per 256 inputs (`csrc/w4a8_gemm.cu`); a decode step's single row runs a GEMV of its own (dp4a, a warp
-  per column), with the same arithmetic in the same order.
+  per column), with the same arithmetic in the same order. On Hopper, from 128 rows, a warpgroup-MMA kernel expands
+  each stage of weights into two int8 planes whose int32 sums give the super-block's exactly (`csrc/w4a8_wgmma.cu`).
 
 **Last layer at the read positions only.** Keys and values are computed for every token; queries, attention output,
 MLP, norm and the 26 letter rows only where answers are read.

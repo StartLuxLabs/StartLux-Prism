@@ -228,10 +228,11 @@ def compare(paths):
     top = lambda d: max(d, key=d.get)                                    # noqa: E731
     for r in runs:
         same = sum(top(r["items"][k]["probs"]) == top(v["probs"]) for k, v in ref["items"].items())
-        worst = max(abs(r["items"][k]["probs"][lab] - p) for k, v in ref["items"].items() for lab, p in v["probs"].items())
+        dp = [max(abs(r["items"][k]["probs"][lab] - p) for lab, p in v["probs"].items()) for k, v in ref["items"].items()]
         t = r["total"]
         print(f"{r['label']:24s} {t['correct']}/{t['n']}  mean {t['mean_ms']:8.2f} ms  same decision as {ref['label']}: "
-              f"{same}/{len(ref['items'])}  max |dp| {worst:.4f}")
+              f"{same}/{len(ref['items'])}  max |dp| {max(dp):.4f}  mean {sum(dp) / len(dp):.4f}  "
+              f"above 0.05: {sum(d > 0.05 for d in dp)}")
 
 
 def main():

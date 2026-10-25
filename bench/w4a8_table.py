@@ -9,11 +9,17 @@ bench/w4a8_micro.py); the fastest per shape and count goes into the table.
 
 --out writes every config's time as well, --table the choices only (the engine's file).  --merge starts from an
 earlier --out file (when it exists) and times only the (shape, count) pairs it lacks.
+
+    python bench/w4a8_table.py A-Q4_K_M.gguf [...] --recheck 20,21 --table startlux_prism/kernels/w4a8_table_h200.json
+
+--recheck times only the given configs (Hopper's warpgroup MMA, csrc/w4a8_wgmma.cu: 3 stages) against each entry of
+the --table file, on the same weights at its token count, and keeps the faster (the file is updated in place).
 """
 import argparse
 import json
 import os
 import sys
+import time
 
 import torch
 
@@ -58,12 +64,17 @@ def engine_shapes(path):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("gguf", nargs="+")
-    ap.add_argument("--out", required=True)
+    ap.add_argument("--out")
+    ap.add_argument("--recheck", default="", help="config ids to time against the --table file's choices")
     ap.add_argument("--merge")
     ap.add_argument("--table")
     ap.add_argument("--m", default=",".join(map(str, M_GRID)))
     ap.add_argument("--copies", type=int, default=4, help="weight copies rotated through, at least 3x L2's size")
     a = ap.parse_args()
+    if a.recheck:
+        return recheck(a)
+    if not a.out:
+        ap.error("--out is required")
     table, times, done = {}, {}, set()
     if a.merge and os.path.exists(a.merge):
         old = json.load(open(a.merge))
@@ -88,11 +99,13 @@ def main():
                 out = torch.empty(M, N, dtype=torch.bfloat16, device="cuda")
                 res = {}
                 for c, (bm, _, _) in W.CUDA_CFGS.items():     # tiles far from the token count skipped
-                    if (M <= 64 and bm >= 128) or (M >= 512 and bm <= 16) or (c >= 13 and M > 256) or \
-                            (c >= 17 and M > 1):              # 13-16: the K-group kernels, for few rows; 17-19 the
-                        continue                               # GEMV, for one (at two a 27B decode step ran 2% slower
-                                                               # on the H200, though each of its GEMMs alone was as fast)
-                    for st in ((2,) if c >= 17 else (2, 3, 4)):
+                    if (M <= 64 and bm >= 128) or (M >= 512 and bm <= 16) or (13 <= c <= 19 and M > 256) or \
+                            (17 <= c <= 19 and M > 1) or \
+                            (c in W.WGMMA_CFGS and not W.wgmma_ok(M, N, K, w0)):
+                        continue        # 13-16: the K-group kernels, for few rows; 17-19 the GEMV, for one (at two a
+                                        # 27B decode step ran 2% slower on the H200, though each of its GEMMs alone was
+                                        # as fast); 20-21: Hopper's warpgroup MMA
+                    for st in ((2,) if 17 <= c <= 19 else (2, 3, 4)):
                         def run(cfg=(c, st)):
                             for w in ws:
                                 W.gemm(xq, xa, xs, w, out, n, cfg=cfg)
@@ -116,6 +129,46 @@ def main():
                    "source": "bench/w4a8_table.py (weights streamed from DRAM; every config and stage count timed at the "
                              "engine's bucket sizes up to 8,192)", "table": table}, open(a.table, "w"), indent=1)
     print(f"wrote {a.out}: {len(table)} shapes")
+
+
+def recheck(a):
+    cfgs = [(int(c), 3) for c in a.recheck.split(",")]
+    doc = json.load(open(a.table))
+    table, changed, seen = doc["table"], 0, set()
+    for path in a.gguf:
+        for (kind, N, K), w0 in sorted(engine_shapes(path).items()):
+            key = f"{kind},{N},{K}"
+            if key not in table or key in seen:
+                continue
+            seen.add(key)
+            copies = max(a.copies, -(-3 * torch.cuda.get_device_properties(0).L2_cache_size // w0.nbytes()))
+            ws = [w0] + [W.W4(*[t.clone() if torch.is_tensor(t) else t for t in w0]) for _ in range(copies - 1)]
+            for m_str, cur in list(table[key].items()):
+                M = int(m_str)
+                cands = [c for c in cfgs if W.wgmma_ok(M, N, K, w0) and not (M <= 64 and W.CUDA_CFGS[c[0]][0] >= 128)]
+                if not cands:
+                    continue
+                xq, xa, xs = W.quantize_ref(torch.randn(M, K, device="cuda"))
+                n = torch.tensor([M], dtype=torch.int32, device="cuda")
+                out = torch.empty(M, N, dtype=torch.bfloat16, device="cuda")
+                res = {}
+                for cfg in [tuple(cur)] + cands:
+                    def run(cfg=cfg):
+                        for w in ws:
+                            W.gemm(xq, xa, xs, w, out, n, cfg=cfg)
+                    res[cfg] = round(timed(run) / len(ws), 2)
+                best = min(res, key=res.get)
+                if best != tuple(cur):
+                    table[key][m_str] = list(best)
+                    changed += 1
+                print(f"{key:20s} M={M:5d}  table {tuple(cur)} {res[tuple(cur)]:8.1f} us   "
+                      + "  ".join(f"{c}: {res[c]:8.1f} us" for c in cands) + f"   -> {best}", flush=True)
+            del ws
+            torch.cuda.empty_cache()
+    doc["source"] += (f"; Hopper's warpgroup MMA (cfgs {a.recheck}, csrc/w4a8_wgmma.cu) timed against these choices "
+                      f"and kept where faster (--recheck), {time.strftime('%Y-%m-%d')}")
+    json.dump(doc, open(a.table, "w"), indent=1)
+    print(f"rechecked {len(seen)} shapes: {changed} entries now take {a.recheck}")
 
 
 if __name__ == "__main__":

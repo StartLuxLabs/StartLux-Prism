@@ -11,7 +11,7 @@ release does:
 |---|---|---|
 | v1 (`"format": "StartLux-Decision-v1"`) | in one pass, exactly as before v1.1 support | 4B, 9B, 27B |
 | v1.1 AutoThink | one pass, then a thought when the first read-out is unsure | 27B: int8, bf16 and W4A8; 9B: int8 and W4A8 |
-| v1.1 Instant (prompt read bidirectionally) | not served yet: refused at start-up | |
+| v1.1 Instant (prompt read bidirectionally) | in one pass per question: its full-attention layers read the whole prompt, so questions share no evidence and nothing is cached | 4B: int8 and bf16; 9B: int8, bf16 and W4A8; 27B: int8 and W4A8 |
 
 - **Thoughts.** `think_mode` `auto` (the default) thinks when the first read-out's top probability is below `gate`
   (0.6; the published numbers used 0.9). `never` answers in one pass, and `always` thinks first.

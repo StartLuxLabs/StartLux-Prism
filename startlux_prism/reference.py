@@ -17,6 +17,9 @@ Gated attention mixer:
     q|gate = x Wq^T (per head 256 + 256);  k = x Wk^T;  v = x Wv^T;  q, k = rmsnorm per head;  RoPE on the first 64
     dims (rotate-half);  o = softmax(q k^T / sqrt(256), causal) v  (GQA: query head h reads kv head h // 4)
     out = (o * sigmoid(gate)) Wo^T
+StartLux-Decision v1.1 Instant models read the prompt bidirectionally in the gated attention layers (every token sees the
+whole prompt; the linear-attention layers stay causal): Reference(bidirectional=True), the default for a GGUF marked
+non-causal.
 """
 from __future__ import annotations
 
@@ -106,11 +109,12 @@ def gdn_chunked(q, k, v, g, beta, state, chunk=64):
 class Reference:
     """fp32 reference.  forward(ids) -> final-normed hidden states [L, hidden]; letter_logits(rows) for Decider."""
 
-    def __init__(self, weights: Weights, device="cuda", chunked=True):
+    def __init__(self, weights: Weights, device="cuda", chunked=True, bidirectional=None):
         self.w = weights.to(device)
         self.cfg = weights.config
         self.device = torch.device(device)
         self.chunked = chunked
+        self.bidirectional = not self.cfg.causal if bidirectional is None else bool(bidirectional)
         self.letter_rows = None
 
     def set_letters(self, letter_ids):
@@ -174,8 +178,9 @@ class Reference:
         rep = H // Hk
         k, v = k.repeat_interleave(rep, dim=1), v.repeat_interleave(rep, dim=1)
         s = torch.einsum("qhd,khd->hqk", q, k) * d ** -0.5
-        mask = torch.ones(L, L, dtype=torch.bool, device=x.device).tril()
-        p = s.masked_fill(~mask, float("-inf")).softmax(-1)
+        if not self.bidirectional:
+            s = s.masked_fill(~torch.ones(L, L, dtype=torch.bool, device=x.device).tril(), float("-inf"))
+        p = s.softmax(-1)
         if Reference.ATTN_PV is not None:
             p, v = Reference.ATTN_PV(p, v)
         o = torch.einsum("hqk,khd->qhd", p, v)

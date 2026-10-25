@@ -449,6 +449,51 @@ batch and thought (`tests/test_tp.py`), and it holds at 2 and 4 GPUs.  Numbers: 
 * **Tried, not kept:** a lane per whole super-block (128 contiguous bytes per lane, eight lanes a column): half the
   piece-per-lane GEMV's speed, the warp's loads 128 bytes apart.
 
+## W4A8 on Hopper's warpgroup MMA (2026-10-25)
+
+* **Kernel** (`csrc/w4a8_wgmma.cu`, configs 20 and 21 of `kernels/w4a8.py`): the sub-blocks' integer scales go into
+  the weights instead of onto every output after every 32-input MMA. Each 128-input stage of the packed weights is
+  expanded in shared memory into two int8 planes whose int32 dot products give the super-block's sum exactly: Q4_K
+  sc = s0 + 8 s1 (3 bits each), planes s0 q and s1 q (at most 105, one 32-bit multiply for four bytes); Q6_K
+  w' = sc q split into lo = w' & 63 and hi = w' >> 6 (one multiply-add per two values in 16-bit lanes). A 32-input
+  step is then one m64n256k32 wgmma (both planes side by side as B) and nothing per output until the super-block
+  ends; Q4_K's mins are four m64n64k32 wgmmas a super-block (m against the activation sums' two bytes); the
+  floating-point step is the reference's (one I2F of the exact int32 sum, t = d f, fma(-dmin, mins, t), fma(a, t, y)).
+  A producer warpgroup keeps TMA copies in flight; two MMA warpgroups take a 128 x 128 tile (config 20), one a
+  64 x 128 tile (config 21); three stages, and every warp expands a share of each. `tests/test_w4a8.py`:
+  bit-identical to the reference in both configs, Q4_K and Q6_K, bf16 stores and fp32 adds, padded buckets.
+* **Measured** (H200, the 27B's shapes, weights streamed): at 4,096 rows 406-430 TOPS against the mma.sync kernels'
+  201-271 (`ffn_gate` 1.63x, `ffn_down` (Q6_K) 2.14x, `ssm_out` 1.50x); at 256 rows 1.47-2.01x.
+  `bench/w4a8_table.py --recheck 20,21` timed both against the H200 table's choices over the 27B's and 9B's shapes:
+  414 of 600 entries changed, from 128 rows on (the 1,024-wide projections keep their K-group kernels up to 512
+  rows). A shape the table lacks takes config 20 on Hopper from 128 rows (`pick_cuda`).
+* **End to end** (v1.1 27B Q4_K_M, one H200, old and new kernels in the same session): Instant one-pass latency
+  1.23-1.55x lower (256 tokens 81.4 -> 59.0 ms, 8,192 tokens 1,782 -> 1,185), JevBench from 64 clients 7.12 -> 10.93
+  requests/s; AutoThink one pass 1.16-1.53x lower, 64 clients 7.45 -> 11.52 requests/s, with thoughts in steady state
+  (64 clients) 2.59 -> 3.56 requests/s. The same scores (216 and 212 of 231). Decode steps (up to 64 rows) keep the
+  mma.sync kernels: three questions with thoughts 1,329 -> 1,266 ms.
+* **Many clients: int8 on the same file.** `--precision int8` requantizes a Q4_K_M file at start-up to the int8 path's
+  per-row W8A8 (its activation ranges calibrated in 2 s on the first start): from 64 clients 29.0 (Instant) and 30.6
+  (AutoThink) requests/s, as the Q8_0 files, against W4A8's 10.9 and 11.5; with thoughts in steady state 8.3, 9.0 with
+  `--think-seqs 128`. The cost is a second rounding of the 4-bit weights: Instant's mean |dp| against the official
+  BF16 0.0131 (W4A8 0.0118, the Q8_0 file in int8 0.0062), the same score (216), and 9 GB more GPU memory. W4A8 stays
+  the default for Q4_K_M files.
+* **Where the time goes now** (ablations, and clock64 stamps of one CTA's warps): a super-block takes about 5,300
+  cycles of a CTA against 2,304 of tensor time, and leaving out the main MMAs, the expansion or the floating-point
+  step saves only 21, 20 and 15% (Q4_K; Q6_K 22, 31 and 0%): the parts overlap poorly. The two MMA warpgroups read the
+  same expanded tiles, so they run in step and their floating-point steps leave the tensor cores idle; a warp's share
+  of a stage's expansion takes 800-1,400 cycles beside the MMAs' shared-memory reads. Tried without gain: int32 ->
+  float through the exponent field instead of I2F (8-13% slower: more instructions than the conversion it saves), the
+  producer at 56 registers, all expansion on the MMA warpgroups (Q6_K 7% slower), four expanded tiles (the activation
+  and raw rings shortened to fit).
+* **Tried, not kept: a few-token kernel** for decode steps (up to 64 rows): the product transposed so that the
+  weights are wgmma's A from registers - each thread expands its fragments straight from the packed bytes, m64nNk32
+  with N = 8-64 tokens, two CTAs to an SM - and a variant with the inputs split over two or four warpgroups that hand
+  their super-blocks' t to warpgroup 0, which folds them in order (bit-identical too). It streamed 1.25-2.0 TB/s, behind
+  the GEMV and K-group kernels on the Q6_K shapes up to 16 rows (0.6-0.9x), ahead only on `ssm_out` at 2-8 rows (1.11x)
+  and on some shapes at 32-64 rows (1.07-1.25x); with seven TMA copies a super-block, its pipeline alone streamed Q4_K
+  at 2.5 TB/s.
+
 ## Opt-in
 
 * **int8 attention scores** (`--attn-qk8`, `Options.attn_qk8`): keys also kept as int8 (one scale per token and kv
@@ -504,8 +549,10 @@ batch and thought (`tests/test_tp.py`), and it holds at 2 and 4 GPUs.  Numbers: 
   two fifths of a prefill pass and a fifth to a third of a decode step, mostly NCCL's int32 sums of the output
   projections. The in-kernel thresholds (`STARTLUX_PRISM_TP_FAST_ROWS`, `STARTLUX_PRISM_TP_PULL_ROWS`) were measured on H200s on
   NVSwitch only.
-* Hopper (H200): W4A8 still runs on mma.sync (Q4_K_M's projections at 200-300 TOPS against W8A8's 1,250 on wgmma:
-  90% of the 27B's W4A8 GPU time); the GEMMs at up to 64 rows (2.5-3.4 TB/s of 4.8); the TMA kernel's epilogue
+* Hopper (H200): W4A8's GEMMs from 128 rows run on wgmma (406-430 TOPS, above) but at a third of W8A8's 1,250 - two
+  int8 planes per product halve the tensor rate at best, and the two MMA warpgroups' floating-point steps run in
+  step (warpgroups taking turns, or the weights expanded in registers for 128-token tiles, would overlap them); up to
+  64 rows they stay on mma.sync (2.0-3.1 TB/s of 4.8); the TMA kernel's epilogue
   still does not overlap the next tile's main loop (one CTA per SM: a persistent kernel with two MMA warpgroups taking
   turns would hide it); the linear-attention chunk kernels (18% of a large batch); attention at 366 TFLOPS of the
   H200's 989 (bf16; FlashAttention 3 reaches 600+ with wgmma and TMA).

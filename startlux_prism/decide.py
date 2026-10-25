@@ -88,16 +88,20 @@ def choice_answer(dist, none=None, abstain=False):
     return out
 
 
-def request_controls(body):
+def request_controls(body, kind="v1"):
     """StartLux-Decision v1.1's request controls (startlux_decide/controls.py) where StartLux-Prism answers in one pass (v1
-    folders; AutoThink folders on the w4a8 path) -> {"allow_none", "none_check"} (None: not given).  The thinking
-    controls are validated as there; a request that asks for a thought (think_mode "auto" or "always") is refused
-    (AutoThink folders on the int8 and bf16 paths think: think.parse_controls).  Raises ValueError for a bad value."""
+    and Instant folders; AutoThink folders on the w4a8 path) -> {"allow_none", "none_check"} (None: not given).  The
+    thinking controls are validated as there; a request that asks for a thought (think_mode "auto" or "always") is
+    refused, for an Instant folder (`kind`) with v1.1's own message (AutoThink folders on the int8 and bf16 paths
+    think: think.parse_controls).  Raises ValueError for a bad value."""
     tm = body.get("think_mode")
     if tm is not None:
         mode = THINK_MODE_ALIASES.get(tm, tm) if isinstance(tm, str) else tm
         if mode not in THINK_MODES:
             raise ValueError(f"think_mode must be one of {', '.join(THINK_MODES)} (or hybrid, plain, think), not {tm!r}")
+        if mode != "never" and kind == "instant":
+            raise ValueError('this is an Instant model: it answers in one pass and does not think; leave think_mode '
+                             'out or set it to "never" (thinking needs an AutoThink model)')
         if mode != "never":
             raise ValueError('StartLux-Prism answers this model in one pass: leave think_mode out or set it to "never" (it '
                              "thinks with StartLux-Decision v1.1 AutoThink models on the int8 and bf16 paths)")

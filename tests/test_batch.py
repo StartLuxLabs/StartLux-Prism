@@ -169,6 +169,33 @@ def test_prefix_cache(rng):
     first, nck, in_ref, out_ref, tail = p8.tables["segs0"][0]
     assert (first, nck, in_ref, out_ref, tail) == (0, 3 + 2, B.ROOT_SLOT, p8.inserted[0].slot, 2)
     assert tuple(p8.tables["chunks"][3]) == (p8.segs[1].start, 64) and p8.segs[1].start == 130
+    whole(rng, S)
+
+
+def whole(rng, S):
+    """Whole rows (bidirectional prompts, Instant models): every row one segment from position 0 and the zero state,
+    nothing shared or cached, and its own range is all of it."""
+    ev = list(rng.integers(1000, 2000, 150))
+    rows = [SYS + ev + list(rng.integers(3000, 4000, n)) for n in (40, 7, 90)]
+    single = SYS + [7] * 20
+    cache = PrefixCache(slots=range(2, 6), kv_start=10000, kv_rows=1000, min_tokens=64)
+    p = B.plan_batch([B.Group(rows, len(SYS) + len(ev)), B.Group([single], len(SYS))], len(SYS), 64, (0, 30),
+                     cache=cache, system=S, whole=True)
+    assert p.counts["segs"] == 4 and p.counts["segs0"] == 4 and p.counts["segs1"] == 0 and p.counts["trans"] == 0
+    assert not p.inserted and len(cache) == 0 and p.counts["saves"] == 0
+    assert p.n_tok == sum(len(r) for r in rows) + len(single)
+    for k, r in enumerate(rows + [single]):
+        s = p.segs[p.read_seg[k]]
+        assert s.pos0 == 0 and s.in_ref == B.ZERO_SLOT and s.no_root and list(s.tokens) == list(r), k
+        assert tuple(p.tables["ranges"][p.read_seg[k]]) == (0, 0, 0, 0, s.kv_start, len(r)), k
+        assert (p.tables["pos"][s.start:s.start + len(r)] == np.arange(len(r))).all()
+        assert p.read[k] == s.start + len(r) - 1
+        assert (p.tables["hist"][s.start] == -1).all()           # conv history: zeros before the first token
+    # the causal plan of the same rows shares the system text and the evidence
+    q = B.plan_batch([B.Group(rows, len(SYS) + len(ev)), B.Group([single], len(SYS))], len(SYS), 64, (0, 30),
+                     system=S)
+    assert q.n_tok < p.n_tok and q.counts["segs1"] == 3
+    print("whole rows: ok")
 
 
 if __name__ == "__main__":

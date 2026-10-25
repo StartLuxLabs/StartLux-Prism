@@ -150,6 +150,8 @@ class Config:
     gdn_dim: int            # key and value head dim of linear attention
     attn_interval: int
     vocab: int
+    causal: bool = True     # False (qwen35.attention.causal): the prompt is read bidirectionally in the full-attention
+                            # layers, as StartLux-Decision v1.1 Instant models are
 
     def is_attention(self, layer):
         return (layer + 1) % self.attn_interval == 0
@@ -261,7 +263,8 @@ def load(path) -> Weights:
         rope_theta=float(p("rope.freq_base")), eps=float(p("attention.layer_norm_rms_epsilon")),
         conv_kernel=int(p("ssm.conv_kernel")), k_heads=int(p("ssm.group_count")),
         v_heads=int(p("ssm.time_step_rank")), gdn_dim=int(p("ssm.state_size")),
-        attn_interval=int(p("full_attention_interval", 4)), vocab=0)
+        attn_interval=int(p("full_attention_interval", 4)), vocab=0,
+        causal=meta.get("qwen35.attention.causal", True) is not False)
     tensors = f.tensors
 
     def get(name):
