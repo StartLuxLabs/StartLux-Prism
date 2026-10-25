@@ -13,14 +13,14 @@ configs=[(16,32,4,1,64),(32,32,4,1,64),(32,64,4,1,64),(64,64,4,1,64),
 def equal(x,y):return torch.equal(x.contiguous().view(torch.uint8),y.contiguous().view(torch.uint8))
 count=0
 for typ in [GGML_Q4_K,GGML_Q6_K]:
- for k in [256,5120]:
+ for k in ([256,5120] if typ==GGML_Q4_K else [256,5120,17408]):
   raw=synthetic(typ,33,k);refw=raw.dequant(torch.float32).half().double();w=W.repack(raw.to('cuda'))
   x=torch.randn(65,k,generator=torch.Generator().manual_seed(k)).half();x[0]=0;x[1,::17]*=20
   reference=x.double()@refw.T;bound=1e-5+5e-6*(x.double().abs()@refw.abs().T)
   x=x.cuda();live=torch.tensor([65],device='cuda',dtype=torch.int32)
   baseline=torch.ones((65,40),device='cuda');H.gemm(x,w,baseline[:,3:36],live,1)
   assert torch.all((baseline[:,3:36].cpu().double()-1-reference).abs()<=bound)
-  for cfg in configs:
+  for cfg in (configs if typ==GGML_Q4_K else configs+[(16,64,4,1,256)]):
    for dtype,epi in [(torch.float32,0),(torch.float32,1),(torch.float16,0),(torch.bfloat16,0)]:
     for n in [0,1,64,65]:
      live.fill_(n);want=torch.randn((65,40),generator=torch.Generator().manual_seed(42+n+epi)).to(device='cuda',dtype=dtype);got=want.clone()
@@ -28,7 +28,7 @@ for typ in [GGML_Q4_K,GGML_Q6_K]:
      assert equal(got,want),(typ,k,cfg,dtype,n,float((got.float()-want.float()).abs().max()))
      count+=1
   print('PASS hoisted metadata exact profile',typ,k,flush=True)
-live.fill_(65);y=torch.ones((65,40),device='cuda');fn=lambda:C.gemm(x,w,y[:,3:36],live,1,configs[3])
+live.fill_(65);y=torch.ones((65,40),device='cuda');fn=lambda:C.gemm(x,w,y[:,3:36],live,1,(16,64,4,1,256))
 fn();full=y.clone();stream=torch.cuda.Stream();stream.wait_stream(torch.cuda.current_stream())
 with torch.cuda.stream(stream):y.fill_(1);fn()
 torch.cuda.current_stream().wait_stream(stream)

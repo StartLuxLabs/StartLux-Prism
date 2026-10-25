@@ -54,7 +54,7 @@ def _gemm_meta(xp, qp, sp, mp, dp, dmp, yp, livep,
 
 def gemm(x, w, out, live, epi=0, cfg=(32, 64, 4, 1, 64)):
     bm, bn, nw, ns, bk = cfg
-    assert bk in (32, 64) and ns == 1
+    assert bk in (32, 64, 128, 256) and ns == 1
     return _gemm_meta[(triton.cdiv(x.shape[0], bm), triton.cdiv(w.n, bn))](
         x, w.q, w.sc, w.mn, w.d, w.dm, out, live, x.shape[0], w.n, w.k,
         out.stride(0), w.kind == 'q4k', epi, bm, bn, bk, num_warps=nw, num_stages=ns)

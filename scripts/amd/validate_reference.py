@@ -19,6 +19,7 @@ def main():
     p.add_argument("--oracle", required=True)
     p.add_argument("--output", required=True)
     p.add_argument("--min-samples", type=int, default=500)
+    p.add_argument("--precision", choices=("w4a8", "w4a16"), default="w4a8")
     a = p.parse_args()
     P.on()
     data = [json.loads(x) for x in Path(a.oracle).read_text().splitlines()]
@@ -29,7 +30,7 @@ def main():
             raise ValueError("oracle question/row/logit/option counts must match")
         if any(not 0 < n <= len(z) for n, z in zip(record["n_options"], record["logits"], strict=True)):
             raise ValueError("oracle option count exceeds available logits")
-    e = Engine(a.gguf, a.model_dir, Options(precision="w4a8", max_tokens=2048, graphs=False, prefix_cache=0))
+    e = Engine(a.gguf, a.model_dir, Options(precision=a.precision, max_tokens=2048, graphs=False, prefix_cache=0))
     errors = []
     cases = []
     agree = 0
@@ -69,6 +70,8 @@ def main():
         if i % 25 == 24:
             print("model reference comparison", i + 1, "/", len(data), flush=True)
     result = dict(
+        precision=a.precision,
+        q_components=os.getenv("STARTLUX_PRISM_AMD_Q_COMPONENTS", "all") if a.precision=="w4a16" else None,
         shared_gpu=os.getenv("PRISM_SHARED_GPU") == "1",
         samples=len(cases),
         probability_values=len(errors),
