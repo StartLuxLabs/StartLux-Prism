@@ -3,6 +3,8 @@
 This is a different numerical profile from W4A8, not a bit-equivalent speedup.
 Weights are dequantized only inside a program; no floating point model copy.
 """
+import os
+
 import triton
 import triton.language as tl
 from ..backends import math as F
@@ -47,7 +49,18 @@ def _gemm(xp, qp, sp, mp, dp, dmp, yp, livep,
     tl.store(ptr, y, mask)
 
 
-def gemm(x, w, out, live, epi=0, cfg=(16, 32, 4, 1, 64)):
+def gemm(x, w, out, live, epi=0, cfg=None):
+    if cfg is None:
+        mode = os.environ.get("STARTLUX_PRISM_AMD_W4A16", "auto")
+        if mode not in ("auto", "reference"):
+            raise ValueError("STARTLUX_PRISM_AMD_W4A16 must be auto or reference")
+        if mode == "auto":
+            from .amd_w4a16_dispatch import pick
+            chosen = pick(x, w, out, epi)
+            if chosen is not None:
+                from .amd_w4a16_meta import gemm as optimized
+                return optimized(x, w, out, live, epi, tuple(chosen))
+        cfg = (16, 32, 4, 1, 64)
     bm, bn, nw, ns, bk = (*cfg, 64) if len(cfg) == 4 else cfg
     assert bk in (64, 128, 256)
     _gemm[(triton.cdiv(x.shape[0], bm), triton.cdiv(w.n, bn))](

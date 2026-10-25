@@ -22,6 +22,7 @@ def main():
     p.add_argument("--gguf", required=True)
     p.add_argument("--model-dir", required=True)
     p.add_argument("--output", required=True)
+    p.add_argument("--precision", choices=("w4a8", "w4a16"), default="w4a8")
     p.add_argument("--reps", type=int, default=12)
     a = p.parse_args()
     P.on()
@@ -29,7 +30,7 @@ def main():
         a.gguf,
         a.model_dir,
         Options(
-            precision="w4a8",
+            precision=a.precision,
             max_tokens=2048,
             graphs=False,
             prefix_cache=4,
@@ -47,7 +48,7 @@ def main():
     def equal(x, y, label):
         assert len(x) == len(y) and all(torch.equal(u, v) for u, v in zip(x, y)), label
 
-    result = dict(shared_gpu=os.getenv("PRISM_SHARED_GPU") == "1", cases={})
+    result = dict(precision=a.precision, shared_gpu=os.getenv("PRISM_SHARED_GPU") == "1", cases={})
     for name, rows in cases.items():
         eng.opt.share = False
         baseline = eng.letter_logits(rows)

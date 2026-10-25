@@ -24,6 +24,7 @@ def main():
     p.add_argument("--gguf", required=True)
     p.add_argument("--model-dir", required=True)
     p.add_argument("--output", required=True)
+    p.add_argument("--precision", choices=("w4a8", "w4a16"), default="w4a8")
     p.add_argument("--tokens", type=int, default=8)
     p.add_argument("--graphs", action="store_true")
     a = p.parse_args()
@@ -31,7 +32,7 @@ def main():
     eng = Engine(
         a.gguf,
         a.model_dir,
-        Options(precision="w4a8", max_tokens=2048, graphs=a.graphs, prefix_cache=0, think_seqs=2, think_kv_rows=8192),
+        Options(precision=a.precision, max_tokens=2048, graphs=a.graphs, prefix_cache=0, think_seqs=2, think_kv_rows=8192),
     )
     dec = Decoder(eng, a.gguf, max_seqs=2, graphs=a.graphs, sampling=Sampling(greedy=True))
     framing = Framing(a.model_dir)
@@ -42,7 +43,7 @@ def main():
         rec = J.from_systemone(state, q, allow_none=q["type"] == "choice")
         ids = eng.tok.encode(framing.prompt(rec) + RELEASE_PREFIX)
         ps.append((name, ids))
-    result = dict(shared_gpu=os.getenv("PRISM_SHARED_GPU") == "1", sequences=[], graphs=a.graphs)
+    result = dict(precision=a.precision, shared_gpu=os.getenv("PRISM_SHARED_GPU") == "1", sequences=[], graphs=a.graphs)
     start = time.perf_counter()
     s = Seqs(eng, dec, ps, 4096)
     s.prefill(s.s)

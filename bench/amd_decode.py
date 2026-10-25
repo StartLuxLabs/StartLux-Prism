@@ -7,9 +7,12 @@ import torch
 repo=Path(__file__).resolve().parents[1]
 p=argparse.ArgumentParser(description=__doc__)
 p.add_argument('--gguf',required=True);p.add_argument('--model-dir',required=True);p.add_argument('--out',required=True)
+p.add_argument('--precision',choices=('w4a8','w4a16'),default='w4a8')
 p.add_argument('--reference-decode',help='Optional baseline decode.json; require identical token hashes')
 p.add_argument('--paired',action='store_true',help='Alternate legacy and qualified kernels on one resident model/head')
-args=p.parse_args();out=Path(args.out);out.mkdir(parents=True,exist_ok=True)
+args=p.parse_args()
+if args.paired and args.precision!='w4a8':p.error('--paired currently compares W4A8 kernels only')
+out=Path(args.out);out.mkdir(parents=True,exist_ok=True)
 assert torch.version.hip and torch.cuda.device_count()==1,'Select exactly one ROCm GPU before starting'
 
 sys.path[:0]=[str(repo)]
@@ -23,11 +26,11 @@ if args.paired:
  from startlux_prism.kernels.amd_w4a8_dispatch import table
  assert table(),'No qualified table matches this runtime/source'
  os.environ['STARTLUX_PRISM_AMD_GEMM']='auto'
-e=Engine(gguf,str(model),Options(precision='w4a8',max_tokens=4096,graphs=False,prefix_cache=0,
+e=Engine(gguf,str(model),Options(precision=args.precision,max_tokens=4096,graphs=False,prefix_cache=0,
  think_seqs=8,think_kv_rows=8192))
 dec=Decoder(e,gguf,max_seqs=8,sampling=Sampling(greedy=True),graphs=True);dec.warm_up()
 rng=np.random.default_rng(0);prompts=[rng.integers(1000,100000,512).tolist() for _ in range(8)]
-result=dict(context=512,warm_steps=8,timed_steps=64,rows_each=1024,greedy=True,ignore_eos=True,modes={})
+result=dict(precision=args.precision,context=512,warm_steps=8,timed_steps=64,rows_each=1024,greedy=True,ignore_eos=True,modes={})
 reference={}
 def phase(name,**kw):(out/'phase.json').write_text(json.dumps(dict(phase=name,**kw)))
 def run(B,graphs,indices=None,check_repeat=True):

@@ -146,11 +146,13 @@ class Engine:
     def __init__(self, gguf_path, model_dir, options=None, device="cuda"):
         self.opt = options or Options()
         require_single_gpu(self.opt.tp)
+        if self.opt.precision == "w4a16" and not is_hip():
+            raise ValueError("The experimental W4A16 profile requires ROCm gfx1201")
         if is_hip():
             if architecture() != "gfx1201":
                 raise ValueError("The experimental ROCm model profile is currently limited to gfx1201")
             if self.opt.precision not in ("w4a8", "w4a16"):
-                raise ValueError("The current ROCm model path is w4a8 from Q4_K_M; "
+                raise ValueError("The current ROCm model paths use Q4_K_M as w4a8 or w4a16; "
                                  "bf16/int8 whole-model paths are not qualified on this single-GPU profile")
             self.opt.pdl = 0
             self.opt.l2_prefetch = 0
@@ -285,7 +287,7 @@ class Engine:
         self.out_norm = w.out_norm.to(dev)
         self.layers, self.gdn_index, self.attn_index = [], {}, {}
         seg = lambda *m: KW4.segments(m, dev)       # noqa: E731
-        bar = P.Bar("weights to the GPU (W4A8: the file's 4-bit blocks)", len(w.layers), "layers")
+        bar = P.Bar(f"weights to the GPU ({self.opt.precision.upper()}: the file's 4-bit blocks)", len(w.layers), "layers")
         for i, l in enumerate(w.layers):
             d = {"attn_norm": l.attn_norm.to(dev), "post_norm": l.post_norm.to(dev), "gu": seg(l.ffn_gate, l.ffn_up),
                  "down": seg(l.ffn_down)}

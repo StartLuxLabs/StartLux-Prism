@@ -24,13 +24,14 @@ def main():
     p.add_argument("--model-dir", required=True)
     p.add_argument("--mmproj", required=True)
     p.add_argument("--output", required=True)
+    p.add_argument("--precision", choices=("w4a8", "w4a16"), default="w4a8")
     a = p.parse_args()
     P.on()
     e = Engine(
         a.gguf,
         a.model_dir,
         Options(
-            precision="w4a8",
+            precision=a.precision,
             max_tokens=4096,
             graphs=False,
             graph_max_tokens=512,
@@ -39,7 +40,7 @@ def main():
             mmproj=a.mmproj,
         ),
     )
-    result = dict(shared_gpu=os.getenv("PRISM_SHARED_GPU") == "1", scenes=[], right=0, total=0)
+    result = dict(precision=a.precision, shared_gpu=os.getenv("PRISM_SHARED_GPU") == "1", scenes=[], right=0, total=0)
     reqs = {n: (s, q, im, right) for n, s, q, im, right in vision_suite.requests()}
 
     def rows(name):
