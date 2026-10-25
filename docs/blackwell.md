@@ -106,7 +106,7 @@ Caveats:
 |---|---|---|
 | SM120 | RTX 5060 Ti, 5070, 5080, 5090 | **supported**, validated on the 5060 Ti |
 | SM121 | RTX PRO Blackwell | **supported**, builds with `CUDA_ARCH=sm_121a`; untested |
-| SM100 | B200, GB200 | compiles with the same builder and `-arch=sm_100a`; untested |
+| SM100 | B200, GB200 | compile-checked with `ArchTag = cutlass::arch::Sm100` and `-arch=sm_100a`; untested |
 | SM103 | B300, GB300 | planned; needs CUTLASS's FP4 Ultra 1Sm/2Sm structure |
 
 The launch geometry is the SM120 cooperative Pingpong schedule, 128x128x128, one CTA per
