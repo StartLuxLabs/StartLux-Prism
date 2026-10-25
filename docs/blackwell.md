@@ -49,8 +49,8 @@ It packs the MLP, attention and GDN projections one at a time and writes
 `q, s = blob["0.gu"]; mxfp4.MX4(q.cuda(), s.cuda(), q.shape[0], q.shape[1] * 2)`.  The `--smooth` path is the
 SmoothQuant-style scheme used for the 9B numbers: `W * s`, with the matching activation division folded into
 the preceding norm or applied at runtime; for `down`, `1/s_down` is folded into the `up` rows.  On the 9B model,
-layer 0's packed `q`/`s` and `s_gu` match the research `mlp_smooth.pt` exactly.  The engine-side folding and
-loading remain outside this package.
+layer 0's MLP `gu`/`down` and GDN `inp`/`out` packed `q`/`s` and `s_*` match the research
+`mlp_smooth.pt`/`full_smooth.pt` exactly.  The engine-side folding and loading remain outside this package.
 
 ## Build
 
