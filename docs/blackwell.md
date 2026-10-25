@@ -2,7 +2,8 @@
 
 An optional MXFP4 (e2m1 weights and activations, one e8m0 scale per 32 inputs, fp32
 accumulate) projection kernel for Blackwell, not for one memory size. The CUTLASS launcher runs
-on SM120/SM121 (GeForce and RTX PRO); SM100 is compile-checked and SM103 is planned. It falls back
+on SM120/SM121 (RTX 50 series/RTX PRO 6000 and DGX Spark); SM100 is compile-checked and SM103 is
+planned.  It falls back
 to the pure-Triton `tl.dot_scaled` kernel when the shared library is absent or the GPU is not
 SM120/SM121.
 
@@ -62,8 +63,8 @@ git clone --depth 1 --branch v4.8.1 https://github.com/NVIDIA/cutlass /opt/cutla
 CUTLASS_HOME=/opt/cutlass ./scripts/build_mxfp4_cutlass.sh
 ```
 
-The default `sm_120a` covers RTX 50 series. RTX PRO Blackwell (SM121) uses
-`CUDA_ARCH=sm_121a ./scripts/build_mxfp4_cutlass.sh`; it has not been tested on hardware.
+The default `sm_120a` covers the RTX 50 series and RTX PRO 6000 Blackwell (SM120). DGX Spark (GB10,
+SM121) uses `CUDA_ARCH=sm_121a ./scripts/build_mxfp4_cutlass.sh`; it has not been tested on hardware.
 The script writes `startlux_prism/kernels/libmxfp4_cutlass.so`, which is git-ignored.
 
 Enable it in Python:
@@ -131,9 +132,9 @@ Caveats:
 
 | architecture | GPUs | status |
 |---|---|---|
-| SM120 | RTX 5060 Ti, 5070, 5080, 5090 | **supported**, validated on the 5060 Ti |
-| SM121 | RTX PRO Blackwell | **supported**, builds with `CUDA_ARCH=sm_121a`; untested |
-| SM100 | B200, GB200 | compile-checked with `ArchTag = cutlass::arch::Sm100` and `-arch=sm_100a`; untested |
+| SM120 | RTX 5060 Ti, 5070, 5080, 5090; RTX PRO 6000 Blackwell | **kernel supported**, validated on the 5060 Ti; other SM120 cards untested |
+| SM121 | NVIDIA GB10 (DGX Spark) | build target; `CUDA_ARCH=sm_121a`; untested |
+| SM100 | B200, GB200 | compile-checked with `ArchTag = cutlass::arch::Sm100` and `-arch=sm_100a`; not run |
 | SM103 | B300, GB300 | planned; needs CUTLASS's FP4 Ultra 1Sm/2Sm structure |
 
 The launch geometry is the SM120 cooperative Pingpong schedule, 128x128x128, one CTA per

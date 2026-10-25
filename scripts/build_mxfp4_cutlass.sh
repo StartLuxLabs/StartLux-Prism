@@ -2,7 +2,7 @@
 # Build the optional CUTLASS MXFP4 GEMM for Blackwell SM120/SM121.  SM100 is compile-checked
 # separately; SM103 is planned (see docs/blackwell.md).
 # CUTLASS_HOME must point at CUTLASS 4.8.x (tested: 4.8.1); CUDA 12.8 or newer.
-# SM121 (RTX PRO Blackwell) needs CUDA_ARCH=sm_121a.
+# SM121 (DGX Spark / GB10) needs CUDA_ARCH=sm_121a; untested.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 : "${CUTLASS_HOME:?set CUTLASS_HOME to the CUTLASS 4.8.x source tree}"
