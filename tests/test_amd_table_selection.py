@@ -4,7 +4,7 @@ from pathlib import Path
 import sys
 import unittest
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'bench'))
-from amd_table_selection import select_row, merge_qualified
+from amd_table_selection import select_row, select_fixtures, merge_qualified
 
 
 def candidate(cold, hot, partial, correct=True):
@@ -47,6 +47,57 @@ class SelectionTests(unittest.TestCase):
         self.assertEqual(base,original)
         self.assertEqual(result['entries']['legacy-key'],original['entries']['legacy-key'])
         self.assertEqual(decisions[0]['winner'],'dot')
+
+    def test_w4a16_retains_fallback_without_an_invalid_table_entry(self):
+        row=copy.deepcopy(self.row)
+        for name in ('dot','last_wmma'): row['candidates'][name]['correct']=False
+        data=dict(profile='w4a16',kernel_identity='same',runtime={},protocol='real-weight-seven-paired-v1',
+                  completed=True,experiment='test',rows=[row])
+        base=dict(kernel_identity='same',runtime={},entries={})
+        result,decisions=merge_qualified(data,base,'same',{})
+        self.assertEqual(result['entries'],{})
+        self.assertTrue(decisions[0]['retained_baseline'])
+
+    def test_w4a16_promotes_only_valid_metadata_choices(self):
+        row=copy.deepcopy(self.row)
+        data=dict(profile='w4a16',kernel_identity='same',runtime={},protocol='real-weight-seven-paired-v1',
+                  completed=True,experiment='test',rows=[row])
+        base=dict(kernel_identity='same',runtime={},entries={})
+        with self.assertRaises(ValueError):merge_qualified(data,base,'same',{})
+        row['candidates']['dot'].update(implementation='meta',cfg=[16,64,4,1,32])
+        result,_=merge_qualified(data,base,'same',{})
+        self.assertEqual(result['entries'][row['key']],[16,64,4,1,32])
+
+    def test_shared_fixture_winner_must_pass_every_input(self):
+        second=copy.deepcopy(self.row)
+        second['candidates']['dot']['partial_ms']=11
+        for rows in ([self.row,second],[second,self.row]):
+            result=select_fixtures(rows)
+            self.assertEqual(result['winner'],'last_wmma')
+            self.assertEqual(result['fixture_count'],2)
+        second['candidates']['last_wmma']['correct']=False
+        self.assertTrue(select_fixtures([self.row,second])['retained_baseline'])
+
+    def test_fixture_ranking_normalizes_each_runs_baseline(self):
+        second=copy.deepcopy(self.row)
+        for value in second['candidates'].values():
+            for key in ('cold_ms','hot_ms','partial_ms'):value[key]*=100
+        self.assertEqual(select_fixtures([self.row,second])['winner'],'dot')
+        second['candidates']['old']['cfg']=[8,8,4]
+        with self.assertRaises(ValueError):select_fixtures([self.row,second])
+
+    def test_quarantine_blocks_conflicting_promotion(self):
+        data=dict(protocol='real-weight-seven-paired-v1', completed=True,
+                  kernel_identity='same', runtime={}, rows=[self.row],
+                  quarantined=[dict(key=self.row['key'])])
+        base=dict(kernel_identity='same',runtime={},entries={})
+        with self.assertRaises(ValueError):merge_qualified(data,base,'same',{})
+        data['rows']=[];base['entries'][self.row['key']]={}
+        with self.assertRaises(ValueError):merge_qualified(data,base,'same',{})
+        base['entries']={}
+        table,decisions=merge_qualified(data,base,'same',{})
+        self.assertEqual(table['entries'],{})
+        self.assertEqual(decisions[0]['status'],'quarantined')
 
 
 if __name__ == '__main__':unittest.main()

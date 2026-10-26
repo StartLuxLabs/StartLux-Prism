@@ -4,6 +4,7 @@ from concurrent.futures import ThreadPoolExecutor
 import json
 from pathlib import Path
 import subprocess
+import socket
 import sys
 import threading
 import time
@@ -19,7 +20,12 @@ p.add_argument('--output',required=True);p.add_argument('--port',type=int,defaul
 p.add_argument('--precision',choices=['w4a8','w4a16'],default='w4a8')
 p.add_argument('--seconds',type=int,default=0);p.add_argument('--requests',type=int,default=0)
 p.add_argument('--graphs',action='store_true');p.add_argument('--readout-only',action='store_true')
+p.add_argument('--think-seqs',type=int,default=1)
+p.add_argument('--think-kv-rows',type=int,default=4096)
 p.add_argument('--mmproj',default='none');p.add_argument('--max-tokens',type=int,default=2048)
+p.add_argument('--graph-max-tokens',type=int,default=512)
+p.add_argument('--budget',type=int,default=8192)
+p.add_argument('--overlap-tokens',type=int,default=1024)
 a=p.parse_args()
 a.gguf=str(Path(a.gguf).resolve());a.model_dir=str(Path(a.model_dir).resolve())
 if a.mmproj!='none':a.mmproj=str(Path(a.mmproj).resolve())
@@ -33,8 +39,9 @@ def http(body=None,path='/v1/systemone'):
     except urllib.error.HTTPError as e:return e.code,json.load(e)
 cmd=[sys.executable,'-m','startlux_prism.server','--gguf',a.gguf,'--model-dir',a.model_dir,'--port',str(a.port),
      '--host','127.0.0.1','--precision',a.precision,'--max-tokens',str(a.max_tokens),'--prefix-cache','4','--prefix-cache-tokens','4096',
-     '--think-seqs','1','--max-think-budget','256','--think-kv-rows','4096','--context-length',str(a.max_tokens),
-     '--mmproj',a.mmproj,'--graph-max-tokens','512']
+     '--think-seqs',str(a.think_seqs),'--max-think-budget','256','--think-kv-rows',str(a.think_kv_rows),'--context-length',str(a.max_tokens),
+     '--mmproj',a.mmproj,'--graph-max-tokens',str(a.graph_max_tokens),
+     '--budget',str(a.budget),'--overlap-tokens',str(a.overlap_tokens),'--tp','1']
 cmd+=['--graphs'] if a.graphs else ['--no-graphs']
 assert not a.readout_only,'latest upstream qualification retains the full generation head'
 # The upstream endpoint intentionally has no allocator telemetry. Instrument only
@@ -135,6 +142,20 @@ with out.with_suffix('.server.log').open('w') as log:
         report['concurrent_thought_requests']=len(overload)
         check('recovery after concurrent thoughts',base)
         print('PASS 16 concurrent requests and drain',flush=True)
+        # There is no request-cancel API. A disconnected client must still let
+        # accepted work drain and release its slot; do not claim immediate abort.
+        before_disconnect=http(path='/stats')[1].get('thoughts',0)
+        payload=json.dumps(dict(base,think_mode='always',think_budget=16)).encode()
+        with socket.create_connection(('127.0.0.1',a.port),timeout=10) as client:
+            headers=(f'POST /v1/systemone HTTP/1.1\r\nHost: 127.0.0.1\r\nContent-Type: application/json\r\n'
+                     f'Content-Length: {len(payload)}\r\nConnection: close\r\n\r\n').encode()
+            client.sendall(headers+payload)
+        deadline=time.monotonic()+120
+        while http(path='/stats')[1].get('thoughts',0)<=before_disconnect:
+            assert time.monotonic()<deadline,'disconnected request did not drain'
+            time.sleep(.2)
+        assert check('recovery after client disconnect',base)['answers']==alone['answers']
+        report['disconnect_behavior']='accepted thought completed and drained; no immediate cancellation API'
         # Exercise eviction before measuring retained memory, then keep churning a
         # working set larger than the four-entry cache during the sustained run.
         cache_bodies=[dict(base,state=f'Incident {i}: '+

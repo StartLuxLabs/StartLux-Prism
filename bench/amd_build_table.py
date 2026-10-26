@@ -15,7 +15,8 @@ if a.tuning:
  from amd_table_selection import merge_qualified
  if not a.base_table:parser.error('--tuning requires --base-table')
  data=json.loads(a.tuning.read_text());base=json.loads(a.base_table.read_text())
- spec=importlib.util.spec_from_file_location('qualified_dispatch',repo/'startlux_prism/kernels/amd_w4a8_dispatch.py')
+ dispatcher='amd_w4a16_dispatch.py' if data.get('profile')=='w4a16' else 'amd_w4a8_dispatch.py'
+ spec=importlib.util.spec_from_file_location('qualified_dispatch',repo/'startlux_prism/kernels'/dispatcher)
  module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
  result,decisions=merge_qualified(data,base,module.kernel_identity(),data['runtime'])
  result.setdefault('sources',{})[data['experiment']]=hashlib.sha256(a.tuning.read_bytes()).hexdigest()
