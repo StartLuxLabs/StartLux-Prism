@@ -1,0 +1,2 @@
+bench/results/*.json linguist-generated=true
+startlux_prism/kernels/*_table_gfx950.json linguist-generated=true

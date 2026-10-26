@@ -1,0 +1,163 @@
+{
+  "gpu": "AMD Instinct MI355X",
+  "model": "StartLux-Decision-v1.1-27B-AutoThink-Q8_0.gguf",
+  "runtime": {
+    "torch": "2.14.0+rocm10.1.0",
+    "hip": "7.16.26385",
+    "triton": "3.8.0"
+  },
+  "kernel_identity": "22c1b4f59acc7968d0b3988516276383ff87bc24ac660b083154a9f3928cce9a",
+  "engine_protocol": {
+    "prefix_cache": false,
+    "rounds": 3,
+    "calls_per_round": 30,
+    "warmups": 3,
+    "alternating_modes": true
+  },
+  "ceilings": {
+    "torch_copy": {
+      "ms": 0.19716099500656128,
+      "tb_s": 5.446015445216571
+    },
+    "triton_copy": {
+      "ms": 0.1860329031944275,
+      "tb_s": 5.771784483080428
+    },
+    "torch.bfloat16": {
+      "ms": 0.6164873123168946,
+      "tera_ops_s": 1783.5105537594832
+    },
+    "torch.int8": {
+      "ms": 0.39481019973754883,
+      "tera_ops_s": 2784.911910854642
+    }
+  },
+  "theoretical": {
+    "hbm_tb_s": 8.0,
+    "int8_tops": 5033.2,
+    "bf16_tflops": 2516.6
+  },
+  "engine": {
+    "yesno": {
+      "baseline": 16.0247883759439,
+      "tuned": 15.337762422859669,
+      "speedup": 1.0447931017669354,
+      "latency_reduction_percent": 4.287270052911152
+    },
+    "review1": {
+      "baseline": 24.089996935799718,
+      "tuned": 18.022850854322314,
+      "speedup": 1.3366363141168842,
+      "latency_reduction_percent": 25.185333554198696
+    },
+    "readme3": {
+      "baseline": 26.56687842682004,
+      "tuned": 20.18731110729277,
+      "speedup": 1.3160186755740153,
+      "latency_reduction_percent": 24.013236395461913
+    },
+    "startlux3": {
+      "baseline": 39.866953156888485,
+      "tuned": 33.92163198441267,
+      "speedup": 1.1752663661703466,
+      "latency_reduction_percent": 14.912905807171128
+    },
+    "longpage2": {
+      "baseline": 111.00513068959117,
+      "tuned": 95.86722543463111,
+      "speedup": 1.157904906356992,
+      "latency_reduction_percent": 13.637122141039493
+    }
+  },
+  "counters": {
+    "baseline": {
+      "raw": {
+        "VALUBusy": {
+          "value": 12.525923,
+          "kernel_us": 125.441
+        },
+        "MfmaUtil": {
+          "value": 10.834351,
+          "kernel_us": 124.561
+        },
+        "WRITE_SIZE": {
+          "value": 13056.0,
+          "kernel_us": 125.521
+        },
+        "FetchSize": {
+          "value": 554286.125,
+          "kernel_us": 124.24
+        }
+      },
+      "external_read_bytes": 567588992.0,
+      "external_write_bytes": 13369344.0,
+      "external_read_tb_s": 4.568488345138442,
+      "read_amplification_over_weight_bytes": 3.1840884937959557,
+      "mfma_util_percent": 10.834351
+    },
+    "tuned": {
+      "raw": {
+        "VALUBusy": {
+          "value": 13.312673,
+          "kernel_us": 104.2
+        },
+        "MfmaUtil": {
+          "value": 17.836504,
+          "kernel_us": 104.121
+        },
+        "WRITE_SIZE": {
+          "value": 13056.0,
+          "kernel_us": 103.88
+        },
+        "FetchSize": {
+          "value": 359352.75,
+          "kernel_us": 105.001
+        }
+      },
+      "external_read_bytes": 367977216.0,
+      "external_write_bytes": 13369344.0,
+      "external_read_tb_s": 3.504511537985352,
+      "read_amplification_over_weight_bytes": 2.0642965877757353,
+      "mfma_util_percent": 17.836504
+    }
+  },
+  "profiles": {
+    "baseline": {
+      "graph_ms": 26.460906982421875,
+      "eager_kernel_ms": 26.395557999999983,
+      "gemm_ms": 20.919943999999973
+    },
+    "tuned": {
+      "graph_ms": 20.068151473999023,
+      "eager_kernel_ms": 20.22580300000001,
+      "gemm_ms": 14.715022000000005
+    }
+  },
+  "http": {
+    "yesno": {
+      "baseline": 16.483826329931617,
+      "tuned": 15.961926663294435,
+      "speedup": 1.0326965332974074
+    },
+    "review1": {
+      "baseline": 24.46240419521928,
+      "tuned": 18.3327195700258,
+      "speedup": 1.3343576277256528
+    },
+    "readme3": {
+      "baseline": 27.01282547786832,
+      "tuned": 20.537399454042315,
+      "speedup": 1.315299219763263
+    },
+    "startlux3": {
+      "baseline": 40.51739047281444,
+      "tuned": 34.618861973285675,
+      "speedup": 1.1703848180821335
+    },
+    "longpage2": {
+      "baseline": 111.09907552599907,
+      "tuned": 96.03406605310738,
+      "speedup": 1.1568715154116316
+    }
+  }
+}

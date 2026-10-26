@@ -41,7 +41,7 @@ from typing import NamedTuple
 import torch
 import triton
 import triton.language as tl
-from triton.language.extra.cuda import libdevice
+from ..backends import math as libdevice
 
 
 @functools.lru_cache(None)
@@ -49,7 +49,7 @@ def _pdl():
     """The producers signal programmatic dependent launch (griddepcontrol.launch_dependents) on sm_90 and later only:
     the instruction does not exist before Hopper, and there no GEMM launches early (no dispatch table, so no CUDA GEMM
     with PDL; csrc/w8a8_gemm.cu)."""
-    return torch.cuda.get_device_capability()[0] >= 9
+    return torch.version.hip is None and torch.cuda.get_device_capability()[0] >= 9
 
 
 class Sync(NamedTuple):
@@ -167,7 +167,7 @@ def _norm_q8_kernel(h_ptr, w_ptr, q_ptr, s_ptr, rows_ptr, n_ptr, eps, parts_ptr,
     y = h * tl.rsqrt(tl.sum(h * h, 0) / HID + eps) * tl.load(w_ptr + c, mask=m, other=0.0)
     amax = tl.max(tl.abs(y), 0)
     scale = tl.maximum(amax, 1e-10) / 127.0
-    tl.store(q_ptr + i * HID + c, tl.extra.cuda.libdevice.rint(y / scale).to(tl.int8), mask=m)
+    tl.store(q_ptr + i * HID + c, libdevice.rint(y / scale).to(tl.int8), mask=m)
     tl.store(s_ptr + i, scale)
 
 
@@ -242,7 +242,7 @@ def _gated_norm_q8_kernel(o_ptr, z_ptr, P, Z_OFF, w_ptr, inv_s_ptr, q_ptr, s_ptr
     if MODE == 3:
         amax = _ll_amax(amax, t, ep_ptr, w0, w1, w2, w3, off, RANK, NR)
     scale = tl.maximum(amax, 1e-10) / 127.0
-    tl.store(q_ptr + t * HV * D + idx, tl.extra.cuda.libdevice.rint(y / scale).to(tl.int8), mask=hm)
+    tl.store(q_ptr + t * HV * D + idx, libdevice.rint(y / scale).to(tl.int8), mask=hm)
     tl.store(s_ptr + t, scale)
 
 
@@ -279,8 +279,8 @@ def _swiglu_q8_kernel(gu_ptr, inv_s_ptr, q_ptr, s_ptr, n_ptr, amax_ptr, ep_ptr, 
     if MODE == 3:
         amax = _ll_amax(amax, t, ep_ptr, w0, w1, w2, w3, off, RANK, NR)
     scale = tl.maximum(amax, 1e-10) / 127.0
-    tl.store(q_ptr + t * FF + c1, tl.extra.cuda.libdevice.rint(y1 / scale).to(tl.int8), mask=m1)
-    tl.store(q_ptr + t * FF + c2, tl.extra.cuda.libdevice.rint(y2 / scale).to(tl.int8), mask=m2)
+    tl.store(q_ptr + t * FF + c1, libdevice.rint(y1 / scale).to(tl.int8), mask=m1)
+    tl.store(q_ptr + t * FF + c2, libdevice.rint(y2 / scale).to(tl.int8), mask=m2)
     tl.store(s_ptr + t, scale)
 
 
@@ -305,7 +305,7 @@ def _rows_q8_kernel(x_ptr, inv_s_ptr, q_ptr, s_ptr, n_ptr, amax_ptr, ep_ptr, w0,
     if MODE == 3:
         amax = _ll_amax(amax, t, ep_ptr, w0, w1, w2, w3, off, RANK, NR)
     scale = tl.maximum(amax, 1e-10) / 127.0
-    tl.store(q_ptr + t * K + c, tl.extra.cuda.libdevice.rint(y / scale).to(tl.int8), mask=m)
+    tl.store(q_ptr + t * K + c, libdevice.rint(y / scale).to(tl.int8), mask=m)
     tl.store(s_ptr + t, scale)
 
 
@@ -316,18 +316,22 @@ def _store_g(y, q_ptr, s_ptr, xs_ptr, row, M, K: tl.constexpr, KP: tl.constexpr)
     """y [KP] fp32 (zero past K) -> row `row` of q int8 [M, K], s fp32 [K / 256, M] and xs int8 [K / 256, M, 16]: per
     256 inputs the scale and the sums S of the eight groups of 32 (|S| <= 32 * 127), split as eight S & 63 then eight
     S >> 6 (super-block-major, as the GEMM reads them)."""
-    yg = tl.reshape(y, (KP // 256, 256))
-    scale = libdevice.div_rn(tl.maximum(tl.max(tl.abs(yg), 1), 1e-10), 127.0)     # IEEE divisions, as the reference
-    qv = libdevice.rint(libdevice.div_rn(yg, scale[:, None])).to(tl.int8)
-    gi = tl.arange(0, KP // 256)
-    c = gi[:, None] * 256 + tl.arange(0, 256)[None, :]
-    tl.store(q_ptr + row * K + c, qv, mask=c < K)
-    tl.store(s_ptr + gi * M + row, scale, mask=gi < K // 256)
-    si = tl.arange(0, KP // 32)
-    sums = tl.sum(tl.reshape(qv.to(tl.int32), (KP // 32, 32)), 1)
-    o = ((si // 8) * M + row) * 16 + si % 8
-    tl.store(xs_ptr + o, (sums & 63).to(tl.int8), mask=si < K // 32)
-    tl.store(xs_ptr + o + 8, (sums >> 6).to(tl.int8), mask=si < K // 32)
+    if q_ptr.dtype.element_ty == tl.float16:
+        c = tl.arange(0, KP)
+        tl.store(q_ptr + row * K + c, y, c < K)
+    else:
+        yg = tl.reshape(y, (KP // 256, 256))
+        scale = libdevice.div_rn(tl.maximum(tl.max(tl.abs(yg), 1), 1e-10), 127.0)     # IEEE divisions, as the reference
+        qv = libdevice.rint(libdevice.div_rn(yg, scale[:, None])).to(tl.int8)
+        gi = tl.arange(0, KP // 256)
+        c = gi[:, None] * 256 + tl.arange(0, 256)[None, :]
+        tl.store(q_ptr + row * K + c, qv, mask=c < K)
+        tl.store(s_ptr + gi * M + row, scale, mask=gi < K // 256)
+        si = tl.arange(0, KP // 32)
+        sums = tl.sum(tl.reshape(qv.to(tl.int32), (KP // 32, 32)), 1)
+        o = ((si // 8) * M + row) * 16 + si % 8
+        tl.store(xs_ptr + o, (sums & 63).to(tl.int8), mask=si < K // 32)
+        tl.store(xs_ptr + o + 8, (sums >> 6).to(tl.int8), mask=si < K // 32)
 
 
 @triton.jit

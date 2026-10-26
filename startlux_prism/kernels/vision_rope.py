@@ -12,7 +12,7 @@ on an H200, and half its kernel launches.
 """
 import triton
 import triton.language as tl
-from triton.language.extra.cuda import libdevice
+from ..backends import math as libdevice
 
 
 @triton.jit

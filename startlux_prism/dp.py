@@ -226,6 +226,9 @@ def wait_health(w, timeout, every=20):
 
 
 def main():
+    from .backends import architecture, device_env, is_hip
+    if is_hip() and architecture() != "gfx950":
+        raise SystemExit("ROCm data parallelism requires gfx950; use one server on the Radeon profile")
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     ap.add_argument("--gpus", required=True, help="GPUs, one worker each (--tp of them with --tp), e.g. 0,1,2,3")
     ap.add_argument("--tp", type=int, default=1,
@@ -257,7 +260,7 @@ def main():
     cache = os.environ.get("TRITON_CACHE_DIR") or os.path.join(os.path.expanduser("~"), ".triton", "cache")
 
     def start(w):
-        env = dict(os.environ, CUDA_VISIBLE_DEVICES=w.gpu,          # a --tp server runs on its visible GPUs
+        env = dict(device_env(w.gpu),
                    TRITON_CACHE_DIR=os.path.join(cache, f"dp-worker{w.idx}"))
         w.log = os.path.join(a.log_dir, f"worker{w.idx}-gpu{w.gpu.replace(',', '-')}.log")
         log = open(w.log, "w")

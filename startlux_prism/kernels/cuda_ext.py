@@ -8,6 +8,7 @@ import time
 import torch
 
 from .. import progress as P
+from ..backends import gpu_tag, is_hip
 
 # the canonical path: the build command holds it, and processes that imported startlux_prism by different paths (a script's
 # sys.path entry, a tensor-parallel follower's PYTHONPATH) otherwise rebuilt the extension in turn, each waiting for
@@ -23,14 +24,6 @@ WS_BYTES = 96 << 20          # stream-K partial tiles: 2 slots per CTA of BM x B
 MAX_TILES = 1 << 16          # stream-K tile counters
 
 
-@functools.lru_cache(None)
-def gpu_tag(device=None):
-    """The GPU model, lower case without spaces: "rtx5090", "h200" - the suffix of the tuning tables measured on it
-    (gemm_table_<tag>.json, w4a8_table_<tag>.json)."""
-    name = torch.cuda.get_device_name(device).lower().replace("nvidia", "").replace("geforce", "")
-    return "".join(name.split())
-
-
 def table_path(prefix):
     """kernels/<prefix>_<gpu tag>.json: a tuning table measured on this GPU's model (it may not exist)."""
     return os.path.join(os.path.dirname(__file__), f"{prefix}_{gpu_tag()}.json")
@@ -40,6 +33,8 @@ def table_path(prefix):
 def cuda_arch():
     """The GPU architecture the kernels are built for: STARTLUX_PRISM_CUDA_ARCH, else this GPU's - "120" on the RTX 5090, "90a"
     on Hopper (H100 / H200: the architecture-specific build, which the wgmma kernel of csrc/w8a8_wgmma.cu needs)."""
+    if is_hip():
+        raise RuntimeError("CUDA architecture requested on HIP; select the ROCm kernel backend")
     arch = os.environ.get("STARTLUX_PRISM_CUDA_ARCH")
     if arch:
         return arch
@@ -49,6 +44,8 @@ def cuda_arch():
 
 @functools.lru_cache(None)
 def load():
+    if is_hip():
+        raise RuntimeError("NVIDIA CUDA extension loading is forbidden on the ROCm backend")
     from torch.utils.cpp_extension import load as _load
 
     arch = cuda_arch()
@@ -97,7 +94,7 @@ WG_SMEM_LIMIT = 232448        # bytes of dynamic shared memory per block on sm_9
 @functools.lru_cache(None)
 def has_wgmma(device=None):
     """The Hopper W8A8 kernel (csrc/w8a8_wgmma.cu) runs here: an sm_90 GPU and an sm_90a build."""
-    return cuda_arch() == "90a" and torch.cuda.get_device_capability(device)[0] == 9
+    return not is_hip() and cuda_arch() == "90a" and torch.cuda.get_device_capability(device)[0] == 9
 
 
 def wg_fits(cfg, stages):

@@ -1,0 +1,368 @@
+{
+  "baseline": "4534c11",
+  "source_commit": "afeab60bcf4087162ab168473cc2155b1299fa5a",
+  "original_model": {
+    "repo": "startlux-models/StartLux-Decision-v1.1-27B-AutoThink",
+    "revision": "dd62d5cd84a483d75bdd548880bbf08bdd3f67a4",
+    "shards": {
+      "model-00001.safetensors": {
+        "bytes": 5085593848,
+        "sha256": "0d33f3508c516750f5abf7a76312462e43de38141d99f22c45e2f12914e51c42"
+      },
+      "model-00002.safetensors": {
+        "bytes": 4042468368,
+        "sha256": "89f78267c15e024d77b92079a75b7d1777a1f0a5e4b4b19f739fcf55f21caf29"
+      },
+      "model-00003.safetensors": {
+        "bytes": 4167220864,
+        "sha256": "b2bfda14840e9a39ef3f105536b3ac4571920dc252d2cd82d4d1e62a49e27dcc"
+      },
+      "model-00004.safetensors": {
+        "bytes": 4167241584,
+        "sha256": "540918f0e5a52fcdc5a62a9a9dc91fa456145ecf85a19d15f590f277c71c65f8"
+      },
+      "model-00005.safetensors": {
+        "bytes": 4020421768,
+        "sha256": "6a5cfcd876421da27324fc6ac78250890b9a7ca71980ce34d4bda9cdb2281e53"
+      },
+      "model-00006.safetensors": {
+        "bytes": 4145184544,
+        "sha256": "5a4d340dd73ab41b93b2feb241b386aa48422f9178fef06278044d0708322172"
+      },
+      "model-00007.safetensors": {
+        "bytes": 4042478760,
+        "sha256": "46679084542a902dab2d43165e596500f5bfa8f51455815169c47bd2b9ccf687"
+      },
+      "model-00008.safetensors": {
+        "bytes": 4167220872,
+        "sha256": "f8e82a97d393c4bb94f53da489b712b9a25c3828f7f644d1c56190e3719380c9"
+      },
+      "model-00009.safetensors": {
+        "bytes": 4072870784,
+        "sha256": "1a8abe510f19f80bea634326ded56687215c1a79a78b75dbb114f9736c353b43"
+      },
+      "model-00010.safetensors": {
+        "bytes": 4114792576,
+        "sha256": "24c1e4ddfac5cef3db8b92fc491c67367f76b881a3d7543a5b7fbb60de5e823c"
+      },
+      "model-00011.safetensors": {
+        "bytes": 4167220864,
+        "sha256": "912411099cb3b0a89661b8daf22f59e8daf7755fbd707fd43639ebed2da7966a"
+      },
+      "model-00012.safetensors": {
+        "bytes": 4042478768,
+        "sha256": "6f3814d7469f8f78681bc67a7c253bb786ea012c47a0bb50dbc07fcb508002a6"
+      },
+      "model-00013.safetensors": {
+        "bytes": 4004192056,
+        "sha256": "d8a756d8fc3b2544f22825ce5e8689d72e98e96c9e23a2fe48d4adb152118bb0"
+      },
+      "model-00014.safetensors": {
+        "bytes": 474220608,
+        "sha256": "23a3e3b8d03a0af9f89cc8b0d3d56e58d54cf01ba5dda81bf0c178a90aa135f0"
+      }
+    }
+  },
+  "options": {
+    "prefix_cache": 0,
+    "graphs": true,
+    "think_mode": "never",
+    "concurrency": 1
+  },
+  "files": {
+    "StartLux-Decision-v1.1-27B-AutoThink-Q8_0.gguf": {
+      "bytes": 28595763616,
+      "sha256": "28757be9a8fae5253201edd155e553e7a7324d9f1130ad20ac1009780d90659d"
+    },
+    "mi355x-27b-calib.pt": {
+      "bytes": 8730853,
+      "sha256": "7c85e13fe103bbc8c1d995dcbfface3166f333b7e517af984cbb8cc70d7fba9c"
+    },
+    "config.json": {
+      "bytes": 3687,
+      "sha256": "effbfe91edcf6af4a97d7621e6424d73f8b7510119a3de1fae53d7cee3a0ddbf"
+    },
+    "decision_config.json": {
+      "bytes": 481,
+      "sha256": "6dda14231eb64553b8c69ea33f1cdb7a55ddb58899f969d21ea7d60a7d62aee8"
+    },
+    "tokenizer.json": {
+      "bytes": 12809320,
+      "sha256": "0997f410c57a1f4e53b09e4be8f4a172d90edd9564368fb0847030937229b9f3"
+    },
+    "tokenizer_config.json": {
+      "bytes": 17928,
+      "sha256": "b11349aafa7cdc6a320767cf7ceb29ed82f7eda5d65e8e0819e76f0ce947bf27"
+    },
+    "chat_template.jinja": {
+      "bytes": 8952,
+      "sha256": "c3cf9e34abf4f9e36c2d72165aa9c132d3e2a725b6c2586aaa3a8af9d7a81041"
+    },
+    "model.safetensors.index.json": {
+      "bytes": 98042,
+      "sha256": "ea0c86ffffe0a8dab85abfa5938c93e3c3ef52088bcefbcf8c4e8ee304be2f2a"
+    }
+  },
+  "requests": {
+    "startlux3": {
+      "body": {
+        "model": "StartLux-Decision",
+        "state": {
+          "ticket": {
+            "id": "T-48213",
+            "channel": "email",
+            "customer_tier": "business",
+            "subject": "Charged twice for renewal, dashboard still shows the account as suspended",
+            "body": "Hello, our annual renewal for the Business plan went through on the 3rd, and the card statement shows two identical charges of 1,140 USD from you on the same day. Since then the admin dashboard still says the workspace is suspended for non-payment, so eleven people on my team cannot log in to the reporting module and we have a board meeting tomorrow morning. I already tried logging out and clearing the cache, and the status page says all systems are operational. Please refund the duplicate charge and restore access as soon as possible. Invoice numbers INV-2291 and INV-2292 are attached."
+          },
+          "account": {
+            "plan": "Business annual",
+            "seats": 11,
+            "open_incidents": 0,
+            "previous_tickets_90d": 1
+          }
+        },
+        "questions": {
+          "team": {
+            "type": "choice",
+            "instructions": "Which team should own this ticket?",
+            "criteria": {
+              "billing": "Payments, refunds and invoices",
+              "access": "Login, suspension and permissions",
+              "technical": "Bugs and outages",
+              "sales": "Plans and upgrades"
+            }
+          },
+          "urgent": {
+            "type": "noul",
+            "instructions": "Does this ticket need a reply within one hour?"
+          },
+          "severity": {
+            "type": "score",
+            "instructions": "How severe is the customer impact?",
+            "criteria": [
+              "cosmetic",
+              "minor inconvenience",
+              "blocks part of the team",
+              "blocks the whole business"
+            ]
+          }
+        },
+        "think_mode": "never"
+      },
+      "sha256": "64b8a029fc7c90ca6f8b6583ae0b03181b65d49b7f8fc0ba4bebec5a836584f0"
+    },
+    "startlux1": {
+      "body": {
+        "model": "StartLux-Decision",
+        "state": {
+          "ticket": {
+            "id": "T-48213",
+            "channel": "email",
+            "customer_tier": "business",
+            "subject": "Charged twice for renewal, dashboard still shows the account as suspended",
+            "body": "Hello, our annual renewal for the Business plan went through on the 3rd, and the card statement shows two identical charges of 1,140 USD from you on the same day. Since then the admin dashboard still says the workspace is suspended for non-payment, so eleven people on my team cannot log in to the reporting module and we have a board meeting tomorrow morning. I already tried logging out and clearing the cache, and the status page says all systems are operational. Please refund the duplicate charge and restore access as soon as possible. Invoice numbers INV-2291 and INV-2292 are attached."
+          },
+          "account": {
+            "plan": "Business annual",
+            "seats": 11,
+            "open_incidents": 0,
+            "previous_tickets_90d": 1
+          }
+        },
+        "questions": {
+          "urgent": {
+            "type": "noul",
+            "instructions": "Does this ticket need a reply within one hour?"
+          }
+        },
+        "think_mode": "never"
+      },
+      "sha256": "9f1163e95eee9a7803523f063f3cd56f79df675334126793bc42168dbf54fb70"
+    },
+    "readme3": {
+      "body": {
+        "model": "StartLux-Decision",
+        "state": {
+          "ticket": "I was charged twice for order #4411 and the app still shows it as unpaid."
+        },
+        "questions": {
+          "team": {
+            "type": "choice",
+            "instructions": "Which team should handle this ticket?",
+            "criteria": {
+              "billing": "Payments, refunds and invoices",
+              "shipping": "Delivery and tracking",
+              "technical": "App, login and account problems"
+            }
+          },
+          "urgent": {
+            "type": "noul",
+            "instructions": "Should this ticket be answered today?"
+          },
+          "severity": {
+            "type": "score",
+            "instructions": "How severe is the impact?",
+            "criteria": [
+              "cosmetic",
+              "annoying",
+              "blocks the customer"
+            ]
+          }
+        },
+        "think_mode": "never"
+      },
+      "sha256": "05acff2e5f04c404c8b915c86e8e4d0b6e2d607a531068eed175710afce9ca89"
+    },
+    "yesno": {
+      "body": {
+        "model": "StartLux-Decision",
+        "state": {
+          "ticket": "I was charged twice for order #4411 and the app still shows it as unpaid."
+        },
+        "questions": {
+          "urgent": {
+            "type": "noul",
+            "instructions": "Should this ticket be answered today?"
+          }
+        },
+        "think_mode": "never"
+      },
+      "sha256": "1552128d605b4158b1a6c8ecb809c8fd7415c4da9eeaa69c35360e75cfb6af0d"
+    },
+    "longpage2": {
+      "body": {
+        "model": "StartLux-Decision",
+        "state": {
+          "page": "Order history. Order #4000: 1 items, total $0.00, status pending. Order #4001: 2 items, total $17.01, status shipped. Order #4002: 3 items, total $34.02, status shipped. Order #4003: 4 items, total $51.03, status pending. Order #4004: 5 items, total $68.04, status shipped. Order #4005: 1 items, total $85.05, status shipped. Order #4006: 2 items, total $102.06, status pending. Order #4007: 3 items, total $119.07, status shipped. Order #4008: 4 items, total $136.08, status shipped. Order #4009: 5 items, total $153.09, status pending. Order #4010: 1 items, total $170.10, status shipped. Order #4011: 2 items, total $187.11, status shipped. Order #4012: 3 items, total $204.12, status pending. Order #4013: 4 items, total $221.13, status shipped. Order #4014: 5 items, total $238.14, status shipped. Order #4015: 1 items, total $255.15, status pending. Order #4016: 2 items, total $272.16, status shipped. Order #4017: 3 items, total $289.17, status shipped. Order #4018: 4 items, total $6.18, status pending. Order #4019: 5 items, total $23.19, status shipped. Order #4020: 1 items, total $40.20, status shipped. Order #4021: 2 items, total $57.21, status pending. Order #4022: 3 items, total $74.22, status shipped. Order #4023: 4 items, total $91.23, status shipped. Order #4024: 5 items, total $108.24, status pending. Order #4025: 1 items, total $125.25, status shipped. Order #4026: 2 items, total $142.26, status shipped. Order #4027: 3 items, total $159.27, status pending. Order #4028: 4 items, total $176.28, status shipped. Order #4029: 5 items, total $193.29, status shipped. Order #4030: 1 items, total $210.30, status pending. Order #4031: 2 items, total $227.31, status shipped. Order #4032: 3 items, total $244.32, status shipped. Order #4033: 4 items, total $261.33, status pending. Order #4034: 5 items, total $278.34, status shipped. Order #4035: 1 items, total $295.35, status shipped. Order #4036: 2 items, total $12.36, status pending. Order #4037: 3 items, total $29.37, status shipped. Order #4038: 4 items, total $46.38, status shipped. Order #4039: 5 items, total $63.39, status pending.",
+          "user": "Where is my most recent pending order?"
+        },
+        "questions": {
+          "next": {
+            "type": "choice",
+            "instructions": "Which order is the user asking about?",
+            "criteria": {
+              "o4000": "Order #4000",
+              "o4003": "Order #4003",
+              "o4006": "Order #4006",
+              "o4009": "Order #4009",
+              "o4012": "Order #4012",
+              "o4015": "Order #4015",
+              "o4018": "Order #4018",
+              "o4021": "Order #4021",
+              "o4024": "Order #4024",
+              "o4027": "Order #4027",
+              "o4030": "Order #4030",
+              "o4033": "Order #4033",
+              "o4036": "Order #4036",
+              "o4039": "Order #4039"
+            }
+          },
+          "done": {
+            "type": "noul",
+            "instructions": "Can the question be answered from this page alone?"
+          }
+        },
+        "think_mode": "never"
+      },
+      "sha256": "b1b6e075643415074b60db6ad7c68ecb2ea0e1902879cb0326797f588f8615d7"
+    },
+    "wide33": {
+      "body": {
+        "model": "StartLux-Decision",
+        "state": {
+          "quiz": "Geography round."
+        },
+        "questions": {
+          "city": {
+            "type": "choice",
+            "instructions": "Which city is the capital of Australia?",
+            "criteria": {
+              "sydney": "Sydney",
+              "melbourne": "Melbourne",
+              "brisbane": "Brisbane",
+              "perth": "Perth",
+              "adelaide": "Adelaide",
+              "canberra": "Canberra",
+              "hobart": "Hobart",
+              "darwin": "Darwin",
+              "auckland": "Auckland",
+              "wellington": "Wellington",
+              "suva": "Suva",
+              "jakarta": "Jakarta",
+              "manila": "Manila",
+              "singapore": "Singapore",
+              "bangkok": "Bangkok",
+              "hanoi": "Hanoi",
+              "tokyo": "Tokyo",
+              "osaka": "Osaka",
+              "seoul": "Seoul",
+              "beijing": "Beijing",
+              "shanghai": "Shanghai",
+              "taipei": "Taipei",
+              "delhi": "Delhi",
+              "mumbai": "Mumbai",
+              "dhaka": "Dhaka",
+              "karachi": "Karachi",
+              "tehran": "Tehran",
+              "dubai": "Dubai",
+              "doha": "Doha",
+              "riyadh": "Riyadh",
+              "cairo": "Cairo",
+              "nairobi": "Nairobi",
+              "lagos": "Lagos"
+            }
+          }
+        },
+        "think_mode": "never"
+      },
+      "sha256": "18d6046a86d8e1fda7111114b92c15934cdbf3a69a81263b5eef0c3b093e3c2f"
+    },
+    "review1": {
+      "body": {
+        "model": "StartLux-Decision",
+        "state": {
+          "review": "The battery died after two days and support never answered."
+        },
+        "questions": {
+          "stars": {
+            "type": "score",
+            "instructions": "How satisfied is the customer?",
+            "criteria": [
+              "1",
+              "2",
+              "3",
+              "4",
+              "5"
+            ]
+          }
+        },
+        "think_mode": "never"
+      },
+      "sha256": "8c4c83828c459df958a1c81083ac611d41df1d204f2d250f555cb6ea1ce041f1"
+    }
+  },
+  "http_geometry": {
+    "startlux3": {
+      "computed_tokens": 372,
+      "bucket": 384
+    },
+    "readme3": {
+      "computed_tokens": 155,
+      "bucket": 192
+    },
+    "yesno": {
+      "computed_tokens": 55,
+      "bucket": 64
+    },
+    "longpage2": {
+      "computed_tokens": 1194,
+      "bucket": 1280
+    },
+    "review1": {
+      "computed_tokens": 77,
+      "bucket": 128
+    }
+  },
+  "http_geometry_source": "bench/mi355x_mxfp4_model.py, matching v1.1 none-option prompts"
+}

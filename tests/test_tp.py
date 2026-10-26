@@ -41,7 +41,13 @@ def work(a):
         from startlux_prism import tp as TP
         TP.start(a.tp, a.gpus)
     else:
-        os.environ["CUDA_VISIBLE_DEVICES"] = a.gpus
+        from startlux_prism.backends import device_env
+        env = device_env(a.gpus)
+        for key in ("HIP_VISIBLE_DEVICES", "CUDA_VISIBLE_DEVICES"):
+            if key in env:
+                os.environ[key] = env[key]
+            else:
+                os.environ.pop(key, None)
     import numpy as np
     import torch
     from startlux_prism import images as I
@@ -178,6 +184,8 @@ def work(a):
         print(f"[tp {a.tp}] images done", flush=True)
     torch.save(out, a.out)
     print(f"[tp {a.tp}] -> {a.out}", flush=True)
+    if a.tp > 1:
+        TP.group().close()
     del np
 
 
@@ -212,7 +220,8 @@ def server_compare(a):
     procs = []
     logs = []
     for label, gpus, tp, port in (("one GPU", a.ref_gpu, 1, a.port), (f"tp {a.tp}", a.gpus, a.tp, a.port + 1)):
-        env = dict(os.environ, CUDA_VISIBLE_DEVICES=gpus)
+        from startlux_prism.backends import device_env
+        env = device_env(gpus)
         log = open(os.path.join(a.log_dir, f"server-tp{tp}.log"), "w")
         logs.append(log)
         cmd = [sys.executable, "-m", "startlux_prism.server", "--port", str(port)] + common

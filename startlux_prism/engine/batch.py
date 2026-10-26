@@ -91,9 +91,11 @@ class Plan:
 
 
 def plan_batch(groups, sys_len, kv_scratch0, root_kv=(0, 0), share=True, cache=None, system=None, max_inserts=16,
-               max_trans=64, bm=BM, keep=(), whole=False):
+               max_trans=64, bm=BM, keep=(), whole=False, canonical_head=False):
     """groups: per request, a Group (or a plain list of token rows: head unknown).  All rows start with the system
-    text (sys_len tokens, `system`; a row that does not is computed whole from the zero state).  cache: a PrefixCache
+    text (sys_len tokens, `system`; a row that does not is computed whole from the zero state).
+    canonical_head: keep evidence boundaries stable without sharing/cache too (BF16 GDN chunk roundings).
+    cache: a PrefixCache
     (see the module docstring).  Returns a Plan whose tables index packed tokens 0..n_tok-1; KV rows of this batch
     start at kv_scratch0, except cache entries' (rows the cache assigns).
 
@@ -117,6 +119,9 @@ def plan_batch(groups, sys_len, kv_scratch0, root_kv=(0, 0), share=True, cache=N
     groups = [(g.rows, g.head, g.pos, g.images) if isinstance(g, Group) else (g, 0, None, ()) for g in groups]
     groups = [([np.asarray(r, dtype=np.int32) for r in rows], head, pos, images)
               for rows, head, pos, images in groups]
+    if canonical_head and not share:
+        groups = [([row], head, None if pos is None else [pos[i]], images)
+                  for rows, head, pos, images in groups for i, row in enumerate(rows)]
 
     def evidence(rows, head, images):           # the cacheable evidence of a request and its key, or (None, None)
         if (cache is None or head - sys_len < cache.min_tokens or any(len(r) <= head for r in rows)
@@ -191,25 +196,51 @@ def plan_batch(groups, sys_len, kv_scratch0, root_kv=(0, 0), share=True, cache=N
                 continue
             for i, r in enumerate(rows):        # one question (or no transient left): computed whole
                 read_seg.append(len(segs))
-                segs.append(Seg(r[sys_len:], sys_len, -1, ROOT_SLOT, **cut(i, sys_len)))
+                if canonical_head:
+                    read_seg.pop()
+                    e = len(segs)
+                    segs.append(Seg(r[sys_len:head], sys_len, -1, ROOT_SLOT, out_ref=-1,
+                                    **cut(i, sys_len, head)))
+                    read_seg.append(len(segs))
+                    segs.append(Seg(r[head:], head, e, -1, **cut(i, head)))
+                else:
+                    segs.append(Seg(r[sys_len:], sys_len, -1, ROOT_SLOT, **cut(i, sys_len)))
             continue
         c = sys_len
-        if share and len(rows) > 1:
+        canonical = (canonical_head and head > sys_len and all(len(r) > head for r in rows)
+                     and all(np.array_equal(r[:head], rows[0][:head]) for r in rows[1:]))
+        if canonical:
+            c = head
+        elif share and len(rows) > 1:
             n = min(len(r) for r in rows) - 1
             first = rows[0]
             for r in rows[1:]:
                 diff = np.nonzero(r[:n] != first[:n])[0]
                 n = int(diff[0]) if len(diff) else n
             c = max(n, sys_len)
-        if c - sys_len >= MIN_SHARE and trans < max_trans:
+        if canonical and len(rows) == 1:
+            # One child is scanned as a chain. Keep its canonical boundary without
+            # a transient arena slot: _hrec_kernel carries S in registers.
+            e = len(segs)
+            segs.append(Seg(rows[0][sys_len:c], sys_len, -1, ROOT_SLOT, out_ref=-1,
+                            **cut(0, sys_len, c)))
+            shared(rows, c, e, cut)
+        elif (c - sys_len >= MIN_SHARE or canonical) and trans < max_trans:
             e = len(segs)
             segs.append(Seg(rows[0][sys_len:c], sys_len, -1, ROOT_SLOT, out_ref=-2 - trans, **cut(0, sys_len, c)))
             trans += 1
             shared(rows, c, e, cut)
         else:
             for i, r in enumerate(rows):
-                read_seg.append(len(segs))
-                segs.append(Seg(r[sys_len:], sys_len, -1, ROOT_SLOT, **cut(i, sys_len)))
+                if canonical:
+                    e = len(segs)
+                    segs.append(Seg(r[sys_len:c], sys_len, -1, ROOT_SLOT, out_ref=-1,
+                                    **cut(i, sys_len, c)))
+                    read_seg.append(len(segs))
+                    segs.append(Seg(r[c:], c, e, -1, **cut(i, c)))
+                else:
+                    read_seg.append(len(segs))
+                    segs.append(Seg(r[sys_len:], sys_len, -1, ROOT_SLOT, **cut(i, sys_len)))
     for k in keep:
         tokens, slot, kv0 = k[:3]
         pos, images = k[3:5] if len(k) > 3 else (None, ())

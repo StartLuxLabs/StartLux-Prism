@@ -1,5 +1,12 @@
 __pycache__/
 *.pyc
-results/
+/results/
+/bench/results/*
+!/bench/results/README.md
+!/bench/results/mi355x_int8_20261026.json
+!/bench/results/mi355x_next_summary_20261026.json
+!/bench/results/mi355x_fp4_frozen_20261026.json
 build/
 *.so
+.rocprofv3/
+.pytest_cache/

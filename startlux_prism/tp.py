@@ -57,6 +57,7 @@ import sys
 import threading
 import time
 import traceback
+import weakref
 
 import numpy as np
 import torch
@@ -343,6 +344,7 @@ class Group:
         dist.init_process_group("nccl", rank=rank, world_size=world, device_id=self.device)
         self.pg = dist.group.WORLD
         self.objs = {}               # followers: mirrored objects by id
+        self._mirrors = weakref.WeakValueDictionary()
         self._ids = 0                # rank 0: ids given out
         self._building = None        # followers: the id of the object under construction
         self._keep = []              # shared buffers' mappings
@@ -353,6 +355,7 @@ class Group:
         self.fast = self.pull = False
         self.fast_rows = self.pull_rows = self.parity = self.hidden = self.word_steps = 0
         self.nsum = self.step = self.mstep = 0
+        self._end = torch.zeros(1, dtype=torch.int32, device=self.device) if torch.version.hip is not None else None
 
     # ------------------------------------------------------------ fused all-reduces (quant.Sync)
     def setup(self, hidden, words, fast_rows=FAST_ROWS, pull_rows=None):
@@ -361,6 +364,10 @@ class Group:
         sums, the row maxima's words (int64, a step x row x rank each: `words` exchanges per pass at most) for passes
         of up to fast_rows rows, and this rank's pass counter.  Called by every rank's Engine at the same point (a
         collective); once."""
+        # HIP uses RCCL collectives for both maxima and integer sums. The fused
+        # symmetric-memory paths below contain NVIDIA PTX and system fences.
+        if torch.version.hip is not None:
+            return
         if self.xs is not None:
             if hidden != self.hidden:
                 raise ValueError("one tensor-parallel group serves one model")
@@ -435,6 +442,11 @@ class Group:
     def sum_(self, x):
         dist.all_reduce(x, op=dist.ReduceOp.SUM, group=self.pg)
 
+    def end(self):
+        """Keep HIP followers through their final consumers before staging can be reused."""
+        if self._end is not None:
+            self.sum_(self._end)
+
     def max_(self, x):
         dist.all_reduce(x, op=dist.ReduceOp.MAX, group=self.pg)
 
@@ -455,6 +467,7 @@ class Group:
             return self._building
         self._ids += 1
         cls = type(obj)
+        self._mirrors[self._ids] = obj
         self.chan.send(OP_NEW, [self._ids], (f"{cls.__module__}:{cls.__qualname__}", _refs(tuple(args)),
                                              _refs(kwargs or {})))
         return self._ids
@@ -484,6 +497,13 @@ class Group:
         return t
 
     # ------------------------------------------------------------ lifetime
+    def _release_graphs(self):
+        """Release RCCL capture references before communicator shutdown on HIP."""
+        for obj in list(self._mirrors.values()) + list(self.objs.values()):
+            for name in ("body_graphs", "head_graphs", "_graphs"):
+                for graph in getattr(obj, name, {}).values():
+                    graph.reset()
+
     def _check(self):
         for p in self.procs:
             if p.poll() is not None:
@@ -507,6 +527,10 @@ class Group:
             self.chan.send(OP_STOP)
         except Exception:                                    # noqa: BLE001
             pass
+        if torch.version.hip is not None and dist.is_initialized():
+            torch.cuda.synchronize(self.device)
+            self._release_graphs()
+            dist.destroy_process_group()
         for p in self.procs:
             try:
                 p.wait(timeout=15)
@@ -528,6 +552,7 @@ def start(world, gpus=None):
     indices (a list or "4,5"; default: the visible ones, else 0..world-1), which become this process's visible GPUs
     (rank r on cuda:r) - so call this before anything uses CUDA.  Engines and decoders built with Options(tp=world)
     then run on the group."""
+    from .backends import device_env, is_hip
     global _GROUP
     if _GROUP is not None:
         return _GROUP
@@ -537,11 +562,17 @@ def start(world, gpus=None):
         raise RuntimeError("startlux_prism.tp.start must run before anything uses CUDA (it sets the visible GPUs)")
     if isinstance(gpus, str):
         gpus = gpus.split(",")
-    gpus = [str(g).strip() for g in (gpus or os.environ.get("CUDA_VISIBLE_DEVICES", "").split(",")) if str(g).strip()]
+    visible = "HIP_VISIBLE_DEVICES" if is_hip() else "CUDA_VISIBLE_DEVICES"
+    gpus = [str(g).strip() for g in (gpus or os.environ.get(visible, "").split(",")) if str(g).strip()]
     gpus = gpus or [str(i) for i in range(world)]
     if len(gpus) < world:
         raise ValueError(f"--tp {world} needs {world} GPUs, got {','.join(gpus)}")
-    os.environ["CUDA_VISIBLE_DEVICES"] = ",".join(gpus[:world])
+    selected = device_env(",".join(gpus[:world]))
+    for key in ("CUDA_VISIBLE_DEVICES", "HIP_VISIBLE_DEVICES"):
+        if key in selected:
+            os.environ[key] = selected[key]
+        else:
+            os.environ.pop(key, None)
     port = _free_port()
     prefix = f"startlux-prism-tp-{os.getpid()}-{port}"
     _sweep_stale()
@@ -614,6 +645,9 @@ def _follow(rank, world, port, prefix):
                 torch.cuda.empty_cache()
             g.chan.finished()
     torch.cuda.synchronize()
+    if torch.version.hip is not None:
+        g._release_graphs()
+        g.objs.clear()                               # release captured RCCL graphs before their communicators
     dist.destroy_process_group()
 
 

@@ -121,6 +121,8 @@ class KQuant:
     def as_q8(self, chunk=16384):
         """Q8_0 blocks of the dequantized values (the embedding kernel reads Q8_0): one more rounding, to 8 bits and an
         fp16 scale per 32 values, as llama.cpp quantizes Q8_0."""
+        if torch.version.hip is not None and self.raw.device.type == "cuda":
+            chunk = min(chunk, 1024)
         n, k = self.shape
         qs = torch.empty(n, k, dtype=torch.int8, device=self.raw.device)
         d = torch.empty(n, k // QK, dtype=torch.float16, device=self.raw.device)
@@ -210,7 +212,7 @@ class Weights:
 
     def to(self, device):
         def mv(x):
-            if isinstance(x, (Q8, KQuant, torch.Tensor)):
+            if isinstance(x, (Q8, KQuant, torch.Tensor)) or (hasattr(x, "dequant") and hasattr(x, "to")):
                 return x.to(device)
             return x
         layers = [Layer(**{f.name: mv(getattr(l, f.name)) for f in dataclasses.fields(Layer)}) for l in self.layers]

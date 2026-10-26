@@ -39,8 +39,10 @@ def default_path(gguf):
 
 
 def first_gpu(gpus=None):
-    """The first of --gpus, else of CUDA_VISIBLE_DEVICES, else 0."""
-    for s in (gpus, os.environ.get("CUDA_VISIBLE_DEVICES")):
+    """The first selected GPU, respecting ROCm visibility for calibration workers."""
+    from .backends import is_hip
+    visible = "HIP_VISIBLE_DEVICES" if is_hip() else "CUDA_VISIBLE_DEVICES"
+    for s in (gpus, os.environ.get(visible), os.environ.get("CUDA_VISIBLE_DEVICES")):
         if s and s.split(",")[0].strip():
             return s.split(",")[0].strip()
     return "0"
@@ -52,7 +54,8 @@ def ensure(gguf, model_dir, path, gpu):
         return
     print(f"int8 activation ranges: computing them once on GPU {gpu} (a bf16 forward of the calibration requests), "
           f"kept in {path}", flush=True)
-    env = dict(os.environ, CUDA_VISIBLE_DEVICES=str(gpu))
+    from .backends import device_env
+    env = device_env(gpu)
     r = subprocess.run([sys.executable, "-m", "startlux_prism.calib", gguf, model_dir, path], env=env)
     if r.returncode != 0 or not os.path.exists(path):
         sys.exit(f"computing the int8 activation ranges failed (exit code {r.returncode})")

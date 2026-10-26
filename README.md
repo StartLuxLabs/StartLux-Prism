@@ -1,8 +1,9 @@
 # StartLux-Prism
 
 **Fast, exact inference for [StartLux-Decision](https://huggingface.co/startlux-models/collections) models on NVIDIA
-GPUs.** StartLux-Prism serves StartLux-Decision v1 and v1.1 AutoThink (4B, 9B, 27B) straight from their released GGUF
-files, behind the TypeSafe `/v1/systemone` API, on GPUs from Ampere to Blackwell, one or several. Like a prism that
+and AMD Instinct MI355X GPUs.** StartLux-Prism serves StartLux-Decision v1 and v1.1 AutoThink (4B, 9B, 27B) straight
+from their released GGUF files, behind the TypeSafe `/v1/systemone` API, on NVIDIA GPUs from Ampere to Blackwell and
+AMD MI355X, one or several. Like a prism that
 splits light into its spectrum, it turns each question into a calibrated probability for every option.
 
 **[Live comparison](#live-comparison-video-understanding)** · **[Installation](#installation)** · **[Quick start](#quick-start)** · **[Example](#example)** · **[Models and GPUs](#supported-models-and-gpus)** · **[Serving guide](docs/serving.md)** · **[Benchmarks](docs/benchmarks.md)**
@@ -49,7 +50,31 @@ HTTP time, median of 5 runs, model loading excluded.
 - **One GPU or several.** Data parallelism for throughput (3.92× on four H200s) and tensor parallelism (`--tp 2` or
   `4`) for latency.
 
+## AMD ROCm support
+
+MI355X (`gfx950`) runs BF16, INT8, W4A8 and explicit W4A16, with graphs, FP8 KV
+cache, images, AutoThink, Instant, data parallelism and INT8 tensor parallelism.
+See [MI355X setup and the measured validation scope](docs/mi355x.md).
+The [27B INT8 performance report](docs/mi355x_performance.md) records measured
+bandwidth, compute throughput and decision latency before and after MI355X tile selection.
+An opt-in [native MXFP4 profile](docs/mi355x.md#experimental-native-mxfp4) converts
+original 27B BF16 weights and improves measured HTTP latency by 1.42–1.68× over
+the earlier tuned INT8 profile. See the [results and remaining quality gates](docs/mi355x_next_version_results.md).
+The current-tree FP4 recheck measures **14.69 ms p50 / 14.74 ms p95** for the
+three-question `readme3` request; the **12 ms target remains open**. A matching
+graph profile identifies GEMM, activation quantization and GDN as the main GPU
+costs. The [next study](docs/mi355x_next_version_speedup_plan.md) tracks the
+remaining latency and hardware-efficiency work.
+
+Radeon R9700 (`gfx1201`) support is developed separately in
+[PR #19](https://github.com/StartLuxLabs/StartLux-Prism/pull/19).
+The MI355X measurements do not extend the NVIDIA accuracy or performance claims
+above to AMD.
+
 ## Installation
+
+**AMD Instinct MI355X (`gfx950`):** use the matched ROCm container and launch commands in
+[the MI355X guide and validation record](docs/mi355x.md). The CUDA requirements below are for NVIDIA.
 
 | Component | Requirement |
 |---|---|
@@ -192,12 +217,16 @@ The [live comparison](#live-comparison-video-understanding) sends this kind of r
 
 `--precision bf16` runs the same weights dequantized, on cuBLAS, as the reference for parity tests.
 
+On ROCm it uses PyTorch's BF16 GEMMs. MI355X also runs INT8, W4A8 and the explicit W4A16 profile;
+see [the tested model and feature matrix](docs/mi355x.md).
+
 | GPU | Architecture | Status |
 |---|---|---|
 | H200 | Hopper, sm_90a | Tuned GEMM tables: int8 and W4A8 on warpgroup MMA with TMA (W4A8 from 128 rows) |
 | RTX 5090 | Blackwell, sm_120 | Tuned GEMM tables: int8, W4A8 |
 | A800 | Ampere, sm_80 | Tuned GEMM tables: int8, W4A8 |
 | RTX 4090 | Ada, sm_89 | Tested without tables: int8 on the Triton kernel, W4A8 on its tile rule |
+| MI355X | CDNA 4, gfx950 | ROCm/Triton; AutoThink and Instant, graphs, FP8 KV cache, images, DP and INT8 TP; [validation](docs/mi355x.md) |
 
 Data parallelism runs every precision; tensor parallelism runs the int8 path on 2 or 4 GPUs (measured on H200s). The
 models and files measured on each GPU: [Models, GPUs and precisions](docs/serving.md#models-gpus-and-precisions).
@@ -217,7 +246,7 @@ Endpoints: `POST /v1/systemone` (also `/v1/decisions`), `GET /v1/models`, `GET /
 
 | Server flag | Default | Description |
 |---|---|---|
-| `--precision` | `auto` | `int8` for Q8_0 files, `w4a8` for Q4_K_M files, `bf16` as the reference |
+| `--precision` | `auto` | `int8` for Q8_0 files, `w4a8` for Q4_K_M files, `bf16` as the reference; `w4a16` is an explicit experimental ROCm option |
 | `--gpus`, `--tp` | | The GPUs; the GPUs per model (2 or 4 for the 27B) |
 | `--max-tokens` | from free memory | The largest batch (131,072 tokens for the 27B on an H200); longer requests get HTTP 422 |
 | `--prefix-cache-tokens` | 65,536 | KV rows kept for evidence that comes again |
