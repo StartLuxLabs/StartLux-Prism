@@ -6,11 +6,14 @@ The initial checkpoint is `StartLux-Decision-v1.1-27B-AutoThink-Q4_K_M.gguf`
 (16,547,400,096 bytes). Other architectures and full-model BF16/W8A8 are not
 qualified. ROCm tensor/data parallelism is deliberately rejected.
 
-This draft depends on the separate fixes for
+The separate fixes for
 [lazy decode graph capture](https://github.com/StartLuxLabs/StartLux-Prism/pull/17)
-and [omitted thought budgets](https://github.com/StartLuxLabs/StartLux-Prism/pull/18).
-Apply those fixes before the complete AutoThink/graph checks below. The backend
-diff itself does not duplicate either fix.
+and [omitted thought budgets](https://github.com/StartLuxLabs/StartLux-Prism/pull/18)
+are now merged upstream and included in this branch.
+The [official 9B report](amd_r9700_9b.md) covers the newer projection tuning and
+W4A16 text-service qualification. The [upstream integration report](amd_pr19_integration.md)
+records the checks after merging FP8 KV-cache support. ROCm retains its default
+16-bit KV cache; `--kv-fp8` is explicitly rejected until that mode is qualified.
 
 ## Environment and launch
 
@@ -62,9 +65,9 @@ The 8K prefill capacity check does not qualify 8K AutoThink.
 Change the launch argument to `--precision w4a16` to select the separately measured
 FP16-activation profile. It retains compressed weights and the full Q8 generation
 head. It changes projection/intermediate/embedding numerical semantics and passes
-the local frozen FP32 readout thresholds. Single-sequence decode remains slower
-than the optimized W4A8 path, and several engineering speed goals are unmet.
-See [the W4A16 scope, measurements and reproduction commands](amd_w4a16.md).
+the local frozen FP32 readout thresholds. Performance depends on the checkpoint:
+see the separate [27B W4A16 report](amd_w4a16.md) and
+[9B measurements and reproduction protocol](amd_r9700_9b.md).
 
 The W4A8 controls and FP32 limitation below describe W4A8. For W4A16,
 `STARTLUX_PRISM_AMD_W4A16=auto` selects the qualified table and `reference` restores

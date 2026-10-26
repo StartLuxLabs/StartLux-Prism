@@ -56,7 +56,9 @@ An explicit compressed [W4A16 profile](docs/amd_w4a16.md) passes the local FP32
 readout checks and has separate performance/service evidence. Automatic Q4_K_M
 precision remains W4A8; both profiles are experimental.
 See [AMD setup and numerical limitations](docs/amd.md) and the
-[measured R9700 acceleration report](docs/amd_acceleration.md). This does not extend
+[official 9B measurements](docs/amd_r9700_9b.md), including the
+[current upstream integration checks](docs/amd_pr19_integration.md).
+The earlier [27B acceleration report](docs/amd_acceleration.md) remains separate. This does not extend
 the NVIDIA accuracy or performance claims above to AMD.
 
 ## Installation

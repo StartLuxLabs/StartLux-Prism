@@ -1,5 +1,9 @@
 # Experimental compressed W4A16 on R9700
 
+This is the earlier **27B** qualification. For the separately tuned official 9B,
+see [the 9B report](amd_r9700_9b.md) and
+[current upstream integration checks](amd_pr19_integration.md).
+
 This opt-in profile uses the same 16.55 GB v1.1 27B AutoThink Q4_K_M checkpoint
 on one Radeon AI PRO R9700 (`gfx1201`). It passes the local frozen FP32 readout
 thresholds and the service checks below. Several speed targets remain unmet;
@@ -182,7 +186,7 @@ eight individual questions against mixed/reordered batches, sharing and graphs.
 
 The [compact evidence](../bench/results/r9700_w4a16_20261026.json) preserves
 round-level measurements, original slow samples, selection decisions, shape
-samples, source/runtime identities and every target assessment. The two existing
-bugfix dependencies remain separate: #17 and #18 must be applied to this backend
-for the complete graph/AutoThink qualification. Other architectures, models and
+samples, source/runtime identities and every target assessment. The original
+qualification included the separate fixes #17 and #18; both are now merged
+upstream and included in this branch. Other architectures, models and
 runtime combinations need their own qualification.
