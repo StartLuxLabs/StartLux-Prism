@@ -104,9 +104,9 @@ no VRAM-size gate. Per-GEMM speedup of CUTLASS over Triton with the same packed 
 | down (4096, 12288) | 1.03x | 1.09x | 1.53x | 1.60x |
 
 At the end-to-end level, on StartLux-Decision-v1.1-9B-AutoThink with the smoothed calibration above,
-32k context, FP8 KV, `think_seqs=4`, and the same binary/config.  The MXFP4 MLP engine path and the
-converter and the FP8 KV arena are in this PR.  These numbers are the measured 9B configuration; the same
-`--kv-fp8` flag is what keeps 32k inside 16 GB:
+32k context, `think_seqs=4`, and the same binary/config.  The MXFP4 MLP engine path and the converter are
+in this PR.  The measurements below used the experimental FP8 KV combination; that combination is now
+refused with MXFP4 (see the accuracy limits below), so current MXFP4 runs without `--kv-fp8`:
 
 | workload | Triton | CUTLASS | |
 |---|---|---|---|
@@ -150,7 +150,7 @@ not an architecture-tag switch.
 The real engine path is `Options(precision="mxfp4")` / `--precision mxfp4`: it builds the W8A8
 attention/GDN weights from a Q8_0 file, loads the MLP side file, folds `post_norm / s_gu`, and runs the
 MXFP4 MLP in prefill, the read-out head, and the thought decoder.  It is still MLP-only; full-FP4
-attention/GDN remains a separate research path; `--kv-fp8` is included.
+attention/GDN remains a separate research path; `--kv-fp8` is separate and is not combined with MXFP4.
 
 `startlux_prism/tools/mxfp4_reference.py` is the compact reference for the same scale handling; it is not
 imported by the engine and runs one MLP block:
