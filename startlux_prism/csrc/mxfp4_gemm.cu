@@ -72,8 +72,8 @@ __global__ void repack_sf_kernel(TensorSF t, const uint8_t* s, int MN, int KS) {
 }
 
 template <class ElementC, class ElementD, class KernelT>
-void run(const void* aq, const void* as, const void* bq, const void* bs, void* out,
-         int M, int N, int K, float alpha, float beta, cudaStream_t stream) {
+int run(const void* aq, const void* as, const void* bq, const void* bs, void* out,
+        int M, int N, int K, float alpha, float beta, cudaStream_t stream) {
   using Gemm = typename KernelT::Gemm;
   using LayoutSFA = typename KernelT::LayoutSFA;
   using LayoutSFB = typename KernelT::LayoutSFB;
@@ -108,9 +108,10 @@ void run(const void* aq, const void* as, const void* bq, const void* bs, void* o
     workspace_size = need;
   }
   Gemm gemm;
-  gemm.can_implement(args);
-  gemm.initialize(args, workspace, stream);
-  gemm.run(stream);
+  if (gemm.can_implement(args) != cutlass::Status::kSuccess) return 1;
+  if (gemm.initialize(args, workspace, stream) != cutlass::Status::kSuccess) return 2;
+  if (gemm.run(stream) != cutlass::Status::kSuccess) return 3;
+  return 0;
 }
 
 }  // namespace mxfp4_launcher
@@ -151,15 +152,17 @@ void mxfp4_prepare_sfb(const void* s, void* dst, int N, int K, cudaStream_t stre
   repack_sf_kernel<<<(n + 255) / 256, 256, 0, stream>>>(tS, (const uint8_t*)s, N, K / 32);
 }
 
-void mxfp4_gemm(const void* aq, const void* as, const void* bq, const void* bs, void* out,
-                 int M, int N, int K, int epi, cudaStream_t stream) {
+int mxfp4_gemm(const void* aq, const void* as, const void* bq, const void* bs, void* out,
+                int M, int N, int K, int epi, cudaStream_t stream) {
   if (epi == 0) {
     using K0 = Kernel<cutlass::bfloat16_t, cutlass::bfloat16_t>;
-    run<cutlass::bfloat16_t, cutlass::bfloat16_t, K0>(aq, as, bq, bs, out, M, N, K, 1.f, 0.f, stream);
-  } else {
-    using K1 = Kernel<float, float>;
-    run<float, float, K1>(aq, as, bq, bs, out, M, N, K, 1.f, 1.f, stream);
+    return run<cutlass::bfloat16_t, cutlass::bfloat16_t, K0>(aq, as, bq, bs, out, M, N, K, 1.f, 0.f, stream);
   }
+  if (epi == 1) {
+    using K1 = Kernel<float, float>;
+    return run<float, float, K1>(aq, as, bq, bs, out, M, N, K, 1.f, 1.f, stream);
+  }
+  return 4;
 }
 
 }  // extern "C"

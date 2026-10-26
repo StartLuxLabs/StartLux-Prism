@@ -170,21 +170,40 @@ this module is the minimal scale-handling reference.
 
 ## Engine integration
 
-`--precision mxfp4` is opt-in and runs the MLP in MXFP4 with the rest W8A8; `--kv-fp8` gives the
-32k/16 GB KV cache:
+`--precision mxfp4` is opt-in and runs the MLP in MXFP4 with the rest W8A8.  It is a lower-precision
+mode: `auto` never selects it, and the start-up log and `/health` mark it.  `--kv-fp8` is a separate
+opt-in and is refused together with MXFP4 because that combination has produced confident wrong answers:
 
 ```bash
 python -m startlux_prism.server --gguf MODEL.gguf --model-dir MODEL_DIR --precision mxfp4 \
-  --calib int8_calib.pt --mxfp4-side MODEL_DIR/mxfp4/mlp_smooth.pt --kv-fp8
+  --calib int8_calib.pt --mxfp4-side MODEL_DIR/mxfp4/mlp_smooth.pt
 ```
 
 The side file is optional: without one, the engine packs the GGUF's MLP (weight-only, scale 1).  A Q8_0
-file and the int8 calibration file are required.  The engine loads the side file once, folds
-`post_norm / s_gu`, keeps the W8A8 attention/GDN path, and uses the MXFP4 MLP in prefill, the read-out
-head and the thought decoder.  It falls back to Triton when the CUTLASS `.so` is missing or the GPU is not
-SM120/SM121.  `--kv-fp8` stores the KV cache as e4m3 bytes with one fp32 scale per token and KV head;
-full-FP4 attention/GDN remains a separate experiment.
+file is required; the int8 calibration file is made on the first start.  The engine loads the side file
+once, folds `post_norm / s_gu`, keeps the W8A8 attention/GDN path, and uses the MXFP4 MLP in prefill, the
+read-out head and the thought decoder.  It falls back to Triton below about 64 rows and when the CUTLASS
+`.so` is missing or the GPU is not SM120/SM121.  `--kv-fp8` stores the KV cache as e4m3 bytes with one
+fp32 scale per token and KV head; full-FP4 attention/GDN remains a separate experiment.
 
 The C ABI is intentionally small: `mxfp4_sfb_bytes`, `mxfp4_sfa_bytes`,
 `mxfp4_prepare_sfb`, `mxfp4_prepare_sfa`, and `mxfp4_gemm`. The shared library keeps one
-scratch workspace per process, sized by CUTLASS at the first call.
+scratch workspace per process, sized by CUTLASS at the first call.  `mxfp4_gemm` returns 0 on
+success, 1–3 for a failed `can_implement`/`initialize`/`run`, and 4 for an invalid epilogue; the
+Python wrapper raises instead of silently using the output.
+
+## Accuracy and limits
+
+231 public JevBench items, v1.1 9B AutoThink on an RTX 5090, `think_mode=never`,
+`--allow-none off --gate 0.9`, against the bf16 reference:
+
+| variant | same decision | mean \|dp\| | max \|dp\| | items > 0.05 |
+|---|---:|---:|---:|---:|
+| int8 | 225/231 | 0.0110 | 0.117 | 12 |
+| W4A8 (Q4_K_M, mixed 4/6-bit) | 225/231 | 0.0186 | 0.260 | 27 |
+| **MXFP4 (Q8_0 source, smoothed)** | **221/231** | **0.0307** | **0.376** | **45** |
+
+MXFP4 is a product trade-off, not an int8 replacement.  Quantizing the MLP from the BF16 checkpoint
+instead of Q8_0 did not improve the 231-item result, and FP4 weights with FP8 activations did not
+either; the remaining error is in the 4-bit weights.  The MXFP4 + `--kv-fp8` combination is
+explicitly rejected.

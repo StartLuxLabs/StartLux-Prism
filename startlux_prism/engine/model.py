@@ -826,16 +826,17 @@ class Engine:
         from ..tp import out_proj
         return out_proj(self.tp, a, a_s, w, w_s, self.buf["tp_parts"], rows, n_rows, pdl=pd)
 
-    def _body_layers(self, T, cfg, b, c, L, h, n, parts, aq, as_, pend):
+    def _body_layers(self, T, cfg, b, c, L, h, n, parts, aq, as_, pend, mxfp4=False):
         pd = self.opt.pdl_mode if 0 < T <= self.opt.pdl else 0
         for i in range(n):
             lw = L[i]
             xq = self._rows(aq, T, cfg.hidden)
             KQ.norm_q8(h, lw["attn_norm_s"], xq, as_, c["tok"], T, cfg.eps, parts=parts, pending=pend)
+            gu_w = lw["gu_mx4"].q if mxfp4 else lw["gu_q"]
             if i in self.gdn_index:
                 proj = b["proj"][:T, :lw["inp_q"].shape[0]]
                 KW.gemm(xq, as_, lw["inp_q"], lw["inp_s"], proj, c["tok"], cfg.hidden, pdl=pd)
-                self._prefetch(T, [lw["gu_q"]])
+                self._prefetch(T, [gu_w])
                 self._gdn_core(i, proj, T)
                 mq = self._rows(aq, T, cfg.value_dim)
                 self._q8_input(KQ.gated_norm_q8, T, b["o"], proj, cfg.conv_dim, lw["ssm_norm"], lw["out_inv"], mq,
@@ -849,18 +850,27 @@ class Engine:
                     self._attn_core(i, proj, T, slots="kv")
                     return
                 KW.gemm(xq, as_, lw["qkv_q"], lw["qkv_s"], proj, c["tok"], cfg.hidden, pdl=pd)
-                self._prefetch(T, [lw["gu_q"]])
+                self._prefetch(T, [gu_w])
                 mix = self._attn_core(i, proj, T)
                 mq = self._rows(aq, T, cfg.n_head * cfg.head_dim)
                 self._q8_input(KQ.rows_q8, T, mix, lw["o_inv"], mq, as_, c["tok"], T)
                 pend = self._out_proj(mq, as_, lw["o_q"], lw["o_s"], h, c["tok"], parts, pd, T)
-            KQ.norm_q8(h, lw["post_norm_s"], xq, as_, c["tok"], T, cfg.eps, parts=parts, pending=pend)
-            KW.gemm(xq, as_, lw["gu_q"], lw["gu_s"], b["gu"][:T], c["tok"], cfg.hidden, pdl=pd)
-            fq = self._rows(aq, T, cfg.ffn)
-            self._q8_input(KQ.swiglu_q8, T, b["gu"], lw["down_inv"], fq, as_, c["tok"], T)
-            pend = self._out_proj(fq, as_, lw["down_q"], lw["down_s"], h, c["tok"], parts, pd, T)
+            if mxfp4:
+                KQ.fold(h, parts, pend, c["tok"], T)
+                if self.mlp_chunk and T > self.mlp_chunk:
+                    for t0 in range(0, T, self.mlp_chunk):
+                        rows = min(self.mlp_chunk, T - t0)
+                        self._mlp_mxfp4(lw, b, h[t0:t0 + rows], rows, cfg, self._cnt(rows))
+                else:
+                    self._mlp_mxfp4(lw, b, h, T, cfg, c["tok"])
+            else:
+                KQ.norm_q8(h, lw["post_norm_s"], xq, as_, c["tok"], T, cfg.eps, parts=parts, pending=pend)
+                KW.gemm(xq, as_, lw["gu_q"], lw["gu_s"], b["gu"][:T], c["tok"], cfg.hidden, pdl=pd)
+                fq = self._rows(aq, T, cfg.ffn)
+                self._q8_input(KQ.swiglu_q8, T, b["gu"], lw["down_inv"], fq, as_, c["tok"], T)
+                pend = self._out_proj(fq, as_, lw["down_q"], lw["down_s"], h, c["tok"], parts, pd, T)
 
-    def _head_int8(self, R):
+    def _head_int8(self, R, mxfp4=False):
         cfg, b, t, c = self.cfg, self.buf, self.tab, self.cnt
         i = cfg.n_layer - 1
         lw, parts = self.layers[i], b.get("parts")
@@ -877,12 +887,21 @@ class Engine:
         mq = self._rows(aq, R, cfg.n_head * cfg.head_dim)
         self._q8_input(KQ.rows_q8, R, b["mixr"], lw["o_inv"], mq, as_, c["read"], R)
         pend = self._out_proj(mq, as_, lw["o_q"], lw["o_s"], b["hr"], c["read"], parts, pd, R)
-        KQ.norm_q8(b["hr"], lw["post_norm_s"], xq, as_, c["read"], R, cfg.eps, parts=parts, pending=pend)
-        KW.gemm(xq, as_, lw["gu_q"], lw["gu_s"], b["gur"][:R], c["read"], cfg.hidden, pdl=pd)
-        fq = self._rows(aq, R, cfg.ffn)
-        self._q8_input(KQ.swiglu_q8, R, b["gur"], lw["down_inv"], fq, as_, c["read"], R)
-        pend = self._out_proj(fq, as_, lw["down_q"], lw["down_s"], b["hr"], c["read"], parts, pd, R)
-        KQ.fold(b["hr"], parts, pend, c["read"], R)
+        if mxfp4:
+            KQ.fold(b["hr"], parts, pend, c["read"], R)
+            KE.add_norm(b["hr"], None, lw["post_norm_fp4"], b["xr"], c["read"], R, cfg.eps, add=False)
+            KQ4.quantize_act(b["xr"][:R], b["aq4r"][:R], b["as4r"][:R])
+            KQ4.gemm(b["aq4r"][:R], b["as4r"][:R], lw["gu_mx4"], b["gur"][:R], R, epi=0)
+            KE.swiglu(b["gur"], b["actr"], c["read"], R)
+            KQ4.quantize_act(b["actr"][:R], b["fq4r"][:R], b["fs4r"][:R])
+            KQ4.gemm(b["fq4r"][:R], b["fs4r"][:R], lw["down_mx4"], b["hr"], R, epi=1)
+        else:
+            KQ.norm_q8(b["hr"], lw["post_norm_s"], xq, as_, c["read"], R, cfg.eps, parts=parts, pending=pend)
+            KW.gemm(xq, as_, lw["gu_q"], lw["gu_s"], b["gur"][:R], c["read"], cfg.hidden, pdl=pd)
+            fq = self._rows(aq, R, cfg.ffn)
+            self._q8_input(KQ.swiglu_q8, R, b["gur"], lw["down_inv"], fq, as_, c["read"], R)
+            pend = self._out_proj(fq, as_, lw["down_q"], lw["down_s"], b["hr"], c["read"], parts, pd, R)
+            KQ.fold(b["hr"], parts, pend, c["read"], R)
         self._readout(b["hr"][:R], R)
 
     def _body_mxfp4_i8(self, T):
@@ -893,46 +912,9 @@ class Engine:
         pend = None
         KE.embed(self.tab["ids"], self.embed, h, c["tok"], T)
         try:
-            self._body_layers_mxfp4(T, cfg, b, c, L, h, n, parts, aq, as_, pend)
+            self._body_layers(T, cfg, b, c, L, h, n, parts, aq, as_, pend, mxfp4=True)
         finally:
             self._join_side()
-
-    def _body_layers_mxfp4(self, T, cfg, b, c, L, h, n, parts, aq, as_, pend):
-        pd = self.opt.pdl_mode if 0 < T <= self.opt.pdl else 0
-        for i in range(n):
-            lw = L[i]
-            xq = self._rows(aq, T, cfg.hidden)
-            KQ.norm_q8(h, lw["attn_norm_s"], xq, as_, c["tok"], T, cfg.eps, parts=parts, pending=pend)
-            if i in self.gdn_index:
-                proj = b["proj"][:T, :lw["inp_q"].shape[0]]
-                KW.gemm(xq, as_, lw["inp_q"], lw["inp_s"], proj, c["tok"], cfg.hidden, pdl=pd)
-                self._prefetch(T, [lw["gu_mx4"].q])
-                self._gdn_core(i, proj, T)
-                mq = self._rows(aq, T, cfg.value_dim)
-                self._q8_input(KQ.gated_norm_q8, T, b["o"], proj, cfg.conv_dim, lw["ssm_norm"], lw["out_inv"], mq,
-                               as_, c["tok"], T, cfg)
-                pend = self._out_proj(mq, as_, lw["out_q"], lw["out_s"], h, c["tok"], parts, pd, T)
-            else:
-                proj = b["proj"][:T, :lw["qkv_q"].shape[0]]
-                if i == n - 1:
-                    KW.gemm(xq, as_, lw["qkv_q"][self.qn:], lw["qkv_s"][self.qn:], proj[:, self.qn:], c["tok"],
-                            cfg.hidden, pdl=pd)
-                    self._attn_core(i, proj, T, slots="kv")
-                    return
-                KW.gemm(xq, as_, lw["qkv_q"], lw["qkv_s"], proj, c["tok"], cfg.hidden, pdl=pd)
-                self._prefetch(T, [lw["gu_mx4"].q])
-                mix = self._attn_core(i, proj, T)
-                mq = self._rows(aq, T, cfg.n_head * cfg.head_dim)
-                self._q8_input(KQ.rows_q8, T, mix, lw["o_inv"], mq, as_, c["tok"], T)
-                pend = self._out_proj(mq, as_, lw["o_q"], lw["o_s"], h, c["tok"], parts, pd, T)
-            KQ.fold(h, parts, pend, c["tok"], T)
-            if self.mlp_chunk and T > self.mlp_chunk:
-                for t0 in range(0, T, self.mlp_chunk):
-                    rows = min(self.mlp_chunk, T - t0)
-                    self._mlp_mxfp4(lw, b, h[t0:t0 + rows], rows, cfg, self._cnt(rows))
-            else:
-                self._mlp_mxfp4(lw, b, h, T, cfg, c["tok"])
-            pend = None
 
     def _mlp_mxfp4(self, lw, b, out_h, rows, cfg, tok):
         """One layer's MLP over `rows` tokens: norm -> FP4 gate|up -> SwiGLU -> FP4 down (added into out_h)."""
@@ -944,27 +926,7 @@ class Engine:
         KQ4.gemm(b["fq4"][:rows], b["fs4"][:rows], lw["down_mx4"], out_h, rows, epi=1)
 
     def _head_mxfp4_i8(self, R):
-        cfg, b, t, c = self.cfg, self.buf, self.tab, self.cnt
-        lw, parts = self.layers[cfg.n_layer - 1], b.get("parts")
-        aq, as_ = b["aqr"], b["asr"]
-        KE.gather_rows(b["h"], t["read"], b["hr"], c["read"], R)
-        xq = self._rows(aq, R, cfg.hidden)
-        KQ.norm_q8(b["hr"], lw["attn_norm_s"], xq, as_, c["read"], R, cfg.eps)
-        qg = b["qgr"][:R]
-        pd = self.opt.pdl_mode if 0 < R <= self.opt.pdl else 0
-        KW.gemm(xq, as_, lw["qkv_q"][:self.qn], lw["qkv_s"][:self.qn], qg, c["read"], cfg.hidden, pdl=pd)
-        self._head_attention(qg, R)
-        mq = self._rows(aq, R, cfg.n_head * cfg.head_dim)
-        self._q8_input(KQ.rows_q8, R, b["mixr"], lw["o_inv"], mq, as_, c["read"], R)
-        pend = self._out_proj(mq, as_, lw["o_q"], lw["o_s"], b["hr"], c["read"], parts, pd, R)
-        KQ.fold(b["hr"], parts, pend, c["read"], R)
-        KE.add_norm(b["hr"], None, lw["post_norm_fp4"], b["xr"], c["read"], R, cfg.eps, add=False)
-        KQ4.quantize_act(b["xr"][:R], b["aq4r"][:R], b["as4r"][:R])
-        KQ4.gemm(b["aq4r"][:R], b["as4r"][:R], lw["gu_mx4"], b["gur"][:R], R, epi=0)
-        KE.swiglu(b["gur"], b["actr"], c["read"], R)
-        KQ4.quantize_act(b["actr"][:R], b["fq4r"][:R], b["fs4r"][:R])
-        KQ4.gemm(b["fq4r"][:R], b["fs4r"][:R], lw["down_mx4"], b["hr"], R, epi=1)
-        self._readout(b["hr"][:R], R)
+        self._head_int8(R, mxfp4=True)
 
     def _act(self, n, k, read=False):
         """W4A8 activations of n rows and k inputs: int8 [n, k], and super-block-major scales [k / 256, n] and split
@@ -1030,8 +992,14 @@ class Engine:
          self._body_w4 if self.w4 else self._body_int8 if self.int8 else self._body_bf16)(T)
 
     def _head(self, R):
-        (self._head_mxfp4_i8 if self.mxfp4 else
-         self._head_w4 if self.w4 else self._head_int8 if self.int8 else self._head_bf16)(R)
+        if self.mxfp4:
+            self._head_int8(R, mxfp4=True)
+        elif self.w4:
+            self._head_w4(R)
+        elif self.int8:
+            self._head_int8(R)
+        else:
+            self._head_bf16(R)
 
     # ------------------------------------------------------------------ system text
     @torch.no_grad()

@@ -242,9 +242,11 @@ class Decoder:
         from ..tp import out_proj                    # this rank's int32 sums, all-reduced
         return out_proj(self.tp, a, a_s, w, w_s, self.buf["tp_parts"], rows, n, pdl=pd)
 
-    def _layers_int8(self, B):
+    def _layers_int8(self, B, mxfp4=False):
         cfg, e, b, n = self.cfg, self.eng, self.buf, self.n
         h, parts, aq, as_ = b["h"], b.get("parts"), b["aq"], b["as_"]
+        if mxfp4:
+            x4, aq4, as4, act4, fq4, fs4 = b["x4"], b["aq4"], b["as4"], b["act4"], b["fq4"], b["fs4"]
         if self.tp is not None:
             self.tp.begin(B)
         pend = None
@@ -268,11 +270,21 @@ class Decoder:
                 mq = self._rows(aq, B, cfg.n_head * cfg.head_dim)
                 self._q8_input(KQ.rows_q8, B, mix, lw["o_inv"], mq, as_, n, B)
                 pend = self._out_proj(mq, as_, lw["o_q"], lw["o_s"], h, n, parts, pd, B)
-            KQ.norm_q8(h, lw["post_norm_s"], xq, as_, n, B, cfg.eps, parts=parts, pending=pend)
-            KW.gemm(xq, as_, lw["gu_q"], lw["gu_s"], b["gu"][:B], n, cfg.hidden, pdl=pd)
-            fq = self._rows(aq, B, cfg.ffn)
-            self._q8_input(KQ.swiglu_q8, B, b["gu"], lw["down_inv"], fq, as_, n, B)
-            pend = self._out_proj(fq, as_, lw["down_q"], lw["down_s"], h, n, parts, pd, B)
+            if mxfp4:
+                KQ.fold(h, parts, pend, n, B)
+                KE.add_norm(h, None, lw["post_norm_fp4"], x4, n, B, cfg.eps, add=False)
+                KQ4.quantize_act(x4[:B], aq4[:B], as4[:B])
+                KQ4.gemm(aq4[:B], as4[:B], lw["gu_mx4"], b["gu"][:B], B, epi=0)
+                KE.swiglu(b["gu"], act4, n, B)
+                KQ4.quantize_act(act4[:B], fq4[:B], fs4[:B])
+                KQ4.gemm(fq4[:B], fs4[:B], lw["down_mx4"], h, B, epi=1)
+                pend = None
+            else:
+                KQ.norm_q8(h, lw["post_norm_s"], xq, as_, n, B, cfg.eps, parts=parts, pending=pend)
+                KW.gemm(xq, as_, lw["gu_q"], lw["gu_s"], b["gu"][:B], n, cfg.hidden, pdl=pd)
+                fq = self._rows(aq, B, cfg.ffn)
+                self._q8_input(KQ.swiglu_q8, B, b["gu"], lw["down_inv"], fq, as_, n, B)
+                pend = self._out_proj(fq, as_, lw["down_q"], lw["down_s"], h, n, parts, pd, B)
         KQ.fold(h, parts, pend, n, B)
         KD.head_quant(h, e.out_norm, b["hq"], b["hs"], n, B, cfg.eps)
         if self.vshard:                              # this rank's share of the vocabulary, then every rank's
@@ -345,45 +357,7 @@ class Decoder:
 
     def _layers_mxfp4(self, B):
         """W8A8 attention/GDN, MXFP4 MLP (the engine's mixed precision on one token per sequence)."""
-        cfg, e, b, n = self.cfg, self.eng, self.buf, self.n
-        h, parts, aq, as_ = b["h"], b.get("parts"), b["aq"], b["as_"]
-        x4, aq4, as4, act4, fq4, fs4 = b["x4"], b["aq4"], b["as4"], b["act4"], b["fq4"], b["fs4"]
-        pend = None
-        pd = e.opt.pdl_mode if 0 < B <= e.opt.pdl else 0
-        for i in range(cfg.n_layer):
-            lw = e.layers[i]
-            xq = self._rows(aq, B, cfg.hidden)
-            KQ.norm_q8(h, lw["attn_norm_s"], xq, as_, n, B, cfg.eps, parts=parts, pending=pend)
-            if i in e.gdn_index:
-                proj = b["proj"][:B, :lw["inp_q"].shape[0]]
-                KW.gemm(xq, as_, lw["inp_q"], lw["inp_s"], proj, n, cfg.hidden, pdl=pd)
-                self._gdn(i, proj, B)
-                mq = self._rows(aq, B, cfg.value_dim)
-                self._q8_input(KQ.gated_norm_q8, B, b["o"], proj, cfg.conv_dim, lw["ssm_norm"], lw["out_inv"], mq,
-                               as_, n, B, cfg)
-                pend = self._out_proj(mq, as_, lw["out_q"], lw["out_s"], h, n, parts, pd, B)
-            else:
-                proj = b["proj"][:B, :lw["qkv_q"].shape[0]]
-                KW.gemm(xq, as_, lw["qkv_q"], lw["qkv_s"], proj, n, cfg.hidden, pdl=pd)
-                mix = self._attn(i, proj, B)
-                mq = self._rows(aq, B, cfg.n_head * cfg.head_dim)
-                self._q8_input(KQ.rows_q8, B, mix, lw["o_inv"], mq, as_, n, B)
-                pend = self._out_proj(mq, as_, lw["o_q"], lw["o_s"], h, n, parts, pd, B)
-            KQ.fold(h, parts, pend, n, B)
-            KE.add_norm(h, None, lw["post_norm_fp4"], x4, n, B, cfg.eps, add=False)
-            KQ4.quantize_act(x4[:B], aq4[:B], as4[:B])
-            KQ4.gemm(aq4[:B], as4[:B], lw["gu_mx4"], b["gu"][:B], B, epi=0)
-            KE.swiglu(b["gu"], act4, n, B)
-            KQ4.quantize_act(act4[:B], fq4[:B], fs4[:B])
-            KQ4.gemm(fq4[:B], fs4[:B], lw["down_mx4"], h, B, epi=1)
-            pend = None
-        KQ.fold(h, parts, pend, n, B)
-        KD.head_quant(h, e.out_norm, b["hq"], b["hs"], n, B, cfg.eps)
-        if self.vshard:
-            KD.head_q8(b["hq"], b["hs"], self.head_w, self.head_s, self.vshards[self.tp.rank][:B], n, B)
-            KD.gather_vocab([x[:B] for x in self.vshards], b["logits"][:B], n, B, self.tp.sync(self.vshards))
-        else:
-            KD.head_q8(b["hq"], b["hs"], self.head_w, self.head_s, b["logits"], n, B)
+        self._layers_int8(B, mxfp4=True)
 
     def _forward(self, B):
         """One step for B rows (bucket): input tokens, the model, the logits, the sampled tokens -> tok_out."""
@@ -398,14 +372,21 @@ class Decoder:
     def _graph(self, B):
         g = self._graphs.get(B)
         if g is None:
-            st = torch.cuda.Stream()
-            st.wait_stream(torch.cuda.current_stream())
-            with torch.cuda.stream(st):
-                self._forward(B)                     # compile / autotune outside the capture
-            torch.cuda.current_stream().wait_stream(st)
-            g = torch.cuda.CUDAGraph()
-            with torch.cuda.graph(g, pool=self._pool):
-                self._forward(B)
+            # Lazy capture can happen on a live first step. Compilation and capture
+            # must not advance its recurrent state or consume its previous token.
+            live = self.n.clone()
+            self.n.zero_()
+            try:
+                st = torch.cuda.Stream()
+                st.wait_stream(torch.cuda.current_stream())
+                with torch.cuda.stream(st):
+                    self._forward(B)                 # compile / autotune outside the capture
+                torch.cuda.current_stream().wait_stream(st)
+                g = torch.cuda.CUDAGraph()
+                with torch.cuda.graph(g, pool=self._pool):
+                    self._forward(B)
+            finally:
+                self.n.copy_(live)
             self._pool = g.pool()
             self._graphs[B] = g
         return g

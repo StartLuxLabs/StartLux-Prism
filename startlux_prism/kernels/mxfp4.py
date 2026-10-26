@@ -38,7 +38,7 @@ class MX4(NamedTuple):
 
 
 def _e2m1_code(x):
-    """|x| / scale in [0, 6] -> the 3-bit magnitude code of e2m1 (nearest, midpoints round up)."""
+    """|x| / scale in [0, 6] -> the 3-bit magnitude code of e2m1 (nearest; strict thresholds round midpoints down)."""
     import numpy as np
 
     a = np.abs(x)
@@ -189,6 +189,7 @@ def quantize_act(x: torch.Tensor, q: torch.Tensor, s: torch.Tensor) -> None:
 # --------------------------------------------------------------------- CUTLASS (SM120/121, opt-in)
 _CUTLASS = None
 _CUTLASS_SFA = {}
+CUTLASS_MIN_ROWS = 64          # below this Triton is faster; CUTLASS wins from about 64 rows up
 
 
 def _cutlass():
@@ -218,6 +219,7 @@ def _cutlass():
     lib.mxfp4_prepare_sfb.argtypes = [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_int, ctypes.c_int,
                                         ctypes.c_void_p]
     lib.mxfp4_gemm.argtypes = [ctypes.c_void_p] * 5 + [ctypes.c_int] * 4 + [ctypes.c_void_p]
+    lib.mxfp4_gemm.restype = ctypes.c_int
     _CUTLASS = lib
     return lib
 
@@ -293,8 +295,8 @@ def gemm(a_q, a_s, w: MX4, out, n_rows, epi=0, out_stride=None):
     M, K = n_rows, w.k
     N = w.n
     lib = _cutlass()
-    if (lib is not None and w.cs is not None and out.stride(0) == N and a_q.is_contiguous()
-            and a_s.is_contiguous()):
+    if (lib is not None and w.cs is not None and M >= CUTLASS_MIN_ROWS and out.stride(0) == N
+            and a_q.is_contiguous() and a_s.is_contiguous()):
         key = (M, K, a_q.device.index)
         sfa = _CUTLASS_SFA.get(key)
         nbytes = lib.mxfp4_sfa_bytes(M, K)
@@ -303,8 +305,10 @@ def gemm(a_q, a_s, w: MX4, out, n_rows, epi=0, out_stride=None):
             _CUTLASS_SFA[key] = sfa
         stream = ctypes.c_void_p(torch.cuda.current_stream().cuda_stream)
         lib.mxfp4_prepare_sfa(a_s.data_ptr(), sfa.data_ptr(), M, K, stream)
-        lib.mxfp4_gemm(a_q.data_ptr(), sfa.data_ptr(), w.q.data_ptr(), w.cs.data_ptr(), out.data_ptr(),
-                       M, N, K, epi, stream)
+        rc = lib.mxfp4_gemm(a_q.data_ptr(), sfa.data_ptr(), w.q.data_ptr(), w.cs.data_ptr(), out.data_ptr(),
+                            M, N, K, epi, stream)
+        if rc:
+            raise RuntimeError(f"CUTLASS MXFP4 GEMM failed (status {rc}) at M={M}, N={N}, K={K}, epi={epi}")
         return
     BM, BN, BK, GROUP_M, warps, stages = pick(M, N, K, epi)
     grid = (triton.cdiv(M, BM) * triton.cdiv(N, BN),)

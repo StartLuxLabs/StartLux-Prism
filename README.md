@@ -223,6 +223,7 @@ Endpoints: `POST /v1/systemone` (also `/v1/decisions`), `GET /v1/models`, `GET /
 | `--max-tokens` | from free memory | The largest batch (131,072 tokens for the 27B on an H200); longer requests get HTTP 422 |
 | `--prefix-cache-tokens` | 65,536 | KV rows kept for evidence that comes again |
 | `--think-seqs` | as many as fit | Thoughts generated at once (64 for the 27B on an H200, 16 for the 9B in int8 on an RTX 5090) |
+| `--kv-fp8` | off | Keys and values as e4m3 with a scale per token and KV head (sm_89 or newer): about half the KV memory, so more thoughts and cached evidence fit |
 | `--gate`, `--none-check`, `--allow-none` | 0.6, on, on (v1.1) | The defaults of the request fields |
 
 Every field, flag and model folder: [serving guide](docs/serving.md).
@@ -280,7 +281,10 @@ so it changes latency, not decisions. Gains are largest on prefill and read-out;
 14%, because decode dominates there. These 9B numbers use the research branch's smoothed-MLP calibration and the
 opt-in MXFP4 path; they are not the default configuration. The generic kernel and a GGUF converter are included,
 including the optional smoothed calibration, and `--precision mxfp4` runs the MLP in the engine with the rest W8A8.
-FP8 KV is included (`--kv-fp8`); full-FP4 attention/GDN is separate, and a model-specific reference module shows the
+MXFP4 is opt-in and lower precision: `auto` never selects it, `/health` reports `lower_precision`, and it is not
+combined with `--kv-fp8`. On 231 public JevBench items (9B, `think_mode=never`, against bf16) it is 221/231 same
+decision, mean |dp| 0.0307, max 0.376; the full table and limitations are in [Blackwell MXFP4](docs/blackwell.md).
+FP8 KV is a separate opt-in; full-FP4 attention/GDN is separate, and a model-specific reference module shows the
 scale folding. The 9B model
 and one GPU were measured; 27B and multi-GPU were not. The 16 GB card is a test
 bed, not a memory-size gate: the same kernel leaves the freed MLP memory for context or concurrency on 32 GB and
