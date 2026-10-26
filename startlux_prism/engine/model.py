@@ -303,6 +303,9 @@ class Engine:
             self.layers.append(d)
             bar.update(i + 1)
         torch.cuda.empty_cache()
+        if self.opt.precision == "w4a8" and is_hip() and architecture() == "gfx1201":
+            from ..kernels.amd_w4a8_meta import prepare
+            self.amd_w4a8_prepack = prepare(self.layers)
         if not cfg.is_attention(cfg.n_layer - 1):
             raise ValueError("expected the last layer to be full attention")
         self.qn = cfg.n_head * cfg.head_dim * 2

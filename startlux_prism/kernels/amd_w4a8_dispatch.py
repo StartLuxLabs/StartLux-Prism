@@ -20,7 +20,7 @@ def kernel_identity():
     root = Path(__file__).parent
     digest = hashlib.sha256()
     for name in ("amd_w4a8.py", "amd_w4a8_dot.py", "amd_q4_prefill.py", "amd_q6_wmma.py",
-                 "amd_w4a8_dispatch.py", "../backends/math.py"):
+                 "amd_w4a8_dispatch.py", "amd_w4a8_meta.py", "../backends/math.py"):
         digest.update(name.encode())
         digest.update((root / name).read_bytes())
     source = (root / "w4a8.py").read_text()
@@ -87,6 +87,9 @@ def run(xq, a, xs, w, out, n_rows, epi, mode="auto"):
         gemm_triton(xq, a, xs, w, out, n_rows, epi, cfg=None if cfg is None else tuple(cfg))
     elif implementation == "q6scaled":
         from .amd_q6_wmma import gemm
+        gemm(xq, a, xs, w, out, n_rows, epi, cfg=tuple(cfg))
+    elif implementation == "scaled_meta":
+        from .amd_w4a8_meta import gemm
         gemm(xq, a, xs, w, out, n_rows, epi, cfg=tuple(cfg))
     elif implementation == "loop":
         from .amd_q4_prefill import gemm
