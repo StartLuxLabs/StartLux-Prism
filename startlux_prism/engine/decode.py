@@ -213,14 +213,14 @@ class Decoder:
         cfg, e, b, lw = self.cfg, self.eng, self.buf, self.eng.layers[i]
         ai = e.attn_index[i]
         KA.qkv_norm_rope(proj, lw["q_norm"], lw["k_norm"], self.t["pos"], self.t["kvrow"], e.inv_freq, b["qbuf"], e.kv,
-                         ai, self.n, B, cfg, slots="all", k8=e.k8)
+                         ai, self.n, B, cfg, slots="all", k8=e.k8, kv8s=e.kvs, kv_mode=e.kv_mode)
         mix = b["mix"][:B, :cfg.n_head * cfg.head_dim]
         if self.attn == "split":
             KD.attention(b["qbuf"], proj, e.kv, ai, self.t["kvs"], self.t["kvl"], self.attn_scratch, mix, self.n, B,
-                         cfg)
+                         cfg, kv8s=e.kvs, kv_mode=e.kv_mode)
         else:
             KA.tree_attention(b["qbuf"], proj, e.kv, ai, mix, self.t["blocks"], self.n, B, self.t["ranges"], cfg,
-                              k8=e.k8, read=True)
+                              k8=e.k8, read=True, kv8s=e.kvs, kv_mode=e.kv_mode)
         return mix
 
     def _q8_input(self, fn, rows, *args):
@@ -349,14 +349,21 @@ class Decoder:
     def _graph(self, B):
         g = self._graphs.get(B)
         if g is None:
-            st = torch.cuda.Stream()
-            st.wait_stream(torch.cuda.current_stream())
-            with torch.cuda.stream(st):
-                self._forward(B)                     # compile / autotune outside the capture
-            torch.cuda.current_stream().wait_stream(st)
-            g = torch.cuda.CUDAGraph()
-            with torch.cuda.graph(g, pool=self._pool):
-                self._forward(B)
+            # Lazy capture can happen on a live first step. Compilation and capture
+            # must not advance its recurrent state or consume its previous token.
+            live = self.n.clone()
+            self.n.zero_()
+            try:
+                st = torch.cuda.Stream()
+                st.wait_stream(torch.cuda.current_stream())
+                with torch.cuda.stream(st):
+                    self._forward(B)                 # compile / autotune outside the capture
+                torch.cuda.current_stream().wait_stream(st)
+                g = torch.cuda.CUDAGraph()
+                with torch.cuda.graph(g, pool=self._pool):
+                    self._forward(B)
+            finally:
+                self.n.copy_(live)
             self._pool = g.pool()
             self._graphs[B] = g
         return g

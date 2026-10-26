@@ -8,6 +8,12 @@ def is_hip():
     return torch.version.hip is not None
 
 
+def require_supported_kv_cache(kv_fp8=False):
+    if kv_fp8 and is_hip():
+        raise ValueError("--kv-fp8 is not qualified on the experimental ROCm backend; "
+                         "use the default 16-bit KV cache")
+
+
 @functools.lru_cache(None)
 def architecture(device=None):
     p = torch.cuda.get_device_properties(device)

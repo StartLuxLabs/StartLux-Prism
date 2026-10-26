@@ -5,6 +5,30 @@ from unittest.mock import patch
 from startlux_prism import backends as B
 
 
+def test_kv_cache_backend_contract():
+    with patch.object(B, "is_hip", return_value=True):
+        B.require_supported_kv_cache(False)
+        try:
+            B.require_supported_kv_cache(True)
+        except ValueError as e:
+            assert "not qualified" in str(e) and "16-bit KV cache" in str(e)
+        else:
+            raise AssertionError("FP8 KV must be rejected on ROCm")
+    with patch.object(B, "is_hip", return_value=False):
+        B.require_supported_kv_cache(True)  # CUDA's existing capability check remains in the server.
+
+
+def test_engine_rejects_hip_fp8_before_loading_weights():
+    from startlux_prism.engine.model import Engine, Options
+    with patch.object(B, "is_hip", return_value=True), patch.object(B.torch.cuda, "device_count", return_value=1):
+        try:
+            Engine("missing.gguf", "missing-model", Options(precision="w4a16", kv_fp8=True))
+        except ValueError as e:
+            assert "--kv-fp8" in str(e)
+        else:
+            raise AssertionError("Engine must validate KV mode before loading a model")
+
+
 def test_hip_single_gpu_contract():
     with patch.object(B, "is_hip", return_value=True):
         with patch.object(B.torch.cuda, "device_count", return_value=1):

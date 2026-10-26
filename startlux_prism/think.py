@@ -173,7 +173,7 @@ def default_controls(auto, **overrides):
 def parse_controls(body, defaults, max_budget):
     """A request's controls on top of the server defaults, as v1.1 parses them (an AutoThink model on an engine that
     streams thoughts); raises ValueError (HTTP 422) with v1.1's messages."""
-    out = defaults
+    out = dataclasses.replace(defaults, budget=min(defaults.budget, max_budget))
 
     def fraction(v, name):
         if isinstance(v, bool) or not isinstance(v, (int, float)) or not (math.isfinite(v) and 0 <= v <= 1):

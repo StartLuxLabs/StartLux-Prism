@@ -494,6 +494,34 @@ batch and thought (`tests/test_tp.py`), and it holds at 2 and 4 GPUs.  Numbers: 
   and on some shapes at 32-64 rows (1.07-1.25x); with seven TMA copies a super-block, its pipeline alone streamed Q4_K
   at 2.5 TB/s.
 
+## FP8 KV cache (2026-10-26)
+
+From StartLuxLabs/StartLux-Prism#21 (eric8810), merged on its own; the PR's MXFP4 MLP is under
+[Tried, not kept](#tried-not-kept).
+
+* **Format** (`--kv-fp8`, `Options.kv_fp8`): the QK-norm/RoPE kernel writes each token's keys and values, per kv head,
+  as e4m3 bytes with one fp32 scale (the largest |value| / 448). Tree attention and the decode kernel load the bytes,
+  scale them and go on in bf16: the products are the same, only the storage shrinks. A 9B KV row (8 attention layers,
+  4 kv heads of 256) takes 16.25 KiB instead of 32, a thought's slot and 5,120 rows 131.5 MiB instead of 210. It needs
+  sm_89 or newer, and replaces `--attn-qk8` (whose int8 keys sit beside bf16 ones). `tests/test_kv_fp8.py`: the writes
+  within e4m3's rounding of the bf16 ones (relative error 0.026), tree attention (causal and bidirectional) and decode
+  attention within 8e-3 of fp32 attention over the same dequantized values.
+* **One pass** (v1.1 9B AutoThink on the RTX 5090 at `--mem-fraction 0.8`, another process holding 0.8 GB; the 231
+  public JevBench questions one at a time): int8 makes the same decision as without it on 230, mean |dp| 0.0078 (max
+  0.164); against bf16 226 (int8 alone 225), mean |dp| 0.0099 (0.0110), max 0.094 (0.117). The same latency (22.19
+  against 22.23 ms), from 64 clients 53.5 against 54.7 requests/s. W4A8 (the Q4_K_M file): the same decision as without
+  it on 228, mean |dp| 0.0066 (max 0.132); against bf16 222 (W4A8 alone 225), mean |dp| 0.0198 (0.0186).
+* **Thoughts** (every item thinking, 2 x 231 requests on the same seeds, 16 thoughts at once either way): the same
+  lengths (+3 tokens a thought, standard error 44; 14 against 13 ran to the budget), 425 against 424 right. Sampled
+  thoughts part where the logits differ, so 434 of the 462 end in the same decision. Decoding speed is within
+  run-to-run noise: 1,208 against 1,260 thought tokens/s here, 1,346 against 1,296 in steady state (below).
+* **Memory:** `--think-seqs auto` picks 16 thoughts at once instead of 8 (a power of two, in half the memory left),
+  with batches still up to 24,576 tokens: with thoughts in steady state (32 clients, 240 s, counted from 60 s) 3.37
+  requests/s against 1.99. bf16 keys with `--think-seqs 16` set by hand fit there too, with batches up to 16,384 tokens,
+  at 3.85 requests/s (the thoughts' lengths differ from run to run: 1,296 thought tokens/s against 1,346).
+* **Off by default:** it moves the probabilities a little and pays only where memory is short. Not run yet with `--tp`
+  or on Hopper.
+
 ## Opt-in
 
 * **int8 attention scores** (`--attn-qk8`, `Options.attn_qk8`): keys also kept as int8 (one scale per token and kv
@@ -506,6 +534,8 @@ batch and thought (`tests/test_tp.py`), and it holds at 2 and 4 GPUs.  Numbers: 
   -> 0.0148, p95 0.060 -> 0.064, max 0.117 -> 0.148. Calibrated probabilities being the product, off by default.
   Simulated first (`tests/quant_sim.py`, 30 questions): adding fp8 p v as well (`+pv8`) flipped a decision and raised
   the mean |dp| to 0.017, so it was not built.
+* **e4m3 keys and values** (`--kv-fp8`, `Options.kv_fp8`): about half the KV memory, JevBench's decisions and speed
+  unchanged ([above](#fp8-kv-cache-2026-10-26)).
 
 ## Tried, not kept
 
@@ -539,6 +569,16 @@ batch and thought (`tests/test_tp.py`), and it holds at 2 and 4 GPUs.  Numbers: 
 * **FP4 (W4A4)**, simulated in fp32 on the reference over 22 questions (`tests/quant_sim.py`): NVFP4 kept 22/22
   decisions but with mean |dp| 0.045 (max 0.21) against W8A8's 0.016 (0.12); with SmoothQuant 19/22 (max 0.80); MXFP4
   21/22 (max 0.93). Calibrated probabilities are the product, so the 2x FP4 tensor rate is not taken.
+* **MXFP4 MLP weights on Blackwell, measured** (StartLuxLabs/StartLux-Prism#21 by eric8810, 2026-10-26): gate|up and
+  down as MXFP4 (e2m1, an e8m0 scale per 32) from the Q8_0 file with SmoothQuant (alpha 0.5) folded into the norms,
+  the activations quantized to MXFP4 by a kernel of their own, on Triton's `tl.dot_scaled` or a CUTLASS SM120
+  block-scaled GEMM (bit-identical to each other). On the v1.1 9B (RTX 5090), against bf16 on the 231 public JevBench
+  questions: the same decision on 221 (int8 and W4A8 225), mean |dp| 0.0307 (int8 0.0110, W4A8 0.0186), max 0.376
+  (0.117, 0.260), 45 questions moved by more than 0.05 (12, 27); with `--kv-fp8` too, max 0.880. From 64 clients
+  without thoughts 63.1 requests/s with CUTLASS against int8's 54.7 (Triton 55.5); one at a time slower (p50 9.0 and
+  10.05 ms against 7.95), and so are decode steps (CUTLASS at 1 / 8 / 32 sequences 7.67 / 8.10 / 9.45 ms against
+  6.39 / 6.94 / 8.96: it takes every size). With thoughts its gain was memory (16 thoughts at once against 8), which
+  the FP8 KV cache (above) gives int8 at int8's accuracy. Not merged; the PR's FP8 KV cache was.
 
 ## Open
 
