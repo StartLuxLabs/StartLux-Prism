@@ -1,0 +1,7 @@
+.git
+.venv
+**/__pycache__
+results
+build
+*.so
+models

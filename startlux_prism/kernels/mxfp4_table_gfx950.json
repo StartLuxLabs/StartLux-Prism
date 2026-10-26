@@ -1,0 +1,1137 @@
+{
+  "qualified": true,
+  "torch": "2.14.0+rocm10.1.0",
+  "hip": "7.16.26385",
+  "triton": "3.8.0",
+  "gpu": "AMD Instinct MI355X",
+  "kernel_sha256": "30dd5f447348dff1764e3ea64075449adb70551dd4c3028b7df58b74b927aba9",
+  "entries": [
+    {
+      "shape": [
+        1,
+        2048,
+        5120
+      ],
+      "live": 1,
+      "config": [
+        64,
+        64,
+        512,
+        4,
+        2,
+        16,
+        8
+      ],
+      "selection_ms": 0.013386674763001118,
+      "selection_file": "mi355x-fp4-locality.json",
+      "fp64_reference_pass": true,
+      "max_error_bound_fraction": 0.0,
+      "masks_pass": true,
+      "bf16_graph_replay_pass": true
+    },
+    {
+      "shape": [
+        1,
+        5120,
+        6144
+      ],
+      "live": 1,
+      "config": [
+        64,
+        64,
+        512,
+        4,
+        2,
+        16,
+        0
+      ],
+      "selection_ms": 0.014698924440326113,
+      "selection_file": "mi355x-fp4-locality.json",
+      "fp64_reference_pass": true,
+      "max_error_bound_fraction": 0.0,
+      "masks_pass": true,
+      "bf16_graph_replay_pass": true
+    },
+    {
+      "shape": [
+        1,
+        5120,
+        17408
+      ],
+      "live": 1,
+      "config": [
+        64,
+        64,
+        512,
+        4,
+        2,
+        16,
+        8
+      ],
+      "selection_ms": 0.03347518791755041,
+      "selection_file": "mi355x-fp4-locality.json",
+      "fp64_reference_pass": true,
+      "max_error_bound_fraction": 0.0,
+      "masks_pass": true,
+      "bf16_graph_replay_pass": true
+    },
+    {
+      "shape": [
+        1,
+        12288,
+        5120
+      ],
+      "live": 1,
+      "config": [
+        64,
+        64,
+        512,
+        4,
+        2,
+        16,
+        8
+      ],
+      "selection_ms": 0.014994794831556432,
+      "selection_file": "mi355x-fp4-locality.json",
+      "fp64_reference_pass": true,
+      "max_error_bound_fraction": 0.0,
+      "masks_pass": true,
+      "bf16_graph_replay_pass": true
+    },
+    {
+      "shape": [
+        1,
+        14336,
+        5120
+      ],
+      "live": 1,
+      "config": [
+        64,
+        64,
+        512,
+        4,
+        2,
+        16,
+        8
+      ],
+      "selection_ms": 0.015520785536084856,
+      "selection_file": "mi355x-fp4-locality.json",
+      "fp64_reference_pass": true,
+      "max_error_bound_fraction": 0.0,
+      "masks_pass": true,
+      "bf16_graph_replay_pass": true
+    },
+    {
+      "shape": [
+        1,
+        16480,
+        5120
+      ],
+      "live": 1,
+      "config": [
+        64,
+        64,
+        512,
+        4,
+        2,
+        16,
+        8
+      ],
+      "selection_ms": 0.018171771119038265,
+      "selection_file": "mi355x-fp4-locality.json",
+      "fp64_reference_pass": true,
+      "max_error_bound_fraction": 0.0,
+      "masks_pass": true,
+      "bf16_graph_replay_pass": true
+    },
+    {
+      "shape": [
+        1,
+        34816,
+        5120
+      ],
+      "live": 1,
+      "config": [
+        16,
+        64,
+        512,
+        4,
+        1,
+        16,
+        8
+      ],
+      "selection_ms": 0.025858499109745026,
+      "selection_file": "mi355x-fp4-locality.json",
+      "fp64_reference_pass": true,
+      "max_error_bound_fraction": 0.0,
+      "masks_pass": true,
+      "bf16_graph_replay_pass": true
+    },
+    {
+      "shape": [
+        4,
+        2048,
+        5120
+      ],
+      "live": 3,
+      "config": [
+        64,
+        64,
+        512,
+        4,
+        2,
+        16,
+        8
+      ],
+      "selection_ms": 0.013538430646522758,
+      "selection_file": "mi355x-fp4-locality.json",
+      "fp64_reference_pass": true,
+      "max_error_bound_fraction": 0.0,
+      "masks_pass": true,
+      "bf16_graph_replay_pass": true
+    },
+    {
+      "shape": [
+        4,
+        5120,
+        6144
+      ],
+      "live": 3,
+      "config": [
+        64,
+        64,
+        512,
+        4,
+        2,
+        16,
+        0
+      ],
+      "selection_ms": 0.014674333008852873,
+      "selection_file": "mi355x-fp4-locality.json",
+      "fp64_reference_pass": true,
+      "max_error_bound_fraction": 0.0,
+      "masks_pass": true,
+      "bf16_graph_replay_pass": true
+    },
+    {
+      "shape": [
+        4,
+        5120,
+        17408
+      ],
+      "live": 3,
+      "config": [
+        64,
+        64,
+        512,
+        4,
+        2,
+        16,
+        8
+      ],
+      "selection_ms": 0.033493541181087494,
+      "selection_file": "mi355x-fp4-locality.json",
+      "fp64_reference_pass": true,
+      "max_error_bound_fraction": 0.0,
+      "masks_pass": true,
+      "bf16_graph_replay_pass": true
+    },
+    {
+      "shape": [
+        4,
+        12288,
+        5120
+      ],
+      "live": 3,
+      "config": [
+        64,
+        64,
+        512,
+        4,
+        2,
+        16,
+        8
+      ],
+      "selection_ms": 0.014921852770973654,
+      "selection_file": "mi355x-fp4-locality.json",
+      "fp64_reference_pass": true,
+      "max_error_bound_fraction": 0.0,
+      "masks_pass": true,
+      "bf16_graph_replay_pass": true
+    },
+    {
+      "shape": [
+        4,
+        14336,
+        5120
+      ],
+      "live": 3,
+      "config": [
+        64,
+        64,
+        512,
+        4,
+        2,
+        16,
+        8
+      ],
+      "selection_ms": 0.01562294683286122,
+      "selection_file": "mi355x-fp4-locality.json",
+      "fp64_reference_pass": true,
+      "max_error_bound_fraction": 0.0,
+      "masks_pass": true,
+      "bf16_graph_replay_pass": true
+    },
+    {
+      "shape": [
+        4,
+        16480,
+        5120
+      ],
+      "live": 3,
+      "config": [
+        64,
+        64,
+        512,
+        4,
+        2,
+        16,
+        8
+      ],
+      "selection_ms": 0.018175937235355377,
+      "selection_file": "mi355x-fp4-locality.json",
+      "fp64_reference_pass": true,
+      "max_error_bound_fraction": 0.0,
+      "masks_pass": true,
+      "bf16_graph_replay_pass": true
+    },
+    {
+      "shape": [
+        4,
+        34816,
+        5120
+      ],
+      "live": 3,
+      "config": [
+        16,
+        64,
+        512,
+        4,
+        1,
+        16,
+        8
+      ],
+      "selection_ms": 0.026070167620976765,
+      "selection_file": "mi355x-fp4-locality.json",
+      "fp64_reference_pass": true,
+      "max_error_bound_fraction": 0.0,
+      "masks_pass": true,
+      "bf16_graph_replay_pass": true
+    },
+    {
+      "shape": [
+        64,
+        2048,
+        5120
+      ],
+      "live": 55,
+      "config": [
+        64,
+        64,
+        512,
+        4,
+        2,
+        16,
+        0
+      ],
+      "selection_ms": 0.014883593185660765,
+      "selection_file": "mi355x-fp4-locality.json",
+      "fp64_reference_pass": true,
+      "max_error_bound_fraction": 0.0,
+      "masks_pass": true,
+      "bf16_graph_replay_pass": true
+    },
+    {
+      "shape": [
+        64,
+        5120,
+        6144
+      ],
+      "live": 55,
+      "config": [
+        64,
+        64,
+        512,
+        4,
+        2,
+        16,
+        8
+      ],
+      "selection_ms": 0.016280394611936626,
+      "selection_file": "mi355x-fp4-locality.json",
+      "fp64_reference_pass": true,
+      "max_error_bound_fraction": 0.0,
+      "masks_pass": true,
+      "bf16_graph_replay_pass": true
+    },
+    {
+      "shape": [
+        64,
+        5120,
+        17408
+      ],
+      "live": 55,
+      "config": [
+        64,
+        64,
+        512,
+        4,
+        2,
+        16,
+        0
+      ],
+      "selection_ms": 0.037650249898433685,
+      "selection_file": "mi355x-fp4-locality.json",
+      "fp64_reference_pass": true,
+      "max_error_bound_fraction": 0.0,
+      "masks_pass": true,
+      "bf16_graph_replay_pass": true
+    },
+    {
+      "shape": [
+        64,
+        12288,
+        5120
+      ],
+      "live": 55,
+      "config": [
+        64,
+        64,
+        512,
+        4,
+        2,
+        16,
+        8
+      ],
+      "selection_ms": 0.01664833812152638,
+      "selection_file": "mi355x-fp4-locality.json",
+      "fp64_reference_pass": true,
+      "max_error_bound_fraction": 0.0,
+      "masks_pass": true,
+      "bf16_graph_replay_pass": true
+    },
+    {
+      "shape": [
+        64,
+        14336,
+        5120
+      ],
+      "live": 55,
+      "config": [
+        64,
+        64,
+        512,
+        4,
+        2,
+        16,
+        0
+      ],
+      "selection_ms": 0.017217267836843218,
+      "selection_file": "mi355x-fp4-locality.json",
+      "fp64_reference_pass": true,
+      "max_error_bound_fraction": 0.0,
+      "masks_pass": true,
+      "bf16_graph_replay_pass": true
+    },
+    {
+      "shape": [
+        64,
+        16480,
+        5120
+      ],
+      "live": 55,
+      "config": [
+        64,
+        64,
+        512,
+        4,
+        2,
+        16,
+        0
+      ],
+      "selection_ms": 0.020640958100557327,
+      "selection_file": "mi355x-fp4-locality.json",
+      "fp64_reference_pass": true,
+      "max_error_bound_fraction": 0.0,
+      "masks_pass": true,
+      "bf16_graph_replay_pass": true
+    },
+    {
+      "shape": [
+        64,
+        34816,
+        5120
+      ],
+      "live": 55,
+      "config": [
+        64,
+        64,
+        512,
+        4,
+        2,
+        16,
+        0
+      ],
+      "selection_ms": 0.031936834255854286,
+      "selection_file": "mi355x-fp4-locality.json",
+      "fp64_reference_pass": true,
+      "max_error_bound_fraction": 0.0,
+      "masks_pass": true,
+      "bf16_graph_replay_pass": true
+    },
+    {
+      "shape": [
+        128,
+        2048,
+        5120
+      ],
+      "live": 77,
+      "config": [
+        64,
+        64,
+        512,
+        4,
+        2,
+        16,
+        0
+      ],
+      "selection_ms": 0.015678548321281512,
+      "selection_file": "mi355x-fp4-locality.json",
+      "fp64_reference_pass": true,
+      "max_error_bound_fraction": 0.0,
+      "masks_pass": true,
+      "bf16_graph_replay_pass": true
+    },
+    {
+      "shape": [
+        128,
+        5120,
+        6144
+      ],
+      "live": 77,
+      "config": [
+        64,
+        64,
+        512,
+        4,
+        2,
+        16,
+        8
+      ],
+      "selection_ms": 0.01764282493880301,
+      "selection_file": "mi355x-fp4-locality.json",
+      "fp64_reference_pass": true,
+      "max_error_bound_fraction": 0.0,
+      "masks_pass": true,
+      "bf16_graph_replay_pass": true
+    },
+    {
+      "shape": [
+        128,
+        5120,
+        17408
+      ],
+      "live": 77,
+      "config": [
+        64,
+        64,
+        512,
+        4,
+        2,
+        16,
+        0
+      ],
+      "selection_ms": 0.04152775059143702,
+      "selection_file": "mi355x-fp4-locality.json",
+      "fp64_reference_pass": true,
+      "max_error_bound_fraction": 0.0,
+      "masks_pass": true,
+      "bf16_graph_replay_pass": true
+    },
+    {
+      "shape": [
+        128,
+        12288,
+        5120
+      ],
+      "live": 77,
+      "config": [
+        64,
+        64,
+        512,
+        4,
+        2,
+        16,
+        8
+      ],
+      "selection_ms": 0.021540131639031804,
+      "selection_file": "mi355x-fp4-locality.json",
+      "fp64_reference_pass": true,
+      "max_error_bound_fraction": 0.0,
+      "masks_pass": true,
+      "bf16_graph_replay_pass": true
+    },
+    {
+      "shape": [
+        128,
+        14336,
+        5120
+      ],
+      "live": 77,
+      "config": [
+        64,
+        64,
+        512,
+        4,
+        2,
+        16,
+        8
+      ],
+      "selection_ms": 0.02207298151084355,
+      "selection_file": "mi355x-fp4-locality.json",
+      "fp64_reference_pass": true,
+      "max_error_bound_fraction": 0.0,
+      "masks_pass": true,
+      "bf16_graph_replay_pass": true
+    },
+    {
+      "shape": [
+        128,
+        16480,
+        5120
+      ],
+      "live": 77,
+      "config": [
+        128,
+        128,
+        512,
+        8,
+        2,
+        16,
+        0
+      ],
+      "selection_ms": 0.02313764641682307,
+      "selection_file": "mi355x-fp4-locality.json",
+      "fp64_reference_pass": true,
+      "max_error_bound_fraction": 0.0,
+      "masks_pass": true,
+      "bf16_graph_replay_pass": true
+    },
+    {
+      "shape": [
+        128,
+        34816,
+        5120
+      ],
+      "live": 77,
+      "config": [
+        64,
+        64,
+        512,
+        4,
+        2,
+        16,
+        8
+      ],
+      "selection_ms": 0.04358191788196564,
+      "selection_file": "mi355x-fp4-locality.json",
+      "fp64_reference_pass": true,
+      "max_error_bound_fraction": 0.0,
+      "masks_pass": true,
+      "bf16_graph_replay_pass": true
+    },
+    {
+      "shape": [
+        192,
+        2048,
+        5120
+      ],
+      "live": 144,
+      "config": [
+        64,
+        64,
+        512,
+        4,
+        2,
+        16,
+        8
+      ],
+      "selection_ms": 0.01709205956803155,
+      "selection_file": "mi355x-fp4-locality.json",
+      "fp64_reference_pass": true,
+      "max_error_bound_fraction": 0.0,
+      "masks_pass": true,
+      "bf16_graph_replay_pass": true
+    },
+    {
+      "shape": [
+        192,
+        5120,
+        6144
+      ],
+      "live": 144,
+      "config": [
+        64,
+        64,
+        512,
+        4,
+        2,
+        32,
+        8
+      ],
+      "selection_ms": 0.019232235171578148,
+      "selection_file": "mi355x-fp4-locality.json",
+      "fp64_reference_pass": true,
+      "max_error_bound_fraction": 0.0,
+      "masks_pass": true,
+      "bf16_graph_replay_pass": true
+    },
+    {
+      "shape": [
+        192,
+        5120,
+        17408
+      ],
+      "live": 144,
+      "config": [
+        64,
+        64,
+        512,
+        4,
+        2,
+        32,
+        8
+      ],
+      "selection_ms": 0.04650695621967316,
+      "selection_file": "mi355x-fp4-locality.json",
+      "fp64_reference_pass": true,
+      "max_error_bound_fraction": 0.0,
+      "masks_pass": true,
+      "bf16_graph_replay_pass": true
+    },
+    {
+      "shape": [
+        192,
+        12288,
+        5120
+      ],
+      "live": 144,
+      "config": [
+        128,
+        128,
+        256,
+        4,
+        2,
+        16,
+        8
+      ],
+      "selection_ms": 0.028656058451708627,
+      "selection_file": "mi355x-fp4-locality.json",
+      "fp64_reference_pass": true,
+      "max_error_bound_fraction": 0.0,
+      "masks_pass": true,
+      "bf16_graph_replay_pass": true
+    },
+    {
+      "shape": [
+        192,
+        14336,
+        5120
+      ],
+      "live": 144,
+      "config": [
+        128,
+        128,
+        256,
+        4,
+        2,
+        16,
+        8
+      ],
+      "selection_ms": 0.02895946374961308,
+      "selection_file": "mi355x-fp4-locality.json",
+      "fp64_reference_pass": true,
+      "max_error_bound_fraction": 0.0,
+      "masks_pass": true,
+      "bf16_graph_replay_pass": true
+    },
+    {
+      "shape": [
+        192,
+        16480,
+        5120
+      ],
+      "live": 144,
+      "config": [
+        64,
+        64,
+        512,
+        4,
+        2,
+        16,
+        8
+      ],
+      "selection_ms": 0.03456187496582667,
+      "selection_file": "mi355x-fp4-locality.json",
+      "fp64_reference_pass": true,
+      "max_error_bound_fraction": 0.0,
+      "masks_pass": true,
+      "bf16_graph_replay_pass": true
+    },
+    {
+      "shape": [
+        192,
+        34816,
+        5120
+      ],
+      "live": 144,
+      "config": [
+        128,
+        128,
+        256,
+        4,
+        2,
+        32,
+        8
+      ],
+      "selection_ms": 0.05558033287525177,
+      "selection_file": "mi355x-fp4-locality.json",
+      "fp64_reference_pass": true,
+      "max_error_bound_fraction": 0.0,
+      "masks_pass": true,
+      "bf16_graph_replay_pass": true
+    },
+    {
+      "shape": [
+        384,
+        2048,
+        5120
+      ],
+      "live": 361,
+      "config": [
+        64,
+        64,
+        512,
+        4,
+        2,
+        16,
+        8
+      ],
+      "selection_ms": 0.020871771979577763,
+      "selection_file": "mi355x-fp4-locality.json",
+      "fp64_reference_pass": true,
+      "max_error_bound_fraction": 0.0,
+      "masks_pass": true,
+      "bf16_graph_replay_pass": true
+    },
+    {
+      "shape": [
+        384,
+        5120,
+        6144
+      ],
+      "live": 361,
+      "config": [
+        64,
+        64,
+        512,
+        4,
+        2,
+        16,
+        8
+      ],
+      "selection_ms": 0.028090469764940666,
+      "selection_file": "mi355x-fp4-locality.json",
+      "fp64_reference_pass": true,
+      "max_error_bound_fraction": 0.0,
+      "masks_pass": true,
+      "bf16_graph_replay_pass": true
+    },
+    {
+      "shape": [
+        384,
+        5120,
+        17408
+      ],
+      "live": 361,
+      "config": [
+        128,
+        128,
+        512,
+        8,
+        2,
+        16,
+        8
+      ],
+      "selection_ms": 0.0748229871193568,
+      "selection_file": "mi355x-fp4-wide-384-rotate.json",
+      "fp64_reference_pass": true,
+      "max_error_bound_fraction": 0.0,
+      "masks_pass": true,
+      "bf16_graph_replay_pass": true
+    },
+    {
+      "shape": [
+        384,
+        12288,
+        5120
+      ],
+      "live": 361,
+      "config": [
+        128,
+        128,
+        256,
+        4,
+        2,
+        16,
+        8
+      ],
+      "selection_ms": 0.040663792806513166,
+      "selection_file": "mi355x-fp4-wide-384-rotate.json",
+      "fp64_reference_pass": true,
+      "max_error_bound_fraction": 0.0,
+      "masks_pass": true,
+      "bf16_graph_replay_pass": true
+    },
+    {
+      "shape": [
+        384,
+        14336,
+        5120
+      ],
+      "live": 361,
+      "config": [
+        128,
+        128,
+        256,
+        4,
+        2,
+        16,
+        8
+      ],
+      "selection_ms": 0.04143311721937997,
+      "selection_file": "mi355x-fp4-wide-384-rotate.json",
+      "fp64_reference_pass": true,
+      "max_error_bound_fraction": 0.0,
+      "masks_pass": true,
+      "bf16_graph_replay_pass": true
+    },
+    {
+      "shape": [
+        384,
+        16480,
+        5120
+      ],
+      "live": 361,
+      "config": [
+        128,
+        128,
+        256,
+        4,
+        2,
+        16,
+        8
+      ],
+      "selection_ms": 0.04151147852341334,
+      "selection_file": "mi355x-fp4-wide-384-rotate.json",
+      "fp64_reference_pass": true,
+      "max_error_bound_fraction": 0.0,
+      "masks_pass": true,
+      "bf16_graph_replay_pass": true
+    },
+    {
+      "shape": [
+        384,
+        34816,
+        5120
+      ],
+      "live": 361,
+      "config": [
+        128,
+        128,
+        256,
+        4,
+        2,
+        16,
+        8
+      ],
+      "selection_ms": 0.07054045796394348,
+      "selection_file": "mi355x-fp4-wide-384-rotate.json",
+      "fp64_reference_pass": true,
+      "max_error_bound_fraction": 0.0,
+      "masks_pass": true,
+      "bf16_graph_replay_pass": true
+    },
+    {
+      "shape": [
+        1280,
+        2048,
+        5120
+      ],
+      "live": 1185,
+      "config": [
+        128,
+        128,
+        512,
+        8,
+        2,
+        16,
+        0
+      ],
+      "selection_ms": 0.043729329846568944,
+      "selection_file": "mi355x-fp4-locality.json",
+      "fp64_reference_pass": true,
+      "max_error_bound_fraction": 0.0,
+      "masks_pass": true,
+      "bf16_graph_replay_pass": true
+    },
+    {
+      "shape": [
+        1280,
+        5120,
+        6144
+      ],
+      "live": 1185,
+      "config": [
+        128,
+        128,
+        256,
+        4,
+        2,
+        16,
+        0
+      ],
+      "selection_ms": 0.06293522950374719,
+      "selection_file": "mi355x-fp4-locality.json",
+      "fp64_reference_pass": true,
+      "max_error_bound_fraction": 0.0,
+      "masks_pass": true,
+      "bf16_graph_replay_pass": true
+    },
+    {
+      "shape": [
+        1280,
+        5120,
+        17408
+      ],
+      "live": 1185,
+      "config": [
+        128,
+        128,
+        256,
+        4,
+        2,
+        16,
+        8
+      ],
+      "selection_ms": 0.15840510527292886,
+      "selection_file": "mi355x-fp4-locality.json",
+      "fp64_reference_pass": true,
+      "max_error_bound_fraction": 0.0,
+      "masks_pass": true,
+      "bf16_graph_replay_pass": true
+    },
+    {
+      "shape": [
+        1280,
+        12288,
+        5120
+      ],
+      "live": 1185,
+      "config": [
+        128,
+        128,
+        256,
+        4,
+        2,
+        16,
+        8
+      ],
+      "selection_ms": 0.08369637938106761,
+      "selection_file": "mi355x-fp4-locality.json",
+      "fp64_reference_pass": true,
+      "max_error_bound_fraction": 0.0,
+      "masks_pass": true,
+      "bf16_graph_replay_pass": true
+    },
+    {
+      "shape": [
+        1280,
+        14336,
+        5120
+      ],
+      "live": 1185,
+      "config": [
+        128,
+        128,
+        256,
+        4,
+        2,
+        16,
+        8
+      ],
+      "selection_ms": 0.09941772903714861,
+      "selection_file": "mi355x-fp4-locality.json",
+      "fp64_reference_pass": true,
+      "max_error_bound_fraction": 0.0,
+      "masks_pass": true,
+      "bf16_graph_replay_pass": true
+    },
+    {
+      "shape": [
+        1280,
+        16480,
+        5120
+      ],
+      "live": 1185,
+      "config": [
+        128,
+        128,
+        256,
+        4,
+        2,
+        16,
+        8
+      ],
+      "selection_ms": 0.10715147852897644,
+      "selection_file": "mi355x-fp4-locality.json",
+      "fp64_reference_pass": true,
+      "max_error_bound_fraction": 0.0,
+      "masks_pass": true,
+      "bf16_graph_replay_pass": true
+    },
+    {
+      "shape": [
+        1280,
+        34816,
+        5120
+      ],
+      "live": 1185,
+      "config": [
+        128,
+        128,
+        256,
+        4,
+        2,
+        16,
+        8
+      ],
+      "selection_ms": 0.18625442186991373,
+      "selection_file": "mi355x-fp4-locality.json",
+      "fp64_reference_pass": true,
+      "max_error_bound_fraction": 0.0,
+      "masks_pass": true,
+      "bf16_graph_replay_pass": true
+    }
+  ]
+}

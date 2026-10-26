@@ -16,6 +16,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 from startlux_prism.engine import batch as B  # noqa: E402
 from startlux_prism.kernels import attn as KA  # noqa: E402
 from startlux_prism.kernels import decode as KD  # noqa: E402
+from startlux_prism.backends import supports_kv_fp8  # noqa: E402
 
 KV0 = 64                                         # first KV arena row of the batch (the engine's KV_SCRATCH0)
 
@@ -37,8 +38,8 @@ def reference(q, gate, k, v, segs, bidir):
 
 
 def main():
-    if torch.cuda.get_device_capability() < (8, 9):
-        print("skip: e4m3 keys and values need sm_89 or newer")
+    if not supports_kv_fp8():
+        print("skip: e4m3 keys and values need gfx950 or sm_89 or newer")
         return
     torch.manual_seed(0)
     dev = torch.device("cuda")

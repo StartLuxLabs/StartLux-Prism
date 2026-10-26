@@ -41,6 +41,7 @@ import torch
 
 from .. import gguf_weights, jevfmt as J
 from .. import progress as P
+from ..backends import architecture, is_hip, supports_kv_fp8, validate_runtime
 from ..kernels import attn as KA
 from ..kernels import cuda_ext as CX
 from ..kernels import elementwise as KE
@@ -140,11 +141,40 @@ class Options:
                                     # started in this process first)
     prompt_attention: str = "auto"  # "causal" or "bidirectional" (the module docstring); "auto": bidirectional for a
                                     # StartLux-Decision v1.1 Instant folder or a GGUF marked non-causal
+    mxfp4_components: str = "all"   # experimental original-BF16 source: "mlp", "gu", "down", or "all"
+    mxfp4_scaling: str = "ceil"     # "ceil" or reconstruction-error-selected "mse" E8M0 scales
+    mxfp4_rotate: bool = True      # paired orthonormal 32-value Hadamard rotation of weights/activations
+    mxfp4_artifact: str = ""       # optional offline projection artifact, checked against original BF16 source
 
 
 class Engine:
     def __init__(self, gguf_path, model_dir, options=None, device="cuda"):
         self.opt = options or Options()
+        validate_runtime(self.opt.tp, device=device)
+        self.mxfp4 = self.opt.precision == "mxfp4"
+        if self.mxfp4:
+            if not self.opt.max_tokens:
+                self.opt = dataclasses.replace(self.opt, max_tokens=4096)
+            if self.opt.max_tokens > 16384:
+                raise ValueError("The experimental MXFP4 profile is currently limited to 16,384 packed tokens")
+        self.original_weights = os.path.isdir(gguf_path)
+        self._weight_source_path = gguf_path
+        if self.mxfp4 and (not is_hip() or architecture(device) != "gfx950" or not self.original_weights):
+            raise ValueError("Native MXFP4 requires gfx950 and an original BF16 safetensors directory")
+        if self.original_weights and (self.opt.precision not in ("bf16", "mxfp4") or self.opt.tp != 1
+                                      or self.opt.think_seqs != 0 or self.opt.mmproj):
+            raise ValueError("Original BF16/MXFP4 research currently supports single-GPU text decisions, without decoding")
+        if self.mxfp4 and self.opt.mxfp4_components not in ("mlp", "gu", "down", "all"):
+            raise ValueError("Unknown MXFP4 projection coverage")
+        if self.opt.precision == "w4a16" and not is_hip():
+            raise ValueError("The experimental W4A16 profile requires ROCm")
+        if is_hip():
+            self.opt.pdl = 0
+            self.opt.l2_prefetch = 0
+        if self.opt.kv_fp8 and not supports_kv_fp8(device):
+            raise ValueError("FP8 KV cache requires gfx950 or NVIDIA sm_89 or newer")
+        if self.opt.kv_fp8 and self.opt.attn_qk8:
+            raise ValueError("FP8 KV cache and int8 attention keys are mutually exclusive")
         self.device = torch.device(device)
         self.tp = None                               # tensor parallelism (startlux_prism/tp.py): this rank's group
         if self.opt.tp > 1:
@@ -157,9 +187,16 @@ class Engine:
             self._tp_id = self.tp.mirror(self, (gguf_path, model_dir, self.opt))   # built on every rank alike
             self.device = self.tp.device
         t0 = time.perf_counter()
-        P.step(f"reading the model file ({os.path.getsize(gguf_path) / 1e9:.1f} GB)")
-        w = gguf_weights.load(gguf_path)
+        P.step(f"reading original BF16 weights from {gguf_path}" if self.original_weights
+               else f"reading the model file ({os.path.getsize(gguf_path) / 1e9:.1f} GB)")
+        if self.original_weights:
+            from ..hf_weights import load
+            w = load(gguf_path)
+        else:
+            w = gguf_weights.load(gguf_path)
         self.cfg = w.config
+        if self.mxfp4 and (self.cfg.hidden, self.cfg.ffn, self.cfg.n_layer) != (5120, 17408, 64):
+            raise ValueError("The experimental MXFP4 model profile is currently qualified only for the 27B layout")
         self.tok = Tokenizer(model_dir)
         mode = self.opt.prompt_attention
         if mode == "auto":
@@ -167,6 +204,8 @@ class Engine:
         if mode not in ("causal", "bidirectional"):
             raise ValueError(f"prompt_attention {self.opt.prompt_attention!r}: causal, bidirectional or auto")
         self.bidir = mode == "bidirectional"
+        if self.mxfp4 and self.bidir:
+            raise ValueError("The experimental MXFP4 model profile currently supports causal AutoThink decisions")
         if self.bidir:                               # every prompt whole: nothing to share or cache
             self.opt = dataclasses.replace(self.opt, share=False, prefix_cache=0)
         self.vision = None
@@ -178,7 +217,12 @@ class Engine:
                 raise ValueError(f"{self.opt.mmproj}: projects to {self.vision.cfg.out}, the decoder's hidden size is "
                                  f"{self.cfg.hidden}")
         self.int8 = False
-        self.w4 = self.opt.precision == "w4a8"
+        self.w4 = self.opt.precision in ("w4a8", "w4a16")
+        self.w4a16 = self.opt.precision == "w4a16"
+        self.q_components = os.environ.get("STARTLUX_PRISM_AMD_Q_COMPONENTS", "all")
+        if self.w4a16 and self.q_components not in ("activation", "intermediates", "all"):
+            raise ValueError("Unknown research precision component selection")
+        self.fp16_intermediates = self.w4a16 and self.q_components != "activation"
         if self.tp is not None:                      # int8 shards straight from the Q8_0 values: no bf16 copy
             self._tp_weights(w)
             self.tp.setup(self.cfg.hidden, 2 * self.cfg.n_layer)   # the fused all-reduces' symmetric buffers
@@ -201,12 +245,14 @@ class Engine:
         if self.opt.precision == "int8" and self.tp is None:
             amax = self._load_or_calibrate(w)
             self._int8_weights(w, amax)
-        elif self.opt.precision not in ("bf16", "w4a8", "int8"):
+        elif self.mxfp4:
+            self._mxfp4_weights()
+        elif self.opt.precision not in ("bf16", "w4a8", "w4a16", "int8"):
             raise ValueError(f"precision {self.opt.precision!r}")
         del w
         torch.cuda.empty_cache()
         T = self.opt.max_tokens
-        if self.int8 or self.w4 or not T:            # the final buffers: this precision's only, at the chosen size
+        if self.int8 or self.w4 or self.mxfp4 or not T:  # final buffers at the chosen size
             self._free_buffers()
             if self.opt.think_seqs < 0:
                 self._auto_think()
@@ -231,7 +277,9 @@ class Engine:
             return torch.cat([q.to(dev).dequant(bf) for q in qs], 0).contiguous()
 
         self.embed = w.embed.to(dev)
-        if not isinstance(self.embed, gguf_weights.Q8):        # a k-quant file: the embedding kernel reads Q8_0
+        if self.original_weights:
+            self.embed = self.embed.values
+        elif not isinstance(self.embed, gguf_weights.Q8):      # a k-quant file: the embedding kernel reads Q8_0
             self.embed = self.embed.as_q8()
         self.letters = w.output.dequant(torch.float32, torch.tensor(self.tok.letters)).to(dev)  # the readout's rows
         self.out_norm = w.out_norm.to(dev)
@@ -255,18 +303,44 @@ class Engine:
         self.inv_freq = (1.0 / (cfg.rope_theta ** (torch.arange(0, cfg.rope_dim, 2, dtype=torch.float64) /
                                                    cfg.rope_dim))).to(torch.float32).to(dev)
 
+    def _mxfp4_weights(self):
+        """Quantize selected original BF16 projections; sensitive state/readout stay unchanged."""
+        from ..kernels import mxfp4 as F
+        coverage = self.opt.mxfp4_components
+        names = {"gu", "down"} if coverage == "mlp" else {coverage}
+        if coverage == "all":
+            names = {"gu", "down", "inp", "out", "qkv", "o"}
+        manifest = None
+        if self.opt.mxfp4_artifact:
+            from .. import mxfp4_artifact as A
+            manifest = A.read_manifest(self.opt.mxfp4_artifact, self._weight_source_path, coverage,
+                                       self.opt.mxfp4_scaling, self.opt.mxfp4_rotate)
+            if len(manifest['layers']) != len(self.layers):
+                raise ValueError('MXFP4 artifact layer count differs from source model')
+        for i, layer in enumerate(self.layers):
+            if manifest:
+                packed = A.load_layer(self.opt.mxfp4_artifact, manifest['layers'][i], self.device)
+                if set(packed) != names & layer.keys() or any(p.shape != tuple(layer[n].shape) for n, p in packed.items()):
+                    raise ValueError(f'MXFP4 artifact projection shapes differ at layer {i}')
+                layer.update(packed)
+                continue
+            for name in names & layer.keys():
+                layer[name] = F.quantize(layer[name], self.opt.mxfp4_scaling, self.opt.mxfp4_rotate)
+
     def _w4_weights(self, w):
         """The W4A8 path's weights (kernels/w4a8.py): every projection repacked from the file's Q4_K / Q6_K blocks, as
         segments of one kind each; norms as they are (no smoothing)."""
         dev, cfg = self.device, self.cfg
         self.embed = w.embed.to(dev)
-        if not isinstance(self.embed, gguf_weights.Q8):
+        if self.w4a16 and self.q_components == "all":
+            self.embed = KW4.repack(self.embed)
+        elif not isinstance(self.embed, gguf_weights.Q8):
             self.embed = self.embed.as_q8()
         self.letters = w.output.dequant(torch.float32, torch.tensor(self.tok.letters)).to(dev)
         self.out_norm = w.out_norm.to(dev)
         self.layers, self.gdn_index, self.attn_index = [], {}, {}
         seg = lambda *m: KW4.segments(m, dev)       # noqa: E731
-        bar = P.Bar("weights to the GPU (W4A8: the file's 4-bit blocks)", len(w.layers), "layers")
+        bar = P.Bar(f"weights to the GPU ({self.opt.precision.upper()}: the file's 4-bit blocks)", len(w.layers), "layers")
         for i, l in enumerate(w.layers):
             d = {"attn_norm": l.attn_norm.to(dev), "post_norm": l.post_norm.to(dev), "gu": seg(l.ffn_gate, l.ffn_up),
                  "down": seg(l.ffn_down)}
@@ -417,7 +491,7 @@ class Engine:
         """Every device buffer of a T-token engine, for this precision's forward (bf16-only buffers for the bf16 path,
         int8 activations for the int8 one): {name: tensor}.  dev "meta" sizes them without memory."""
         cfg, o, R = self.cfg, self.opt, self.opt.max_read
-        f32, bf, i32 = torch.float32, torch.bfloat16, torch.int32
+        f32, bf, i32 = torch.float32, (torch.float16 if self.fp16_intermediates else torch.bfloat16), torch.int32
         z = lambda *s, dtype=f32: torch.zeros(*s, dtype=dtype, device=dev)  # noqa: E731
         HV, HK, D = cfg.v_heads, cfg.k_heads, cfg.gdn_dim
         n_gdn, n_attn = len(self.gdn_index), len(self.attn_index)
@@ -455,8 +529,8 @@ class Engine:
             K = max(cfg.ffn, cfg.value_dim, cfg.hidden, cfg.n_head * cfg.head_dim)
             # int8 activations as the int8 path, with one scale per 256 inputs and the sum of every 32 (Q4_K's mins,
             # split in two bytes: kernels/w4a8.py quantize_ref)
-            buf.update(aq=z(T * K, dtype=torch.int8), as_=z(T * K // 256), xs=z(T * K // 16, dtype=torch.int8),
-                       aqr=z(R * K, dtype=torch.int8), asr=z(R * K // 256), xsr=z(R * K // 16, dtype=torch.int8))
+            buf.update(aq=z(T * K, dtype=torch.float16 if self.w4a16 else torch.int8), as_=z(T * K // 256), xs=z(T * K // 16, dtype=torch.int8),
+                       aqr=z(R * K, dtype=torch.float16 if self.w4a16 else torch.int8), asr=z(R * K // 256), xsr=z(R * K // 16, dtype=torch.int8))
         elif self.int8:
             K = max(cfg.ffn, cfg.value_dim, cfg.hidden)
             # int8 activations: one flat buffer per side, viewed as [rows, K] row-major for each projection's K (the
@@ -474,6 +548,11 @@ class Engine:
         else:
             buf.update(x=z(T, cfg.hidden, dtype=bf), delta=z(T, cfg.hidden, dtype=bf), act=z(T, cfg.ffn, dtype=bf),
                        xr=z(R, cfg.hidden, dtype=bf), deltar=z(R, cfg.hidden, dtype=bf), actr=z(R, cfg.ffn, dtype=bf))
+            if self.mxfp4:
+                K = max(cfg.ffn, cfg.hidden, cfg.value_dim, cfg.n_head * cfg.head_dim)
+                buf.update(fp4q=z(max(T, R) * K // 2, dtype=torch.uint8),
+                           fp4s=z(max(T, R) * K // 32, dtype=torch.uint8),
+                           fp4sf=z((max(T, R) + 31) // 32, K, dtype=torch.uint8))
         out["buf"] = buf
         # every per-batch table is a view of one flat int32 buffer, so a batch's structure goes to the device in one
         # copy from a pinned staging buffer
@@ -551,6 +630,14 @@ class Engine:
     def _allocate(self, T, lean=False):
         """Buffers for T-token batches (self.max_tokens = T); lean: none for the prefix cache and decoding sequences."""
         o, dev = self.opt, self.device
+        if is_hip():
+            def size(x):
+                return sum(size(v) for v in x.values()) if isinstance(x, dict) else x.numel() * x.element_size()
+            needed = size(self._make_buffers(T, "meta", lean))
+            free, _ = torch.cuda.mem_get_info(dev)
+            if needed + (2 << 30) > free:
+                raise RuntimeError(f"ROCm buffer budget needs {needed / 2**30:.2f} GiB plus 2 GiB reserve; "
+                                   f"only {free / 2**30:.2f} GiB free. Reduce tokens, prefix cache or think slots.")
         m = self._make_buffers(T, dev, lean)
         self.max_tokens = T
         self.state, self.conv_state, self.trans, self.kv = m["state"], m["conv_state"], m["trans"], m["kv"]
@@ -585,6 +672,8 @@ class Engine:
         self._stage_np = [x.numpy() for x in self._stage]
         self._logits_host = [torch.zeros(R, len(self.tok.letters)).pin_memory() for _ in range(2)]
         self._done = [torch.cuda.Event() for _ in range(2)]
+        self._timed_events = ([(torch.cuda.Event(enable_timing=True), torch.cuda.Event(enable_timing=True))
+                               for _ in range(2)] if is_hip() else None)
 
     def _stage_tables(self, plan, slot):
         """Plan tables -> pinned staging buffer `slot` (numpy writes: no torch call, no GIL release)."""
@@ -633,6 +722,18 @@ class Engine:
             return mix
 
     # ------------------------------------------------------------------ forward: bf16
+    def _project(self, x, w, out, live):
+        if self.mxfp4:
+            from ..kernels import mxfp4 as F
+            if isinstance(w, F.Packed):
+                m, k = x.shape
+                a = F.Packed(self.buf["fp4q"][:m * k // 2].view(m, k // 2),
+                             self.buf["fp4s"][:m * k // 32].view(m, k // 32),
+                             self.buf["fp4sf"].view(-1)[:((m + 31) // 32) * k].view((m + 31) // 32, k))
+                F.quantize_into(x, a, live, self.opt.mxfp4_scaling, self.opt.mxfp4_rotate)
+                return F.gemm(a, w, out, live)
+        return torch.mm(x, w.t(), out=out)
+
     def _body_bf16(self, T):
         cfg, b, c, L = self.cfg, self.buf, self.cnt, self.layers
         h, x, delta, n = b["h"], b["x"][:T], b["delta"][:T], cfg.n_layer
@@ -643,29 +744,29 @@ class Engine:
             if i in self.gdn_index:
                 self._record((i, "inp"), x, self._n_live)
                 proj = b["proj"][:T, :lw["inp"].shape[0]]
-                torch.mm(x, lw["inp"].t(), out=proj)
+                self._project(x, lw["inp"], proj, c["tok"])
                 self._gdn_core(i, proj, T)
                 mix = b["mix"][:T, :cfg.value_dim]
                 KG.gated_norm(b["o"], proj, cfg.conv_dim, lw["ssm_norm"], mix, c["tok"], T, cfg)
                 self._record((i, "out"), mix, self._n_live)
-                torch.mm(mix, lw["out"].t(), out=delta)
+                self._project(mix, lw["out"], delta, c["tok"])
             else:
                 self._record((i, "qkv"), x, self._n_live)
                 proj = b["proj"][:T, :lw["qkv"].shape[0]]
                 if i == n - 1:                      # last layer: keys and values only; queries run in the head
-                    torch.mm(x, lw["qkv"][self.qn:].t(), out=proj[:, self.qn:])
+                    self._project(x, lw["qkv"][self.qn:], proj[:, self.qn:], c["tok"])
                     self._attn_core(i, proj, T, slots="kv")
                     return
-                torch.mm(x, lw["qkv"].t(), out=proj)
+                self._project(x, lw["qkv"], proj, c["tok"])
                 mix = self._attn_core(i, proj, T)
                 self._record((i, "o"), mix, self._n_live)
-                torch.mm(mix, lw["o"].t(), out=delta)
+                self._project(mix, lw["o"], delta, c["tok"])
             KE.add_norm(h, b["delta"], lw["post_norm"], b["x"], c["tok"], T, cfg.eps)
             self._record((i, "gu"), x, self._n_live)
-            torch.mm(x, lw["gu"].t(), out=b["gu"][:T])
+            self._project(x, lw["gu"], b["gu"][:T], c["tok"])
             KE.swiglu(b["gu"], b["act"], c["tok"], T)
             self._record((i, "down"), b["act"][:T], self._n_live)
-            torch.mm(b["act"][:T], lw["down"].t(), out=delta)
+            self._project(b["act"][:T], lw["down"], delta, c["tok"])
 
     def _head_bf16(self, R):
         cfg, b, t, c = self.cfg, self.buf, self.tab, self.cnt
@@ -674,16 +775,16 @@ class Engine:
         KE.gather_rows(b["x"], t["read"], b["xr"], c["read"], R)
         KE.gather_rows(b["h"], t["read"], b["hr"], c["read"], R)
         qg = b["qgr"][:R]
-        torch.mm(b["xr"][:R], lw["qkv"][:self.qn].t(), out=qg)
+        self._project(b["xr"][:R], lw["qkv"][:self.qn], qg, c["read"])
         self._head_attention(qg, R)
         self._record((i, "o"), b["mixr"][:R], self._r_live)
-        torch.mm(b["mixr"][:R], lw["o"].t(), out=b["deltar"][:R])
+        self._project(b["mixr"][:R], lw["o"], b["deltar"][:R], c["read"])
         KE.add_norm(b["hr"], b["deltar"], lw["post_norm"], b["xr"], c["read"], R, cfg.eps)
         self._record((i, "gu"), b["xr"][:R], self._r_live)
-        torch.mm(b["xr"][:R], lw["gu"].t(), out=b["gur"][:R])
+        self._project(b["xr"][:R], lw["gu"], b["gur"][:R], c["read"])
         KE.swiglu(b["gur"], b["actr"], c["read"], R)
         self._record((i, "down"), b["actr"][:R], self._r_live)
-        torch.mm(b["actr"][:R], lw["down"].t(), out=b["deltar"][:R])
+        self._project(b["actr"][:R], lw["down"], b["deltar"][:R], c["read"])
         self._readout(b["hr"][:R] + b["deltar"][:R].float(), R)
 
     def _head_attention(self, qg, R):
@@ -921,7 +1022,7 @@ class Engine:
         cache = self.cache if self.opt.share else None
         plan = B.plan_batch(groups, self.sys_len, self.kv_scratch0, self.root_kv, share=self.opt.share, cache=cache,
                             system=self.system, max_inserts=MAX_INSERTS - len(keep), max_trans=self.opt.max_trans,
-                            bm=KA.launch("BM"), keep=keep, whole=self.bidir)
+                            bm=KA.launch("BM"), keep=keep, whole=self.bidir, canonical_head=is_hip() and not self.bidir)
         try:
             if plan.feats and self.vision is None:
                 raise ValueError("this engine has no vision tower: it reads text only")
@@ -964,6 +1065,8 @@ class Engine:
         n = b.n_tabs if b.n_tabs >= 0 else self._tabs.numel()
         if self.tp is not None:
             return self._launch_tp(b, n)
+        if self._timed_events is not None:
+            self._timed_events[b.slot][0].record()
         self._tabs[:n].copy_(self._stage[b.slot][:n], non_blocking=True)
         body_graph = self.opt.graphs and b.T <= (self.opt.graph_max_tokens or self.max_tokens)
         if b.plan.feats:
@@ -987,6 +1090,8 @@ class Engine:
             self._head(b.R)
         n = b.plan.counts["read"]
         self._logits_host[b.slot][:n].copy_(self.buf["logits"][:n], non_blocking=True)
+        if self._timed_events is not None:
+            self._timed_events[b.slot][1].record()
         self._done[b.slot].record()
         return b
 
@@ -1004,9 +1109,13 @@ class Engine:
                 raise
             b.images = feats[2]
         self.tp.run(self, b.slot, b.T, b.R, n, 0 if feats is None else len(feats[0]))
+        if self._timed_events is not None:
+            self._timed_events[b.slot][0].record()
         self._pass(b.slot, b.T, b.R, n, feats)
         n = b.plan.counts["read"]
         self._logits_host[b.slot][:n].copy_(self.buf["logits"][:n], non_blocking=True)
+        if self._timed_events is not None:
+            self._timed_events[b.slot][1].record()
         self._done[b.slot].record()
         return b
 
@@ -1039,6 +1148,7 @@ class Engine:
             self._graph("head", R).replay()
         else:
             self._head(R)
+        self.tp.end()
 
     def _encode_images(self, feats):
         """Rank 0: a batch's image rows as vision.write writes them -> (their packed rows, int64; their features, fp32
@@ -1047,7 +1157,8 @@ class Engine:
         for start, image, j0, n in feats:
             f = done.get(image.digest)
             if f is None:
-                f = done[image.digest] = self.vision.encode(image)
+                f = done[image.digest] = (self.vision.encode(image, graphs=self.opt.graphs)
+                                         if is_hip() else self.vision.encode(image))
             rows.append(torch.arange(start, start + n, dtype=torch.int64, device=self.device))
             xs.append(f[j0:j0 + n].float())
         return torch.cat(rows), torch.cat(xs), len(done)
@@ -1061,6 +1172,11 @@ class Engine:
         self.last = {"tokens": p.n_tok, "bucket": b.T, "read": p.counts["read"], "read_bucket": b.R,
                      "segments": p.counts["segs"], "host_ms": round((b.t_staged - b.t0) * 1000, 3),
                      "gpu_ms": round((t - b.t_launch) * 1000, 3)}
+        # Keep gpu_ms for API compatibility; it has always been host wall time.
+        self.last["launch_to_logits_ms"] = self.last["gpu_ms"]
+        if self._timed_events is not None:
+            start, end = self._timed_events[b.slot]
+            self.last["stream_elapsed_ms"] = round(start.elapsed_time(end), 3)
         if b.images:
             self.last["images"] = b.images
         return logits
@@ -1088,6 +1204,32 @@ class Engine:
         if self.vision is not None:
             self.vision.warm_up()
         torch.cuda.synchronize()
+
+    @torch.no_grad()
+    def warm_up_eager(self, buckets=None, reads=None):
+        """Compile common eager buckets with zero live work, preserving all existing state.
+
+        This creates no graphs and performs no online autotuning. A saved live-count
+        table is restored even if compilation fails, so warm-up is safe after load.
+        """
+        if self.tp is not None:
+            self.tp.call(self, "warm_up_eager", buckets, reads)
+        bodies = buckets or [x for x in TOKEN_BUCKETS if x <= self.max_tokens]
+        heads = reads or [x for x in READ_BUCKETS if x <= self.opt.max_read]
+        saved = self.counts.clone()
+        bar = P.Bar("eager kernels", len(bodies) + len(heads), "batch shapes")
+        try:
+            self.counts.zero_()
+            for i, T in enumerate(bodies):
+                self._body(T)
+                bar.update(i + 1)
+            for i, R in enumerate(heads):
+                self._head(R)
+                bar.update(len(bodies) + i + 1)
+            torch.cuda.synchronize()
+        finally:
+            self.counts.copy_(saved)
+            torch.cuda.synchronize()
 
     def letter_logits(self, rows):
         """Decider backend: the rows of one request (prompt.Row); a bidirectional engine's request may take several

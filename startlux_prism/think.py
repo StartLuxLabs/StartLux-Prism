@@ -495,6 +495,7 @@ class ThinkScheduler(Scheduler):
     def submit_async(self, rows):
         """A one-pass forward of one request's rows (batch.Group) through the queue -> future (logits, timings)."""
         f = Future()
+        f.prism_submitted_at = time.perf_counter()
         self.q.put((rows, f, sum(len(r) for r in rows)))
         return f
 

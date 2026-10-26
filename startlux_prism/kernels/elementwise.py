@@ -23,6 +23,18 @@ def _embed_kernel(ids_ptr, qs_ptr, d_ptr, h_ptr, n_tok_ptr, HID: tl.constexpr, H
 
 
 @triton.jit
+def _embed_dense(ids, weights, h, live, HID: tl.constexpr, HP: tl.constexpr):
+    r = tl.program_id(0).to(tl.int64)
+    if r >= tl.load(live):
+        return
+    token = tl.load(ids + r).to(tl.int64)
+    if token < 0:
+        return
+    k = tl.arange(0, HP)
+    tl.store(h + r * HID + k, tl.load(weights + token * HID + k, k < HID, 0).to(tl.float32), k < HID)
+
+
+@triton.jit
 def _add_norm_kernel(h_ptr, delta_ptr, w_ptr, out_ptr, rows_ptr, n_ptr, eps,
                      HID: tl.constexpr, HP: tl.constexpr, ADD: tl.constexpr, GATHER: tl.constexpr):
     """h[r] += delta[i] (ADD); out[i] = rmsnorm(h[r]) * w as bf16; r = rows[i] (GATHER) or i."""
@@ -105,6 +117,11 @@ def readout(h, norm, letters, out, n, R, eps):
 
 
 def embed(ids, embed_q8, h, n_tok, T):
+    if isinstance(embed_q8, torch.Tensor):
+        return _embed_dense[(T,)](ids, embed_q8, h, n_tok, h.shape[1], _p2(h.shape[1]), num_warps=4)
+    if hasattr(embed_q8, "kind"):
+        from .amd_w4a16 import embed as compressed_embed
+        return compressed_embed(ids, embed_q8, h, n_tok, T)
     HID = h.shape[1]
     _embed_kernel[(T,)](ids, embed_q8.qs, embed_q8.d, h, n_tok, HID=HID, HP=_p2(HID), QK=32, num_warps=4)
 
