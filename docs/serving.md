@@ -39,6 +39,13 @@ Files run here: `StartLux-Decision-v1.1-27B-AutoThink-Q8_0.gguf` (28.60 GB, SHA-
 **Precision** (`--precision`): `int8` (W8A8, the fast path: the default for Q8_0 files), `bf16` (the same weights
 dequantized, on cuBLAS: the reference) or `w4a8` (a Q4_K_M file's own 4-bit weights: its default).
 
+**KV cache:** `--kv-fp8` keeps the attention layers' keys and values as e4m3 bytes with one fp32 scale per token and
+KV head, about half the bf16 KV memory (a 9B thought's state and KV rows: 131.5 MiB instead of 210), which the auto
+sizes spend on more thoughts at once, batch rows and cached evidence. It needs sm_89 or newer (Ada, Hopper,
+Blackwell) and replaces `--attn-qk8`. On the 9B in int8 it kept JevBench's decisions and accuracy, with and without
+thoughts, at the same speed ([measurements](optimizations.md#fp8-kv-cache-2026-10-26)). Off by default: it moves the
+probabilities a little (mean |dp| 0.008 against int8 alone, at most 0.16) and pays only where memory is short.
+
 **Several GPUs** (the same flags):
 
 ```bash
@@ -207,6 +214,7 @@ Server flags:
 | `--mmproj`, `--max-images`, `--max-pixels` | `auto`, 8, 1,048,576 | the vision tower (`auto`: the `mmproj-*.gguf` beside `--gguf`; `none`: text only); images need Pillow |
 | `--graph-max-tokens`, `--no-graphs` | | CUDA graphs for every token bucket (recorded at start-up) or fewer |
 | `--attn-qk8` | off | opt-in: q k^T on int8 tensor cores, 15% off at 50,000 tokens at a small probability error |
+| `--kv-fp8` | off | opt-in: keys and values as e4m3 (sm_89 or newer), about half the KV memory (above); not with `--attn-qk8` |
 | `--tp`, `--gpus` | 1, the visible GPUs | tensor parallelism: one model over this many GPUs (int8; 2 or 4 on the 27B) |
 
 **Several GPUs, data parallelism** (`python -m startlux_prism.dp --gpus ...`, the server's flags pass through):

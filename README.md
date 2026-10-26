@@ -222,6 +222,7 @@ Endpoints: `POST /v1/systemone` (also `/v1/decisions`), `GET /v1/models`, `GET /
 | `--max-tokens` | from free memory | The largest batch (131,072 tokens for the 27B on an H200); longer requests get HTTP 422 |
 | `--prefix-cache-tokens` | 65,536 | KV rows kept for evidence that comes again |
 | `--think-seqs` | as many as fit | Thoughts generated at once (64 for the 27B on an H200, 16 for the 9B in int8 on an RTX 5090) |
+| `--kv-fp8` | off | Keys and values as e4m3 with a scale per token and KV head (sm_89 or newer): about half the KV memory, so more thoughts and cached evidence fit |
 | `--gate`, `--none-check`, `--allow-none` | 0.6, on, on (v1.1) | The defaults of the request fields |
 
 Every field, flag and model folder: [serving guide](docs/serving.md).

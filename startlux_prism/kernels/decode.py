@@ -202,9 +202,11 @@ def _sample_kernel(vals_ptr, idx_ptr, seed_ptr, step_ptr, temp_ptr, top_p_ptr, t
 
 
 @triton.jit
-def _attn_part_kernel(q_ptr, kv_ptr, k_base0, kind_stride, head_stride, kvs_ptr, kvl_ptr, pm_ptr, pa_ptr, n_ptr,
+def _attn_part_kernel(q_ptr, kv_ptr, k_base0, kind_stride, head_stride, kv8s_ptr, kv8_layer_off, kv8_kind_stride,
+                      kv8_head_stride, kvs_ptr, kvl_ptr, pm_ptr, pa_ptr, n_ptr,
                       MAXS, H: tl.constexpr, HKV: tl.constexpr, HD: tl.constexpr, G: tl.constexpr, GP: tl.constexpr,
-                      SPLIT: tl.constexpr, BN: tl.constexpr, NP: tl.constexpr, SCALE: tl.constexpr):
+                      SPLIT: tl.constexpr, BN: tl.constexpr, NP: tl.constexpr, SCALE: tl.constexpr,
+                      KVF8: tl.constexpr):
     """Decode attention, first half: per (row, kv head, program p) the splits p, p + NP, ... of SPLIT keys of the
     row's KV range, the G query heads of the kv head together (each key read once): per split the running max, the
     softmax sum (in pm: [rows, HKV, MAXS, G, 2]) and the unnormalized output (pa: [rows, HKV, MAXS, G, HD])."""
@@ -223,6 +225,8 @@ def _attn_part_kernel(q_ptr, kv_ptr, k_base0, kind_stride, head_stride, kvs_ptr,
     q = tl.load(q_ptr + ((b64 * H + g * G + r)[:, None]) * HD + d[None, :], mask=rm[:, None], other=0.0)
     k_base = k_base0.to(tl.int64) + g * head_stride       # int64: the arena passes 2^31 elements (kernels/attn.py)
     v_base = k_base + kind_stride
+    k8s_base = kv8_layer_off.to(tl.int64) + g * kv8_head_stride
+    v8s_base = k8s_base + kv8_kind_stride
     for s in range(p, tl.cdiv(length, SPLIT), NP):
         m_i = tl.full([GP], float("-inf"), dtype=tl.float32)
         l_i = tl.zeros([GP], dtype=tl.float32)
@@ -231,14 +235,26 @@ def _attn_part_kernel(q_ptr, kv_ptr, k_base0, kind_stride, head_stride, kvs_ptr,
         for kb in range(s * SPLIT, end, BN):
             km = (kb + n) < end
             rows = (start + kb + n).to(tl.int64)
-            k = tl.load(kv_ptr + k_base + rows[:, None] * HD + d[None, :], mask=km[:, None], other=0.0)
+            if KVF8:
+                kq = tl.load(kv_ptr + k_base + rows[:, None] * HD + d[None, :], mask=km[:, None], other=0)
+                kf = kq.to(tl.float8e4nv, bitcast=True).to(tl.float32)
+                ks = tl.load(kv8s_ptr + k8s_base + rows, mask=km, other=0.0)
+                k = (kf * ks[:, None]).to(tl.bfloat16)
+            else:
+                k = tl.load(kv_ptr + k_base + rows[:, None] * HD + d[None, :], mask=km[:, None], other=0.0)
             sc = tl.dot(q, tl.trans(k)) * SCALE
             sc = tl.where(km[None, :], sc, float("-inf"))
             m_new = tl.maximum(m_i, tl.max(sc, 1))
             alpha = tl.exp(m_i - m_new)
             pr = tl.exp(sc - m_new[:, None])
             l_i = l_i * alpha + tl.sum(pr, 1)
-            v = tl.load(kv_ptr + v_base + rows[:, None] * HD + d[None, :], mask=km[:, None], other=0.0)
+            if KVF8:
+                vq = tl.load(kv_ptr + v_base + rows[:, None] * HD + d[None, :], mask=km[:, None], other=0)
+                vf = vq.to(tl.float8e4nv, bitcast=True).to(tl.float32)
+                vs = tl.load(kv8s_ptr + v8s_base + rows, mask=km, other=0.0)
+                v = (vf * vs[:, None]).to(tl.bfloat16)
+            else:
+                v = tl.load(kv_ptr + v_base + rows[:, None] * HD + d[None, :], mask=km[:, None], other=0.0)
             acc = acc * alpha[:, None] + tl.dot(pr.to(tl.bfloat16), v)
             m_i = m_new
         o = ((b64 * HKV + g) * MAXS + s) * G + r
@@ -289,17 +305,19 @@ def attn_scratch(B, max_len, cfg, device):
             torch.empty(B, cfg.n_kv_head, S, G, cfg.head_dim, dtype=torch.float32, device=device))
 
 
-def attention(qbuf, qkv, kv, attn_layer, kv_start, kv_len, scratch, out, n, B, cfg):
+def attention(qbuf, qkv, kv, attn_layer, kv_start, kv_len, scratch, out, n, B, cfg, kv8s=None, kv_mode=0):
     """softmax(q K^T / sqrt(HD)) V over each row's KV rows kv_start .. kv_start + kv_len (its new key included), times
     sigmoid(gate) -> out bf16 [B, H * HD]."""
     H, HKV, HD = cfg.n_head, cfg.n_kv_head, cfg.head_dim
     G = H // HKV
     pm, pa = scratch
     S = pm.shape[2]
+    kvs_args = ((kv, 0, 0, 0) if kv8s is None else
+                (kv8s, attn_layer * kv8s.stride(0), kv8s.stride(1), kv8s.stride(2)))
     _attn_part_kernel[(B, HKV, ATTN_PROGRAMS)](
-        qbuf, kv, attn_layer * kv.stride(0), kv.stride(1), kv.stride(2), kv_start, kv_len, pm, pa, n, S, H=H, HKV=HKV,
-        HD=HD, G=G, GP=max(16, _p2(G)), SPLIT=ATTN_SPLIT, BN=64, NP=ATTN_PROGRAMS, SCALE=HD ** -0.5, num_warps=4,
-        num_stages=2)
+        qbuf, kv, attn_layer * kv.stride(0), kv.stride(1), kv.stride(2), *kvs_args, kv_start, kv_len, pm, pa, n, S,
+        H=H, HKV=HKV, HD=HD, G=G, GP=max(16, _p2(G)), SPLIT=ATTN_SPLIT, BN=64, NP=ATTN_PROGRAMS,
+        SCALE=HD ** -0.5, KVF8=kv_mode == 16, num_warps=4, num_stages=2)
     _attn_combine_kernel[(B, H)](qkv, qkv.stride(0), kv_len, pm, pa, out, out.stride(0), n, S, H=H, HKV=HKV, HD=HD,
                                  G=G, SPLIT=ATTN_SPLIT, num_warps=2)
 
