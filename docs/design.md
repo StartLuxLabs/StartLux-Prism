@@ -97,7 +97,7 @@ Code:
 |---|---|
 | `startlux_prism/engine/model.py`, `engine/batch.py` | the engine and its graphs; the forest planner |
 | `kernels/gdn.py` | conv + prep, the WY chunk kernel, the two-wave state scan, the gated norm |
-| `kernels/attn.py` | QK norm + RoPE + KV arena, tree flash attention |
+| `kernels/attn.py` | QK norm + RoPE + KV arena (bf16, or e4m3 with `--kv-fp8`), tree flash attention |
 | `kernels/w8a8.py`, `kernels/quant.py`, `csrc/` | the int8 and W4A8 paths |
 | `reference.py` | a plain fp32 PyTorch forward, the yardstick for every kernel |
 | `decide.py`, `think.py`, `engine/decode.py`, `loops.py` | requests and answers; thoughts |

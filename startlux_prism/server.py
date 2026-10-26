@@ -256,6 +256,8 @@ def main():
         a.precision = CAL.auto_precision(a.gguf)
     if a.precision == "int8" and not a.calib:
         a.calib = CAL.default_path(a.gguf)
+    if a.kv_fp8 and a.attn_qk8:
+        sys.exit("--attn-qk8 keeps int8 copies of the bf16 keys, which --kv-fp8 stores as e4m3: one or the other")
     if a.tp > 1:
         if a.precision != "int8":
             sys.exit(f"--tp runs the int8 path (a Q8_0 file), not {a.precision}")
@@ -268,6 +270,9 @@ def main():
     kind = folder_kind(a.model_dir, GGUFFile(a.gguf).meta)
     sys.setswitchinterval(a.switch_interval)
     gpu = torch.cuda.get_device_properties(0)
+    if a.kv_fp8 and (gpu.major, gpu.minor) < (8, 9):
+        sys.exit(f"--kv-fp8 keeps keys and values as e4m3, which needs sm_89 or newer (Ada, Hopper, Blackwell), not "
+                 f"sm_{gpu.major}{gpu.minor}")
     label = {"auto_think": "v1.1 AutoThink", "instant": "v1.1 Instant, prompt read bidirectionally"}.get(kind, kind)
     P.step(f"StartLux-Prism: {os.path.basename(a.gguf)} ({label}) as "
            f"{a.precision} on {gpu.name} (sm_{gpu.major}{gpu.minor}, {gpu.total_memory / 2**30:.0f} GiB)"

@@ -59,6 +59,7 @@ python bench/charts.py                                                        # 
 | `tests/test_engine.py` | every precision against the fp32 reference forward (`--repeat`: run-to-run bits) |
 | `tests/test_cuda_gemm.py` | the CUDA GEMMs against exact integer math and the Triton kernel's bits |
 | `tests/test_w4a8.py`, `tests/test_kquant.py` | the W4A8 GEMM against its reference arithmetic; k-quant dequantization against gguf-py, bit for bit |
+| `tests/test_kv_fp8.py` | the e4m3 KV cache (`--kv-fp8`, sm_89 or newer): its writes against the bf16 ones; tree attention (causal and bidirectional) and decode attention against fp32 attention over the same dequantized keys and values |
 | `tests/test_prefix_cache.py --exact` | cache hits bit for bit |
 | `tests/test_batch.py`, `tests/test_prompt.py` | the forest planner; prompts byte for byte against the chat template |
 | `tests/test_v11.py` | StartLux-Decision v1.1 on the CPU: prompts and answers against its own package (`STARTLUX_DECIDE` = its checkout); v1 folders against the code before v1.1 support |
