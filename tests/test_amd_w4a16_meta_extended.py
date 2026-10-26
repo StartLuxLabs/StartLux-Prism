@@ -40,5 +40,6 @@ with torch.cuda.graph(graph):fn()
 for n in [65,1,0,64]:
  live.fill_(n);y.fill_(1);graph.replay();want=torch.ones_like(y);want[:n]=full[:n]
  assert equal(y,want),('graph live rows',n)
-Path(os.environ['ACCEL_OUT'],'checks.json').write_text(json.dumps(dict(full_tensor_checks=count,graph_masks=True,independent_fp64_bound=True,exact_frozen_profile=True))+'\n')
+if os.getenv('ACCEL_OUT'):
+ Path(os.environ['ACCEL_OUT'],'checks.json').write_text(json.dumps(dict(full_tensor_checks=count,graph_masks=True,independent_fp64_bound=True,exact_frozen_profile=True))+'\n')
 print('PASS',count,'exact profile checks and graph masks',flush=True)

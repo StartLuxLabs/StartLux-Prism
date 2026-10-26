@@ -51,15 +51,10 @@ HTTP time, median of 5 runs, model loading excluded.
 
 ## Experimental AMD support
 
-A single-GPU ROCm W4A8 backend for R9700 (`gfx1201`) is available experimentally.
-An explicit compressed [W4A16 profile](docs/amd_w4a16.md) passes the local FP32
-readout checks and has separate performance/service evidence. Automatic Q4_K_M
-precision remains W4A8; both profiles are experimental.
-See [AMD setup and numerical limitations](docs/amd.md) and the
-[official 9B measurements](docs/amd_r9700_9b.md), including the
-[current upstream integration checks](docs/amd_pr19_integration.md).
-The earlier [27B acceleration report](docs/amd_acceleration.md) remains separate. This does not extend
-the NVIDIA accuracy or performance claims above to AMD.
+Single-GPU Radeon AI PRO R9700 (`gfx1201`) support runs AutoThink Q4_K_M models
+with W4A8 or explicit `--precision w4a16`. W4A16 passes the local FP32 readout
+gate; W4A8 retains a known accuracy limitation. See the [AMD setup guide](docs/amd.md)
+for the qualified runtime, single-GPU launch command and support boundaries.
 
 ## Installation
 
