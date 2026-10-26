@@ -208,6 +208,13 @@ with out.with_suffix('.server.log').open('w') as log:
                     samples.flush()
                     print('stability',round(report['elapsed_s'],1),'seconds',report['requests'],'requests',flush=True)
                     last=time.monotonic()
+        report['load_window_s']=time.monotonic()-t0
+        if a.seconds:assert report['load_window_s']>=a.seconds
+        # A health query does not submit GPU work. Complete a readout after the
+        # last clients finish so earlier decode work on the stream also drains.
+        drained=check('final drain control',base)
+        assert drained['answers']==alone['answers'],'state leaked after sustained load'
+        report['final_drain_control_exact']=True
         final=http(path='/health')[1];report['final_health']=final
         samples.close()
         report.update(stability_s=time.monotonic()-t0,final_stats=http(path='/stats')[1])
