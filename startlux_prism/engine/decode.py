@@ -349,14 +349,21 @@ class Decoder:
     def _graph(self, B):
         g = self._graphs.get(B)
         if g is None:
-            st = torch.cuda.Stream()
-            st.wait_stream(torch.cuda.current_stream())
-            with torch.cuda.stream(st):
-                self._forward(B)                     # compile / autotune outside the capture
-            torch.cuda.current_stream().wait_stream(st)
-            g = torch.cuda.CUDAGraph()
-            with torch.cuda.graph(g, pool=self._pool):
-                self._forward(B)
+            # Lazy capture can happen on a live first step. Compilation and capture
+            # must not advance its recurrent state or consume its previous token.
+            live = self.n.clone()
+            self.n.zero_()
+            try:
+                st = torch.cuda.Stream()
+                st.wait_stream(torch.cuda.current_stream())
+                with torch.cuda.stream(st):
+                    self._forward(B)                 # compile / autotune outside the capture
+                torch.cuda.current_stream().wait_stream(st)
+                g = torch.cuda.CUDAGraph()
+                with torch.cuda.graph(g, pool=self._pool):
+                    self._forward(B)
+            finally:
+                self.n.copy_(live)
             self._pool = g.pool()
             self._graphs[B] = g
         return g
