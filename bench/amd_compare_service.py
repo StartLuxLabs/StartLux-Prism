@@ -6,12 +6,19 @@ from pathlib import Path
 import statistics
 
 
-def semantic(value):
-    if isinstance(value, dict):
-        return {k:semantic(v) for k,v in value.items() if k!='ms' and not k.endswith('_ms')}
-    if isinstance(value, list):
-        return [semantic(v) for v in value]
-    return value
+def semantic(answers):
+    """Remove only documented timing fields, preserving question/option names."""
+    import copy
+    result = copy.deepcopy(answers)
+    for answer in result.values():
+        details = answer.get('details')
+        if not isinstance(details, dict):
+            continue
+        details.pop('total_ms', None)
+        for section in ('first_pass', 'thought', 'after_thought'):
+            if isinstance(details.get(section), dict):
+                details[section].pop('ms', None)
+    return result
 
 
 def requests(path):
