@@ -93,7 +93,32 @@ dequantized product, batch invariance, and throughput. On the RTX 5060 Ti:
 - 32 engine requests through the CUTLASS path made 32/32 the same choice with `max |dp| = 0`
   against Triton; the kernel changes latency, not decisions.
 
+`tests/test_mxfp4_batch.py` (GPU, a Q8_0 checkpoint) checks the engine path for batch invariance, as Prism's other
+paths: each request alone and all of them in one batch must give the same letter logits, bit for bit.  Alone, a
+short request's W8A8 output projections take split K and leave their residual add to the next kernel that reads the
+residual; in a batch of thousands of tokens they do not.  On the RTX 5090 (the 9B, 6 fixed requests and 48 JevBench
+items, 59 rows): the same bits alone and in a 28,653-token batch, for MXFP4 and for int8.  Without the reset of that
+deferred add after the MXFP4 branch folds it (engine/model.py, `_body_layers`), 38 of the 59 rows differ (up to
+6.3 in a logit).
+
 ## Performance
+
+**RTX 5090, 32 GB** (v1.1 9B AutoThink, without FP8 KV, `--mem-fraction 0.8`; int8 / MXFP4 on Triton / MXFP4 on
+CUTLASS):
+
+| | int8 | MXFP4, Triton | MXFP4, CUTLASS |
+|---|---:|---:|---:|
+| 231 JevBench items one at a time, mean / p50 (ms) | 22.1 / 7.9 | 22.8 / 10.1 | 20.9 / 8.9 |
+| 231 items from 64 clients, 3 passes (requests/s) | 54.1 | 55.2 | **62.6** |
+| a decode step, 1 / 8 / 32 sequences at 1,024 tokens (ms) | 6.38 / 6.95 / 8.97 | 6.57 / 7.26 / 9.42 | 6.73 / 7.43 / 9.60 |
+| largest batch / thoughts at once (sized from free memory) | 24,576 / 8 | 40,960 / 16 | 32,768 / 16 |
+| every item thinking, the same seeds, 32 clients (s) | 196 | 137 | 134 |
+
+With thoughts the gain comes from memory (16 thoughts at once against int8's 8); int8 with `--kv-fp8` also runs 16 and
+took 124 s on the same thoughts' prompts.  The CUTLASS and Triton MXFP4 runs give the same answers and the same
+thoughts, token for token.
+
+## Performance on a 16 GB card
 
 RTX 5060 Ti, 16 GB, idle beside the server. The 16 GB card is the validation card; the kernel has
 no VRAM-size gate. Per-GEMM speedup of CUTLASS over Triton with the same packed inputs:
@@ -202,8 +227,15 @@ Python wrapper raises instead of silently using the output.
 | int8 | 225/231 | 0.0110 | 0.117 | 12 |
 | W4A8 (Q4_K_M, mixed 4/6-bit) | 225/231 | 0.0186 | 0.260 | 27 |
 | **MXFP4 (Q8_0 source, smoothed)** | **221/231** | **0.0307** | **0.376** | **45** |
+| MXFP4 without a side file (unsmoothed) | 220/231 | 0.0306 | 0.393 | 46 |
+| MXFP4 + `--kv-fp8` (refused now) | 225/231 | 0.0300 | 0.880 | 40 |
+
+The tolerance for this opt-in mode: against bf16 on these 231 items, the same decision on at least 220, mean |dp| at
+most 0.035, max |dp| at most 0.40.  Both MXFP4 rows meet it, the unsmoothed one at the edge.  Triton and CUTLASS give
+the same bits.
 
 MXFP4 is a product trade-off, not an int8 replacement.  Quantizing the MLP from the BF16 checkpoint
 instead of Q8_0 did not improve the 231-item result, and FP4 weights with FP8 activations did not
 either; the remaining error is in the 4-bit weights.  The MXFP4 + `--kv-fp8` combination is
-explicitly rejected.
+explicitly rejected: on `hard-sol-a-multi_hop-10` the right answer's probability is 0.919 in bf16, 0.808 with MXFP4
+alone and 0.04 with both, a confident wrong answer.

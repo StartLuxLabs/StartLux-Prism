@@ -857,6 +857,7 @@ class Engine:
                 pend = self._out_proj(mq, as_, lw["o_q"], lw["o_s"], h, c["tok"], parts, pd, T)
             if mxfp4:
                 KQ.fold(h, parts, pend, c["tok"], T)
+                pend = None             # folded: the next layer's norm must not add these partial sums again
                 if self.mlp_chunk and T > self.mlp_chunk:
                     for t0 in range(0, T, self.mlp_chunk):
                         rows = min(self.mlp_chunk, T - t0)

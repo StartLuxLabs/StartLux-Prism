@@ -217,13 +217,12 @@ Endpoints: `POST /v1/systemone` (also `/v1/decisions`), `GET /v1/models`, `GET /
 
 | Server flag | Default | Description |
 |---|---|---|
-| `--precision` | `auto` | `int8` for Q8_0 files, `w4a8` for Q4_K_M files, `bf16` as the reference; `mxfp4` runs the MLP in MXFP4 with the rest W8A8 |
-| `--kv-fp8` | off | e4m3 keys and values, one fp32 scale per token and KV head: half the bf16 KV memory |
+| `--precision` | `auto` | `int8` for Q8_0 files, `w4a8` for Q4_K_M files, `bf16` as the reference; `mxfp4` (opt-in, lower precision) runs the MLP in MXFP4 with the rest W8A8 |
 | `--gpus`, `--tp` | | The GPUs; the GPUs per model (2 or 4 for the 27B) |
 | `--max-tokens` | from free memory | The largest batch (131,072 tokens for the 27B on an H200); longer requests get HTTP 422 |
 | `--prefix-cache-tokens` | 65,536 | KV rows kept for evidence that comes again |
 | `--think-seqs` | as many as fit | Thoughts generated at once (64 for the 27B on an H200, 16 for the 9B in int8 on an RTX 5090) |
-| `--kv-fp8` | off | Keys and values as e4m3 with a scale per token and KV head (sm_89 or newer): about half the KV memory, so more thoughts and cached evidence fit |
+| `--kv-fp8` | off | Keys and values as e4m3 with a scale per token and KV head (sm_89 or newer): about half the KV memory, so more thoughts and cached evidence fit; not with `--precision mxfp4` |
 | `--gate`, `--none-check`, `--allow-none` | 0.6, on, on (v1.1) | The defaults of the request fields |
 
 Every field, flag and model folder: [serving guide](docs/serving.md).
@@ -262,35 +261,13 @@ engine and the raw numbers: [benchmarks](docs/benchmarks.md).
 
 ## Blackwell MXFP4
 
-Blackwell has native MXFP4 tensor-core instructions. The opt-in CUTLASS MXFP4 GEMM in
-[`docs/blackwell.md`](docs/blackwell.md) uses them for the projections, with a plain-Triton fallback. It is not a
-16 GB feature: the launcher covers SM120/SM121 today, SM100 is compile-checked and SM103 is planned; the 16 GB RTX
-5060 Ti below is the validation card, not the target. On a 9B AutoThink model, that card, 32k context, FP8 KV, same
-binary and config:
-
-| workload | baseline | MXFP4 | gain |
-|---|---:|---:|---:|
-| 1,799-token prefill, p50 (int8 → CUTLASS) | 272.6 ms | **192.6 ms** | **1.42×** |
-| 32 read-out items, mean (Triton MXFP4 → CUTLASS) | 104.8 ms | **89.9 ms** | **1.17×** |
-| 1,799-token read-out, p50 (Triton MXFP4 → CUTLASS) | 222.1 ms | **192.6 ms** | **1.15×** |
-| 8 thoughts, 4 clients, budget 512 (Triton MXFP4 → CUTLASS) | 27.6 s | **24.3 s** | **1.14×** |
-| GPU memory at 1k (int8 two-copy → MXFP4 single-copy) | 13.6 GB | **8.0 GB** | **−41%** |
-
-The CUTLASS kernel is bit-identical to the Triton MXFP4 path on the same weights (`max |Δp| = 0` over 32 requests),
-so it changes latency, not decisions. Gains are largest on prefill and read-out; thought-heavy requests gain about
-14%, because decode dominates there. These 9B numbers use the research branch's smoothed-MLP calibration and the
-opt-in MXFP4 path; they are not the default configuration. The generic kernel and a GGUF converter are included,
-including the optional smoothed calibration, and `--precision mxfp4` runs the MLP in the engine with the rest W8A8.
-MXFP4 is opt-in and lower precision: `auto` never selects it, `/health` reports `lower_precision`, and it is not
-combined with `--kv-fp8`. On 231 public JevBench items (9B, `think_mode=never`, against bf16) it is 221/231 same
-decision, mean |dp| 0.0307, max 0.376; the full table and limitations are in [Blackwell MXFP4](docs/blackwell.md).
-FP8 KV is a separate opt-in; full-FP4 attention/GDN is separate, and a model-specific reference module shows the
-scale folding. The 9B model
-and one GPU were measured; 27B and multi-GPU were not. The 16 GB card is a test
-bed, not a memory-size gate: the same kernel leaves the freed MLP memory for context or concurrency on 32 GB and
-larger Blackwell cards, but those runs are not measured yet. The kernel is not on the default path: build it with
-`scripts/build_mxfp4_cutlass.sh`, set `STARTLUX_PRISM_MXFP4_CUTLASS=1`, and see [Blackwell MXFP4](docs/blackwell.md)
-for the layout, API, and the SM100/SM103 plan.
+`--precision mxfp4` (opt-in, lower precision) runs the MLP's projections in MXFP4 on Blackwell's block-scaled tensor
+cores, the rest W8A8, from a Q8_0 file: the MLP's weights take about half of int8's memory (the 9B's 9.5 GB of weights
+become about 7.3 GB). It needs a Q8_0 file, is never chosen by `auto`, and is refused with `--kv-fp8`. On the v1.1 9B
+(RTX 5090, the 231 public JevBench items answered directly, against bf16) it makes the same decision on 221 (int8: 225),
+mean |dp| 0.0307 (0.0110), max 0.376 (0.117); from 64 clients 62.6 requests/s with the optional CUTLASS kernel against
+int8's 54.1, one at a time and in decode steps a little slower. Build, layout, accuracy and speed:
+[Blackwell MXFP4](docs/blackwell.md).
 
 ## Accuracy
 

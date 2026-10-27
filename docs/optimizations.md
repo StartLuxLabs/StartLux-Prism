@@ -496,8 +496,8 @@ batch and thought (`tests/test_tp.py`), and it holds at 2 and 4 GPUs.  Numbers: 
 
 ## FP8 KV cache (2026-10-26)
 
-From StartLuxLabs/StartLux-Prism#21 (eric8810), merged on its own; the PR's MXFP4 MLP is under
-[Tried, not kept](#tried-not-kept).
+From StartLuxLabs/StartLux-Prism#21 (eric8810), merged on its own first; the PR's MXFP4 MLP followed as an
+[opt-in](#opt-in) lower-precision mode.
 
 * **Format** (`--kv-fp8`, `Options.kv_fp8`): the QK-norm/RoPE kernel writes each token's keys and values, per kv head,
   as e4m3 bytes with one fp32 scale (the largest |value| / 448). Tree attention and the decode kernel load the bytes,
@@ -536,6 +536,17 @@ From StartLuxLabs/StartLux-Prism#21 (eric8810), merged on its own; the PR's MXFP
   the mean |dp| to 0.017, so it was not built.
 * **e4m3 keys and values** (`--kv-fp8`, `Options.kv_fp8`): about half the KV memory, JevBench's decisions and speed
   unchanged ([above](#fp8-kv-cache-2026-10-26)).
+* **MXFP4 MLP on Blackwell** (`--precision mxfp4`, `Options.precision`; StartLuxLabs/StartLux-Prism#21 by eric8810):
+  gate|up and down as MXFP4 (e2m1, an e8m0 scale per 32) from the Q8_0 file with SmoothQuant (alpha 0.5) folded into
+  the norms, the activations quantized to MXFP4 by a kernel of their own, on Triton's `tl.dot_scaled` or an optional
+  CUTLASS SM120 block-scaled GEMM from 64 rows (bit-identical to each other); the rest W8A8. On the v1.1 9B (RTX
+  5090), against bf16 on the 231 public JevBench questions: the same decision on 221 (int8 and W4A8 225), mean |dp|
+  0.0307 (int8 0.0110, W4A8 0.0186), max 0.376 (0.117, 0.260); with `--kv-fp8` too, max 0.880, so that combination
+  is refused. From 64 clients 62.6 requests/s with CUTLASS against int8's 54.1; one at a time (p50 8.9 against 7.9
+  ms) and in decode steps (6.73 / 7.43 / 9.60 ms at 1 / 8 / 32 sequences against 6.38 / 6.95 / 8.97) slower. With
+  thoughts its gain is memory (16 thoughts at once against 8), which `--kv-fp8` also gives int8. Kept as an opt-in
+  lower-precision mode within a stated tolerance (against bf16: at least 220 of 231 the same, mean |dp| at most
+  0.035, max at most 0.40); never chosen by `auto`. [Blackwell MXFP4](blackwell.md).
 
 ## Tried, not kept
 
@@ -568,17 +579,8 @@ From StartLuxLabs/StartLux-Prism#21 (eric8810), merged on its own; the PR's MXFP
   0.076. Not built. (Starting from the original bf16 checkpoint instead of Q8_0 might narrow the gap; untested.)
 * **FP4 (W4A4)**, simulated in fp32 on the reference over 22 questions (`tests/quant_sim.py`): NVFP4 kept 22/22
   decisions but with mean |dp| 0.045 (max 0.21) against W8A8's 0.016 (0.12); with SmoothQuant 19/22 (max 0.80); MXFP4
-  21/22 (max 0.93). Calibrated probabilities are the product, so the 2x FP4 tensor rate is not taken.
-* **MXFP4 MLP weights on Blackwell, measured** (StartLuxLabs/StartLux-Prism#21 by eric8810, 2026-10-26): gate|up and
-  down as MXFP4 (e2m1, an e8m0 scale per 32) from the Q8_0 file with SmoothQuant (alpha 0.5) folded into the norms,
-  the activations quantized to MXFP4 by a kernel of their own, on Triton's `tl.dot_scaled` or a CUTLASS SM120
-  block-scaled GEMM (bit-identical to each other). On the v1.1 9B (RTX 5090), against bf16 on the 231 public JevBench
-  questions: the same decision on 221 (int8 and W4A8 225), mean |dp| 0.0307 (int8 0.0110, W4A8 0.0186), max 0.376
-  (0.117, 0.260), 45 questions moved by more than 0.05 (12, 27); with `--kv-fp8` too, max 0.880. From 64 clients
-  without thoughts 63.1 requests/s with CUTLASS against int8's 54.7 (Triton 55.5); one at a time slower (p50 9.0 and
-  10.05 ms against 7.95), and so are decode steps (CUTLASS at 1 / 8 / 32 sequences 7.67 / 8.10 / 9.45 ms against
-  6.39 / 6.94 / 8.96: it takes every size). With thoughts its gain was memory (16 thoughts at once against 8), which
-  the FP8 KV cache (above) gives int8 at int8's accuracy. Not merged; the PR's FP8 KV cache was.
+  21/22 (max 0.93). Calibrated probabilities are the product, so the 2x FP4 tensor rate is not taken. (The MLP alone
+  in MXFP4, measured, is an opt-in lower-precision mode: above.)
 
 ## Open
 
