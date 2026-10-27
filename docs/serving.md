@@ -37,7 +37,11 @@ Files run here: `StartLux-Decision-v1.1-27B-AutoThink-Q8_0.gguf` (28.60 GB, SHA-
 ## Precisions and setup
 
 **Precision** (`--precision`): `int8` (W8A8, the fast path: the default for Q8_0 files), `bf16` (the same weights
-dequantized, on cuBLAS: the reference) or `w4a8` (a Q4_K_M file's own 4-bit weights: its default).
+dequantized, on cuBLAS: the reference), `w4a8` (a Q4_K_M file's own 4-bit weights: its default) or `mxfp4` (the MLP
+in MXFP4, the rest W8A8 from a Q8_0 file; needs `--calib` and, for the smoothed result, `--mxfp4-side`).
+
+**KV cache:** `--kv-fp8` stores keys and values as e4m3 bytes with one fp32 scale per token and KV head, half the
+bf16 KV memory.  It is the flag that keeps the 9B's 32k context inside 16 GB.
 
 **KV cache:** `--kv-fp8` keeps the attention layers' keys and values as e4m3 bytes with one fp32 scale per token and
 KV head, about half the bf16 KV memory (a 9B thought's state and KV rows: 131.5 MiB instead of 210), which the auto
@@ -147,6 +151,7 @@ WantedBy=multi-user.target
 |---|---|---|---|
 | `int8` (W8A8) | int8 per output channel, requantized from the GGUF with SmoothQuant at start-up | int8 per token | Q8_0 files (`auto`) |
 | `w4a8` | the file's own Q4_K / Q6_K blocks, as stored | int8 per 256 inputs | Q4_K_M files (`auto`) |
+| `mxfp4` | MLP: e2m1 + e8m0/32 (optional smoothed side file); other projections int8 | int8 for attention/GDN; MXFP4 for the MLP | Blackwell Q8_0 files with `--calib` |
 | `bf16` | dequantized from the GGUF, cuBLAS | bf16 | the parity reference |
 
 Measured:

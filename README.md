@@ -217,12 +217,12 @@ Endpoints: `POST /v1/systemone` (also `/v1/decisions`), `GET /v1/models`, `GET /
 
 | Server flag | Default | Description |
 |---|---|---|
-| `--precision` | `auto` | `int8` for Q8_0 files, `w4a8` for Q4_K_M files, `bf16` as the reference |
+| `--precision` | `auto` | `int8` for Q8_0 files, `w4a8` for Q4_K_M files, `bf16` as the reference; `mxfp4` (opt-in, lower precision) runs the MLP in MXFP4 with the rest W8A8 |
 | `--gpus`, `--tp` | | The GPUs; the GPUs per model (2 or 4 for the 27B) |
 | `--max-tokens` | from free memory | The largest batch (131,072 tokens for the 27B on an H200); longer requests get HTTP 422 |
 | `--prefix-cache-tokens` | 65,536 | KV rows kept for evidence that comes again |
 | `--think-seqs` | as many as fit | Thoughts generated at once (64 for the 27B on an H200, 16 for the 9B in int8 on an RTX 5090) |
-| `--kv-fp8` | off | Keys and values as e4m3 with a scale per token and KV head (sm_89 or newer): about half the KV memory, so more thoughts and cached evidence fit |
+| `--kv-fp8` | off | Keys and values as e4m3 with a scale per token and KV head (sm_89 or newer): about half the KV memory, so more thoughts and cached evidence fit; not with `--precision mxfp4` |
 | `--gate`, `--none-check`, `--allow-none` | 0.6, on, on (v1.1) | The defaults of the request fields |
 
 Every field, flag and model folder: [serving guide](docs/serving.md).
@@ -259,6 +259,16 @@ Against every other engine compared on v1 (SGLang, vLLM, llama.cpp, StartLux-Dec
 JevK5), StartLux-Prism has the lowest latency (1.6-2.3× below the next) and 1.6-2.4× their throughput. Methods, every
 engine and the raw numbers: [benchmarks](docs/benchmarks.md).
 
+## Blackwell MXFP4
+
+`--precision mxfp4` (opt-in, lower precision) runs the MLP's projections in MXFP4 on Blackwell's block-scaled tensor
+cores, the rest W8A8, from a Q8_0 file: the MLP's weights take about half of int8's memory (the 9B's 9.5 GB of weights
+become about 7.3 GB). It needs a Q8_0 file, is never chosen by `auto`, and is refused with `--kv-fp8`. On the v1.1 9B
+(RTX 5090, the 231 public JevBench items answered directly, against bf16) it makes the same decision on 221 (int8: 225),
+mean |dp| 0.0307 (0.0110), max 0.376 (0.117); from 64 clients 62.6 requests/s with the optional CUTLASS kernel against
+int8's 54.1, one at a time and in decode steps a little slower. Build, layout, accuracy and speed:
+[Blackwell MXFP4](docs/blackwell.md).
+
 ## Accuracy
 
 StartLux-Decision-v1.1-27B-AutoThink with thoughts: StartLux-Prism int8 from the Q8_0 file, and W4A8 from the Q4_K_M
@@ -294,6 +304,7 @@ Every suite: [benchmarks](docs/benchmarks.md#accuracy-startlux-decision-v1s-eval
 | [Benchmarks](docs/benchmarks.md) | Methods, setups and results against the official engine and six other engines |
 | [Design](docs/design.md) | How the engine works, with a map of the code |
 | [Optimization log](docs/optimizations.md) | What was measured, kept and dropped |
+| [Blackwell MXFP4](docs/blackwell.md) | The optional CUTLASS MXFP4 GEMM: layout, build, validation, performance, SM120/121/SM100/SM103 support |
 | [Correctness and tests](docs/testing.md) | How answers are checked against the reference, and how to run the tests |
 
 ## Acknowledgements
