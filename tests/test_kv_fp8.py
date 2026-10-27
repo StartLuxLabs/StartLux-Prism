@@ -37,6 +37,9 @@ def reference(q, gate, k, v, segs, bidir):
 
 
 def main():
+    if torch.version.hip:
+        print("skip: FP8 KV cache is not qualified on the experimental ROCm backend")
+        return
     if torch.cuda.get_device_capability() < (8, 9):
         print("skip: e4m3 keys and values need sm_89 or newer")
         return

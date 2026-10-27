@@ -41,6 +41,7 @@ import torch
 
 from .. import gguf_weights, jevfmt as J
 from .. import progress as P
+from ..backends import architecture, is_hip, require_single_gpu, require_supported_kv_cache
 from ..kernels import attn as KA
 from ..kernels import cuda_ext as CX
 from ..kernels import elementwise as KE
@@ -145,6 +146,18 @@ class Options:
 class Engine:
     def __init__(self, gguf_path, model_dir, options=None, device="cuda"):
         self.opt = options or Options()
+        require_single_gpu(self.opt.tp)
+        require_supported_kv_cache(self.opt.kv_fp8)
+        if self.opt.precision == "w4a16" and not is_hip():
+            raise ValueError("The experimental W4A16 profile requires ROCm gfx1201")
+        if is_hip():
+            if architecture() != "gfx1201":
+                raise ValueError("The experimental ROCm model profile is currently limited to gfx1201")
+            if self.opt.precision not in ("w4a8", "w4a16"):
+                raise ValueError("The current ROCm model paths use Q4_K_M as w4a8 or w4a16; "
+                                 "bf16/int8 whole-model paths are not qualified on this single-GPU profile")
+            self.opt.pdl = 0
+            self.opt.l2_prefetch = 0
         self.device = torch.device(device)
         self.tp = None                               # tensor parallelism (startlux_prism/tp.py): this rank's group
         if self.opt.tp > 1:
@@ -167,6 +180,9 @@ class Engine:
         if mode not in ("causal", "bidirectional"):
             raise ValueError(f"prompt_attention {self.opt.prompt_attention!r}: causal, bidirectional or auto")
         self.bidir = mode == "bidirectional"
+        if is_hip() and self.bidir:
+            raise ValueError("The experimental ROCm profile is qualified for causal AutoThink prompts only; "
+                             "Instant/bidirectional prompts require separate qualification")
         if self.bidir:                               # every prompt whole: nothing to share or cache
             self.opt = dataclasses.replace(self.opt, share=False, prefix_cache=0)
         self.vision = None
@@ -178,7 +194,12 @@ class Engine:
                 raise ValueError(f"{self.opt.mmproj}: projects to {self.vision.cfg.out}, the decoder's hidden size is "
                                  f"{self.cfg.hidden}")
         self.int8 = False
-        self.w4 = self.opt.precision == "w4a8"
+        self.w4 = self.opt.precision in ("w4a8", "w4a16")
+        self.w4a16 = self.opt.precision == "w4a16"
+        self.q_components = os.environ.get("STARTLUX_PRISM_AMD_Q_COMPONENTS", "all")
+        if self.w4a16 and self.q_components not in ("activation", "intermediates", "all"):
+            raise ValueError("Unknown research precision component selection")
+        self.fp16_intermediates = self.w4a16 and self.q_components != "activation"
         if self.tp is not None:                      # int8 shards straight from the Q8_0 values: no bf16 copy
             self._tp_weights(w)
             self.tp.setup(self.cfg.hidden, 2 * self.cfg.n_layer)   # the fused all-reduces' symmetric buffers
@@ -201,7 +222,7 @@ class Engine:
         if self.opt.precision == "int8" and self.tp is None:
             amax = self._load_or_calibrate(w)
             self._int8_weights(w, amax)
-        elif self.opt.precision not in ("bf16", "w4a8", "int8"):
+        elif self.opt.precision not in ("bf16", "w4a8", "w4a16", "int8"):
             raise ValueError(f"precision {self.opt.precision!r}")
         del w
         torch.cuda.empty_cache()
@@ -260,13 +281,15 @@ class Engine:
         segments of one kind each; norms as they are (no smoothing)."""
         dev, cfg = self.device, self.cfg
         self.embed = w.embed.to(dev)
-        if not isinstance(self.embed, gguf_weights.Q8):
+        if self.w4a16 and self.q_components == "all":
+            self.embed = KW4.repack(self.embed)
+        elif not isinstance(self.embed, gguf_weights.Q8):
             self.embed = self.embed.as_q8()
         self.letters = w.output.dequant(torch.float32, torch.tensor(self.tok.letters)).to(dev)
         self.out_norm = w.out_norm.to(dev)
         self.layers, self.gdn_index, self.attn_index = [], {}, {}
         seg = lambda *m: KW4.segments(m, dev)       # noqa: E731
-        bar = P.Bar("weights to the GPU (W4A8: the file's 4-bit blocks)", len(w.layers), "layers")
+        bar = P.Bar(f"weights to the GPU ({self.opt.precision.upper()}: the file's 4-bit blocks)", len(w.layers), "layers")
         for i, l in enumerate(w.layers):
             d = {"attn_norm": l.attn_norm.to(dev), "post_norm": l.post_norm.to(dev), "gu": seg(l.ffn_gate, l.ffn_up),
                  "down": seg(l.ffn_down)}
@@ -280,6 +303,9 @@ class Engine:
             self.layers.append(d)
             bar.update(i + 1)
         torch.cuda.empty_cache()
+        if self.opt.precision == "w4a8" and is_hip() and architecture() == "gfx1201":
+            from ..kernels.amd_w4a8_meta import prepare
+            self.amd_w4a8_prepack = prepare(self.layers)
         if not cfg.is_attention(cfg.n_layer - 1):
             raise ValueError("expected the last layer to be full attention")
         self.qn = cfg.n_head * cfg.head_dim * 2
@@ -417,7 +443,7 @@ class Engine:
         """Every device buffer of a T-token engine, for this precision's forward (bf16-only buffers for the bf16 path,
         int8 activations for the int8 one): {name: tensor}.  dev "meta" sizes them without memory."""
         cfg, o, R = self.cfg, self.opt, self.opt.max_read
-        f32, bf, i32 = torch.float32, torch.bfloat16, torch.int32
+        f32, bf, i32 = torch.float32, (torch.float16 if self.fp16_intermediates else torch.bfloat16), torch.int32
         z = lambda *s, dtype=f32: torch.zeros(*s, dtype=dtype, device=dev)  # noqa: E731
         HV, HK, D = cfg.v_heads, cfg.k_heads, cfg.gdn_dim
         n_gdn, n_attn = len(self.gdn_index), len(self.attn_index)
@@ -455,8 +481,8 @@ class Engine:
             K = max(cfg.ffn, cfg.value_dim, cfg.hidden, cfg.n_head * cfg.head_dim)
             # int8 activations as the int8 path, with one scale per 256 inputs and the sum of every 32 (Q4_K's mins,
             # split in two bytes: kernels/w4a8.py quantize_ref)
-            buf.update(aq=z(T * K, dtype=torch.int8), as_=z(T * K // 256), xs=z(T * K // 16, dtype=torch.int8),
-                       aqr=z(R * K, dtype=torch.int8), asr=z(R * K // 256), xsr=z(R * K // 16, dtype=torch.int8))
+            buf.update(aq=z(T * K, dtype=torch.float16 if self.w4a16 else torch.int8), as_=z(T * K // 256), xs=z(T * K // 16, dtype=torch.int8),
+                       aqr=z(R * K, dtype=torch.float16 if self.w4a16 else torch.int8), asr=z(R * K // 256), xsr=z(R * K // 16, dtype=torch.int8))
         elif self.int8:
             K = max(cfg.ffn, cfg.value_dim, cfg.hidden)
             # int8 activations: one flat buffer per side, viewed as [rows, K] row-major for each projection's K (the
@@ -551,6 +577,14 @@ class Engine:
     def _allocate(self, T, lean=False):
         """Buffers for T-token batches (self.max_tokens = T); lean: none for the prefix cache and decoding sequences."""
         o, dev = self.opt, self.device
+        if is_hip():
+            def size(x):
+                return sum(size(v) for v in x.values()) if isinstance(x, dict) else x.numel() * x.element_size()
+            needed = size(self._make_buffers(T, "meta", lean))
+            free, _ = torch.cuda.mem_get_info(dev)
+            if needed + (2 << 30) > free:
+                raise RuntimeError(f"ROCm buffer budget needs {needed / 2**30:.2f} GiB plus 2 GiB reserve; "
+                                   f"only {free / 2**30:.2f} GiB free. Reduce tokens, prefix cache or think slots.")
         m = self._make_buffers(T, dev, lean)
         self.max_tokens = T
         self.state, self.conv_state, self.trans, self.kv = m["state"], m["conv_state"], m["trans"], m["kv"]
@@ -921,7 +955,7 @@ class Engine:
         cache = self.cache if self.opt.share else None
         plan = B.plan_batch(groups, self.sys_len, self.kv_scratch0, self.root_kv, share=self.opt.share, cache=cache,
                             system=self.system, max_inserts=MAX_INSERTS - len(keep), max_trans=self.opt.max_trans,
-                            bm=KA.launch("BM"), keep=keep, whole=self.bidir)
+                            bm=KA.launch("BM"), keep=keep, whole=self.bidir, canonical_head=is_hip() and not self.bidir)
         try:
             if plan.feats and self.vision is None:
                 raise ValueError("this engine has no vision tower: it reads text only")
@@ -1047,7 +1081,8 @@ class Engine:
         for start, image, j0, n in feats:
             f = done.get(image.digest)
             if f is None:
-                f = done[image.digest] = self.vision.encode(image)
+                f = done[image.digest] = (self.vision.encode(image, graphs=self.opt.graphs)
+                                         if is_hip() else self.vision.encode(image))
             rows.append(torch.arange(start, start + n, dtype=torch.int64, device=self.device))
             xs.append(f[j0:j0 + n].float())
         return torch.cat(rows), torch.cat(xs), len(done)
@@ -1088,6 +1123,30 @@ class Engine:
         if self.vision is not None:
             self.vision.warm_up()
         torch.cuda.synchronize()
+
+    @torch.no_grad()
+    def warm_up_eager(self, buckets=None, reads=None):
+        """Compile common eager buckets with zero live work, preserving all existing state.
+
+        This creates no graphs and performs no online autotuning. A saved live-count
+        table is restored even if compilation fails, so warm-up is safe after load.
+        """
+        bodies = buckets or [x for x in TOKEN_BUCKETS if x <= self.max_tokens]
+        heads = reads or [x for x in READ_BUCKETS if x <= self.opt.max_read]
+        saved = self.counts.clone()
+        bar = P.Bar("eager kernels", len(bodies) + len(heads), "batch shapes")
+        try:
+            self.counts.zero_()
+            for i, T in enumerate(bodies):
+                self._body(T)
+                bar.update(i + 1)
+            for i, R in enumerate(heads):
+                self._head(R)
+                bar.update(len(bodies) + i + 1)
+            torch.cuda.synchronize()
+        finally:
+            self.counts.copy_(saved)
+            torch.cuda.synchronize()
 
     def letter_logits(self, rows):
         """Decider backend: the rows of one request (prompt.Row); a bidirectional engine's request may take several

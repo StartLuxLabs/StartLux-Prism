@@ -186,15 +186,15 @@ def _intra_kernel(k_ptr, v_ptr, g_ptr, beta_ptr, w_ptr, u_ptr, gc_ptr, chunks_pt
     t31 = _mm(t33, _mm(a31, t11) + _mm(a32, t21))
     t30 = _mm(t33, _mm(a30, t00) + _mm(a31, t10) + _mm(a32, t20))
     # w = T (beta k e^gc), u = T (beta v), by row blocks
-    kb0 = (k0.to(tl.float32) * (b0 * tl.exp(c0))[:, None]).to(tl.bfloat16)
-    kb1 = (k1.to(tl.float32) * (b1 * tl.exp(c1))[:, None]).to(tl.bfloat16)
-    kb2 = (k2.to(tl.float32) * (b2 * tl.exp(c2))[:, None]).to(tl.bfloat16)
-    kb3 = (k3.to(tl.float32) * (b3 * tl.exp(c3))[:, None]).to(tl.bfloat16)
-    vb0 = (v0.to(tl.float32) * b0[:, None]).to(tl.bfloat16)
-    vb1 = (v1.to(tl.float32) * b1[:, None]).to(tl.bfloat16)
-    vb2 = (v2.to(tl.float32) * b2[:, None]).to(tl.bfloat16)
-    vb3 = (v3.to(tl.float32) * b3[:, None]).to(tl.bfloat16)
-    bf = tl.bfloat16
+    kb0 = (k0.to(tl.float32) * (b0 * tl.exp(c0))[:, None]).to(k_ptr.dtype.element_ty)
+    kb1 = (k1.to(tl.float32) * (b1 * tl.exp(c1))[:, None]).to(k_ptr.dtype.element_ty)
+    kb2 = (k2.to(tl.float32) * (b2 * tl.exp(c2))[:, None]).to(k_ptr.dtype.element_ty)
+    kb3 = (k3.to(tl.float32) * (b3 * tl.exp(c3))[:, None]).to(k_ptr.dtype.element_ty)
+    vb0 = (v0.to(tl.float32) * b0[:, None]).to(k_ptr.dtype.element_ty)
+    vb1 = (v1.to(tl.float32) * b1[:, None]).to(k_ptr.dtype.element_ty)
+    vb2 = (v2.to(tl.float32) * b2[:, None]).to(k_ptr.dtype.element_ty)
+    vb3 = (v3.to(tl.float32) * b3[:, None]).to(k_ptr.dtype.element_ty)
+    bf = k_ptr.dtype.element_ty
     w0 = tl.dot(t00.to(bf), kb0)
     u0 = tl.dot(t00.to(bf), vb0)
     w1 = tl.dot(t10.to(bf), kb0) + tl.dot(t11.to(bf), kb1)
@@ -235,12 +235,12 @@ def _hrec_run(S, k_ptr, w_ptr, u_ptr, gc_ptr, vnew_ptr, hc_ptr, chunks_ptr, firs
         u = tl.load(u_ptr + (rows[:, None] * HV + h) * D + dv[None, :], mask=m[:, None], other=0.0).to(tl.float32)
         k = tl.load(k_ptr + (rows[:, None] * HK + hk) * D + dk[None, :], mask=m[:, None], other=0.0)
         gc = tl.load(gc_ptr + rows * HV + h, mask=m, other=0.0)
-        Sb = S.to(tl.bfloat16)
+        Sb = S.to(k_ptr.dtype.element_ty)
         tl.store(hc_ptr + (first + j).to(tl.int64) * (HV * D * D) + tile, Sb)
         g_last = tl.sum(tl.where(r == n - 1, gc, 0.0), 0)
-        v_new = (u - tl.dot(w, Sb)).to(tl.bfloat16)
+        v_new = (u - tl.dot(w, Sb)).to(k_ptr.dtype.element_ty)
         tl.store(vnew_ptr + (rows[:, None] * HV + h) * D + dv[None, :], v_new, mask=m[:, None])
-        kd = (k.to(tl.float32) * tl.exp(g_last - gc)[:, None]).to(tl.bfloat16)
+        kd = (k.to(tl.float32) * tl.exp(g_last - gc)[:, None]).to(k_ptr.dtype.element_ty)
         S = S * tl.exp(g_last) + tl.dot(tl.trans(kd), v_new)
     return S
 
@@ -313,8 +313,8 @@ def _output_kernel(q_ptr, k_ptr, gc_ptr, vnew_ptr, hc_ptr, o_ptr, chunks_ptr, n_
     vn = tl.load(vnew_ptr + (rows[:, None] * HV + h) * D + dv[None, :], mask=m[:, None], other=0.0)
     incl = (r[:, None] >= r[None, :]) & m[None, :]
     attn = tl.dot(q, tl.trans(k)) * tl.where(incl, tl.exp(tl.where(incl, gc[:, None] - gc[None, :], 0.0)), 0.0)
-    qg = (q.to(tl.float32) * tl.exp(gc)[:, None]).to(tl.bfloat16)
-    o = tl.dot(qg, hs) + tl.dot(attn.to(tl.bfloat16), vn)
+    qg = (q.to(tl.float32) * tl.exp(gc)[:, None]).to(q_ptr.dtype.element_ty)
+    o = tl.dot(qg, hs) + tl.dot(attn.to(q_ptr.dtype.element_ty), vn)
     tl.store(o_ptr + (rows[:, None] * HV + h) * D + dv[None, :], o, mask=m[:, None])
 
 
@@ -330,7 +330,7 @@ def _gated_norm_kernel(o_ptr, z_ptr, P, Z_OFF, w_ptr, out_ptr, n_tok_ptr, eps,
     o = tl.load(o_ptr + (t * HV + h) * D + d)
     z = tl.load(z_ptr + t * P + Z_OFF + h * D + d).to(tl.float32)
     y = o * tl.rsqrt(tl.sum(o * o, 0) / D + eps) * tl.load(w_ptr + d) * (z / (1.0 + tl.exp(-z)))
-    tl.store(out_ptr + t * (HV * D) + h * D + d, y.to(tl.bfloat16))
+    tl.store(out_ptr + t * (HV * D) + h * D + d, y.to(out_ptr.dtype.element_ty))
 
 
 def conv_prep(proj, convw, hist, conv_arena, gdn_layer, dt_bias, a, q, k, v, g, beta, n_tok, T, cfg, saves, n_save,
@@ -350,7 +350,8 @@ def conv_prep(proj, convw, hist, conv_arena, gdn_layer, dt_bias, a, q, k, v, g, 
 # 32-request batch with value tiles twice as wide (the profiler's kernel times).  A tile only splits independent value
 # columns, so every choice gives the same bits.  STARTLUX_PRISM_<NAME> overrides.
 LAUNCH = dict(INTRA_WARPS=4, OUT_BV=64, OUT_WARPS=4, OUT_NS=2, HREC_BV=32, HREC_NS=3, HREC_WARPS=4)
-LAUNCH_BY_GPU = {"h200": dict(OUT_BV=128, OUT_NS=1, HREC_BV=64, HREC_NS=2)}
+LAUNCH_BY_GPU = {"h200": dict(OUT_BV=128, OUT_NS=1, HREC_BV=64, HREC_NS=2),
+                 "gfx1201": dict(INTRA_WARPS=8, OUT_BV=32, OUT_NS=1, HREC_BV=16, HREC_NS=1)}
 
 
 @functools.lru_cache(None)

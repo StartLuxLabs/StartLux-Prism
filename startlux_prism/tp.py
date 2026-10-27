@@ -528,6 +528,9 @@ def start(world, gpus=None):
     indices (a list or "4,5"; default: the visible ones, else 0..world-1), which become this process's visible GPUs
     (rank r on cuda:r) - so call this before anything uses CUDA.  Engines and decoders built with Options(tp=world)
     then run on the group."""
+    from .backends import is_hip
+    if is_hip():
+        raise RuntimeError("ROCm Prism is single-GPU only; tensor parallelism is disabled")
     global _GROUP
     if _GROUP is not None:
         return _GROUP

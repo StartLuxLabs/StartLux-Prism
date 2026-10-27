@@ -33,7 +33,7 @@ from typing import NamedTuple
 import torch
 import triton
 import triton.language as tl
-from triton.language.extra.cuda import libdevice
+from ..backends import math as libdevice
 
 from .. import gguf_weights as GW
 from ..gguf import GGML_Q4_K, GGML_Q6_K
@@ -354,6 +354,28 @@ def gemm(xq, a, xs, w: W4, out, n_rows, epi=0, cfg=None, pdl=0):
     """xq int8 [M, K], a fp32 [K / 256, M], xs int8 [K / 256, M, 16] (Q4_K's mins; quantize_ref), w W4 [N, K] ->
     out [M, N]: bf16 (epi 0) or added into fp32 (epi 1).  The CUDA kernel (csrc/w4a8_gemm.cu); cfg (id, stages) or
     w4a8.pick_cuda; pdl: launched to overlap the kernel before (programmatic dependent launch, 1-3: csrc)."""
+    if torch.version.hip is not None and xq.dtype == torch.float16:
+        if cfg is not None:
+            raise ValueError("CUDA cfg IDs cannot be used by ROCm W4A16 kernels")
+        from .amd_w4a16 import gemm as fp16_gemm
+        return fp16_gemm(xq, w, out, n_rows, epi)
+    if torch.version.hip is not None:
+        if cfg is not None:
+            raise ValueError("CUDA cfg IDs cannot be used by ROCm W4A8 kernels")
+        implementation = os.getenv("STARTLUX_PRISM_AMD_GEMM", "auto")
+        if implementation in ("auto", "dispatch", "decode", "prefill"):
+            from .amd_w4a8_dispatch import run
+            if run(xq, a, xs, w, out, n_rows, epi, implementation):
+                return
+            implementation = "gemv"
+        if implementation == "gemv":
+            if xq.shape[0] <= 8:
+                from .amd_w4a8 import gemv
+                return gemv(xq, a, xs, w, out, n_rows, epi=epi)
+            return gemm_triton(xq, a, xs, w, out, n_rows, epi=epi)
+        if implementation != "reference":
+            raise ValueError(f"Unknown ROCm W4A8 implementation: {implementation}")
+        return gemm_triton(xq, a, xs, w, out, n_rows, epi=epi)
     from . import cuda_ext as CX
     c, stages = cfg or pick_cuda(xq.shape[0], w.n, w.kind, w.k)
     if c in WGMMA_CFGS and cfg is None and not wgmma_ok(xq.shape[0], w.n, w.k, w):
@@ -368,6 +390,10 @@ def gemm(xq, a, xs, w: W4, out, n_rows, epi=0, cfg=None, pdl=0):
 
 def pick(M, N, kind="q4k"):
     """(BM, BN, warps, stages) of the Triton kernels (Q6_K's int8 tiles take twice Q4_K's shared memory)."""
+    if torch.version.hip is not None:
+        if M <= 32:
+            return 16, 32, 4, 1
+        return (64, 128, 8, 1) if M >= 512 else (64, 64, 4, 1)
     if M <= 32:
         return 16, 128, 4, 3
     if M <= 128:

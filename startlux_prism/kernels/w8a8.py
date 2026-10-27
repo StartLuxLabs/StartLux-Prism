@@ -25,7 +25,7 @@ from typing import NamedTuple
 import torch
 import triton
 import triton.language as tl
-from triton.language.extra.cuda import libdevice
+from ..backends import math as libdevice
 
 
 @triton.jit
@@ -92,7 +92,7 @@ def _w8a8_kernel(a_ptr, as_ptr, w_ptr, ws_ptr, out_ptr, outs_ptr, n_rows_ptr, M,
         act = gate / (1.0 + tl.exp(-gate)) * up
         amax = tl.max(tl.abs(act), 1)
         scale = tl.maximum(amax, 1e-10) / 127.0
-        q = tl.extra.cuda.libdevice.rint(act / scale[:, None]).to(tl.int8)
+        q = libdevice.rint(act / scale[:, None]).to(tl.int8)
         cols = pid_n * HB + tl.arange(0, HB)
         tl.store(out_ptr + rm[:, None] * stride_om + cols[None, :], q, mask=rmask[:, None])
         tl.store(outs_ptr + rm * num_n + pid_n, scale, mask=rmask)
@@ -108,7 +108,7 @@ def _quant_rows_kernel(x_ptr, q_ptr, s_ptr, n_rows_ptr, K: tl.constexpr, GK: tl.
     c = g * GK + tl.arange(0, GK)
     x = tl.load(x_ptr + r * K + c).to(tl.float32)
     scale = tl.maximum(tl.max(tl.abs(x), 0), 1e-10) / 127.0
-    tl.store(q_ptr + r * K + c, tl.extra.cuda.libdevice.rint(x / scale).to(tl.int8))
+    tl.store(q_ptr + r * K + c, libdevice.rint(x / scale).to(tl.int8))
     tl.store(s_ptr + r * (K // GK) + g, scale)
 
 
@@ -149,7 +149,7 @@ def _table():
     tag>.json (rtx5090, h200; without one, the Triton kernel).  STARTLUX_PRISM_GEMM=triton turns it off, STARTLUX_PRISM_GEMM_TABLE names
     another table file."""
     from . import cuda_ext
-    if os.environ.get("STARTLUX_PRISM_GEMM") == "triton":
+    if torch.version.hip is not None or os.environ.get("STARTLUX_PRISM_GEMM") == "triton":
         return {}
     path = os.environ.get("STARTLUX_PRISM_GEMM_TABLE") or cuda_ext.table_path("gemm_table")
     if not os.path.exists(path):

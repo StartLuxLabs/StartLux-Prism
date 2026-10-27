@@ -49,6 +49,13 @@ HTTP time, median of 5 runs, model loading excluded.
 - **One GPU or several.** Data parallelism for throughput (3.92× on four H200s) and tensor parallelism (`--tp 2` or
   `4`) for latency.
 
+## Experimental AMD support
+
+Single-GPU Radeon AI PRO R9700 (`gfx1201`) support runs AutoThink Q4_K_M models
+with W4A8 or explicit `--precision w4a16`. W4A16 passes the local FP32 readout
+gate; W4A8 retains a known accuracy limitation. See the [AMD setup guide](docs/amd.md)
+for the qualified runtime, single-GPU launch command and support boundaries.
+
 ## Installation
 
 | Component | Requirement |
@@ -217,7 +224,7 @@ Endpoints: `POST /v1/systemone` (also `/v1/decisions`), `GET /v1/models`, `GET /
 
 | Server flag | Default | Description |
 |---|---|---|
-| `--precision` | `auto` | `int8` for Q8_0 files, `w4a8` for Q4_K_M files, `bf16` as the reference |
+| `--precision` | `auto` | `int8` for Q8_0 files, `w4a8` for Q4_K_M files, `bf16` as the reference; `w4a16` is an explicit experimental ROCm option |
 | `--gpus`, `--tp` | | The GPUs; the GPUs per model (2 or 4 for the 27B) |
 | `--max-tokens` | from free memory | The largest batch (131,072 tokens for the 27B on an H200); longer requests get HTTP 422 |
 | `--prefix-cache-tokens` | 65,536 | KV rows kept for evidence that comes again |

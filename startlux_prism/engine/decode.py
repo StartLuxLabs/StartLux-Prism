@@ -142,7 +142,7 @@ class Decoder:
     # ------------------------------------------------------------------ buffers
     def _buffers(self, B):
         cfg, e, dev = self.cfg, self.eng, self.eng.device
-        f32, bf, i32 = torch.float32, torch.bfloat16, torch.int32
+        f32, bf, i32 = torch.float32, (torch.float16 if e.fp16_intermediates else torch.bfloat16), torch.int32
         z = lambda *s, dtype=f32: torch.zeros(*s, dtype=dtype, device=dev)  # noqa: E731
         HV, HK, D = cfg.v_heads, cfg.k_heads, cfg.gdn_dim
         P = max(cfg.conv_dim + cfg.value_dim + 2 * HV, e.qn + 2 * cfg.n_kv_head * cfg.head_dim)
@@ -167,7 +167,7 @@ class Decoder:
                 b.update(tp_parts=z(parts_elems(B, cfg.hidden), dtype=i32), tp_amax=z(B))
         elif e.w4:                                   # W4A8 activations (engine/model.py Engine._act), the Q8_0 head's
             K = max(cfg.ffn, cfg.value_dim, cfg.hidden, cfg.n_head * cfg.head_dim)
-            b.update(aq=z(B * K, dtype=torch.int8), as_=z(B * K // 256), xs=z(B * K // 16, dtype=torch.int8),
+            b.update(aq=z(B * K, dtype=torch.float16 if e.w4a16 else torch.int8), as_=z(B * K // 256), xs=z(B * K // 16, dtype=torch.int8),
                      hq=z(B, cfg.hidden, dtype=torch.int8), hs=z(B, cfg.hidden // KD.HEAD_G))
         else:
             b.update(x=z(B, cfg.hidden, dtype=bf), delta=z(B, cfg.hidden, dtype=bf), act=z(B, cfg.ffn, dtype=bf))
